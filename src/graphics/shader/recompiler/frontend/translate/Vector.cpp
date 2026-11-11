@@ -658,6 +658,17 @@ void Translator::EmitVector(const Decoder::Instruction& inst) {
 		case O::V_DIV_FIXUP_F32: return V_DIV_FIXUP(inst, IR::Type::F32);
 		case O::V_DIV_FIXUP_F16: return V_DIV_FIXUP(inst, IR::Type::F16);
 		case O::V_DIV_FIXUP_F64: return V_DIV_FIXUP(inst, IR::Type::F64);
+		case O::V_MAD_I64_I32: return V_MAD_I64_I32(inst);
+		case O::V_MAD_U32_U16: return V_MAD_32_16(inst, false);
+		case O::V_MAD_I32_I16: return V_MAD_32_16(inst, true);
+		case O::V_ADD_NC_I32: return V_ADD_SUB_NC_I32(inst, false);
+		case O::V_SUB_NC_I32: return V_ADD_SUB_NC_I32(inst, true);
+		case O::V_LDEXP_F16: return V_LDEXP_F16(inst);
+		case O::V_CVT_PKNORM_I16_F16: return V_CVT_PKNORM_F16(inst, IR::ValueOpcode::PackSnorm2x16);
+		case O::V_CVT_PKNORM_U16_F16: return V_CVT_PKNORM_F16(inst, IR::ValueOpcode::PackUnorm2x16);
+		case O::V_SAT_PK_U8_I16: return V_SAT_PK_U8_I16(inst);
+		case O::V_CVT_NORM_I16_F16: return V_CVT_NORM_F16(inst, IR::ValueOpcode::PackSnorm2x16);
+		case O::V_CVT_NORM_U16_F16: return V_CVT_NORM_F16(inst, IR::ValueOpcode::PackUnorm2x16);
 		default: return FailMissingTranslation(inst);
 	}
 }

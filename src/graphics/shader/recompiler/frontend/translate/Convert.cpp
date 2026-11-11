@@ -134,6 +134,29 @@ void Translator::V_PACK_B32_F16(const Decoder::Instruction& inst) {
 	             PackU16Lanes(Read16LaneBits(inst.src0, false), Read16LaneBits(inst.src1, false)));
 }
 
+// gta6-prep: shader-alu. D = {norm16(S1.f16), norm16(S0.f16)}, snorm or unorm by `opcode`.
+void Translator::V_CVT_PKNORM_F16(const Decoder::Instruction& inst, IR::ValueOpcode opcode) {
+	const auto pair = ir.Emit(IR::ValueOpcode::CompositeConstructF32x2,
+	                          {ReadF16AsF32(inst.src0), ReadF16AsF32(inst.src1)});
+	WriteOperand(DestinationOperand(inst), ir.Emit(opcode, {pair}));
+}
+
+// D.16 = norm16(S0.f16), snorm or unorm by `opcode`.
+void Translator::V_CVT_NORM_F16(const Decoder::Instruction& inst, IR::ValueOpcode opcode) {
+	const auto pair = ir.Emit(IR::ValueOpcode::CompositeConstructF32x2,
+	                          {ReadF16AsF32(inst.src0), IR::Value::F32(0.0f)});
+	Write16Bits(DestinationOperand(inst), IR::U32(ir.Emit(opcode, {pair})));
+}
+
+// D.f16 = S0.f16 * 2^S1.i16. Exponents past +-64 already saturate the F16 range.
+void Translator::V_LDEXP_F16(const Decoder::Instruction& inst) {
+	const auto value    = ReadF16AsF32(inst.src0);
+	auto       exponent = ReadU16AsU32(inst.src1, true);
+	exponent = IR::U32(ir.Emit(IR::ValueOpcode::SMin32, {exponent, IR::Value(64u)}));
+	exponent = IR::U32(ir.Emit(IR::ValueOpcode::SMax32, {exponent, IR::Value(static_cast<uint32_t>(-64))}));
+	WriteF16(DestinationOperand(inst), IR::F32(ir.Emit(IR::ValueOpcode::FPLdexp, {value, exponent})));
+}
+
 IR::U32 Translator::PackU16Lanes(IR::U32 low, IR::U32 high) {
 	// A zero high lane zero-extends; descriptor tracking bounds a mask, not a bitfield insert.
 	if (high == IR::Value(0u)) return ir.BitwiseAnd(low, IR::U32(IR::Value(0xffffu)));

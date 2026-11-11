@@ -296,6 +296,14 @@ private:
 	void    V_DIV_SCALE(const Decoder::Instruction& inst, bool f64);
 	void    V_DIV_FMAS(const Decoder::Instruction& inst, bool f64);
 	void    V_DIV_FIXUP(const Decoder::Instruction& inst, IR::Type type);
+	IR::U32 SaturateWide(IR::Value wide, bool sign);
+	void    V_MAD_I64_I32(const Decoder::Instruction& inst);
+	void    V_MAD_32_16(const Decoder::Instruction& inst, bool sign);
+	void    V_ADD_SUB_NC_I32(const Decoder::Instruction& inst, bool subtract);
+	void    V_LDEXP_F16(const Decoder::Instruction& inst);
+	void    V_CVT_PKNORM_F16(const Decoder::Instruction& inst, IR::ValueOpcode opcode);
+	void    V_SAT_PK_U8_I16(const Decoder::Instruction& inst);
+	void    V_CVT_NORM_F16(const Decoder::Instruction& inst, IR::ValueOpcode opcode);
 
 	void EmitScalar(const Decoder::Instruction& inst);
 	void EmitVector(const Decoder::Instruction& inst);

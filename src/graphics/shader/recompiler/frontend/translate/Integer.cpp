@@ -630,6 +630,11 @@ IR::U32 Translator::IntegerSum(std::span<const IR::U32> terms, bool sign, bool s
 		const auto term = IR::Value(ir.ConstructU64(terms[i], high));
 		wide            = i == 0 ? term : ir.Emit(IR::ValueOpcode::IAdd64, {wide, term});
 	}
+	return SaturateWide(wide, sign);
+}
+
+// A 64-bit integer saturated to the signed or unsigned 32-bit range.
+IR::U32 Translator::SaturateWide(IR::Value wide, bool sign) {
 	const auto low = ir.CompositeExtract(wide, 0);
 	if (sign) {
 		const auto below = IR::U1(ir.Emit(IR::ValueOpcode::SLessThan64,
@@ -670,6 +675,73 @@ void Translator::V_DOT_INTEGER(const Decoder::Instruction& inst, uint32_t bits, 
 	const bool clamp  = destination.clamp;
 	destination.clamp = false;
 	WriteOperand(destination, IntegerSum(std::span(terms).first(count), sign, clamp));
+}
+
+// {SDST, D.i64} = sext(S0.i32) * sext(S1.i32) + S2.i64, SDST the sign of the exact 65-bit sum.
+// The product stays in words as V_MAD_U64_U32's does.
+void Translator::V_MAD_I64_I32(const Decoder::Instruction& inst) {
+	const auto lhs     = ReadU32(inst.src0);
+	const auto rhs     = ReadU32(inst.src1);
+	const auto product = ir.ConstructU64(ir.IMul(lhs, rhs),
+	                                     IR::U32(ir.Emit(IR::ValueOpcode::SMulHi, {lhs, rhs})));
+	// A signed 64-bit literal is sign extended.
+	const auto addend = inst.src2.kind == Decoder::OperandKind::LiteralConstant
+	                        ? ir.ConstructU64(ReadU32(inst.src2),
+	                                          ir.ShiftRightArithmetic(ReadU32(inst.src2), IR::U32(IR::Value(31u))))
+	                        : ReadU64(inst.src2);
+	const auto result = IR::U64(ir.Emit(IR::ValueOpcode::IAdd64, {product, addend}));
+	WriteOperand(DestinationOperand(inst), result);
+	if (inst.dst2.kind != Decoder::OperandKind::Null &&
+	    inst.dst2.kind != Decoder::OperandKind::Unknown) {
+		const auto r = ir.CompositeExtract(result, 1);
+		const auto p = ir.CompositeExtract(product, 1);
+		const auto a = ir.CompositeExtract(addend, 1);
+		// Signed overflow flips the sign of the wrapped sum.
+		const auto overflow = ir.BitwiseAnd(ir.BitwiseXor(r, p), ir.BitwiseXor(r, a));
+		const auto sign     = ir.ShiftRightLogical(ir.BitwiseXor(r, overflow), IR::U32(IR::Value(31u)));
+		WriteVectorMask(inst.dst2, ir.INotEqual(sign, IR::U32(IR::Value(0u))));
+	}
+}
+
+// D.u32 = S0.u16 * S1.u16 + S2.u32 (V_MAD_I32_I16: signed), halves by OP_SEL; CLAMP saturates.
+void Translator::V_MAD_32_16(const Decoder::Instruction& inst, bool sign) {
+	const std::array terms {ir.IMul(ReadU16AsU32(inst.src0, sign), ReadU16AsU32(inst.src1, sign)),
+	                        ReadU32(inst.src2)};
+	auto       destination = DestinationOperand(inst);
+	const bool clamp       = destination.clamp;
+	destination.clamp      = false;
+	WriteOperand(destination, IntegerSum(terms, sign, clamp));
+}
+
+// D.i32 = S0.i32 +- S1.i32; CLAMP saturates to the signed range.
+void Translator::V_ADD_SUB_NC_I32(const Decoder::Instruction& inst, bool subtract) {
+	const auto lhs         = ReadU32(inst.src0);
+	const auto rhs         = ReadU32(inst.src1);
+	auto       destination = DestinationOperand(inst);
+	if (!destination.clamp) {
+		WriteOperand(destination, subtract ? ir.ISub(lhs, rhs) : ir.IAdd(lhs, rhs));
+		return;
+	}
+	destination.clamp = false;
+	const auto wide   = [&](IR::U32 value) {
+		return IR::Value(ir.ConstructU64(value, ir.ShiftRightArithmetic(value, IR::U32(IR::Value(31u)))));
+	};
+	const auto sum = ir.Emit(subtract ? IR::ValueOpcode::ISub64 : IR::ValueOpcode::IAdd64,
+	                         {wide(lhs), wide(rhs)});
+	WriteOperand(destination, SaturateWide(sum, true));
+}
+
+// D.u16 = {sat_u8(S0.i16[1]), sat_u8(S0.i16[0])}.
+void Translator::V_SAT_PK_U8_I16(const Decoder::Instruction& inst) {
+	const auto source = ReadU32(inst.src0);
+	const auto byte   = [&](uint32_t offset) {
+		const auto half = ir.Emit(IR::ValueOpcode::BitFieldSExtract,
+		                          {source, IR::Value(offset), IR::Value(16u)});
+		const auto low  = ir.Emit(IR::ValueOpcode::SMax32, {half, IR::Value(0u)});
+		return IR::U32(ir.Emit(IR::ValueOpcode::SMin32, {low, IR::Value(255u)}));
+	};
+	const auto result = ir.BitwiseOr(byte(0u), ir.ShiftLeftLogical(byte(16u), IR::U32(IR::Value(8u))));
+	Write16Bits(DestinationOperand(inst), result);
 }
 
 } // namespace Libs::Graphics::ShaderRecompiler::Frontend

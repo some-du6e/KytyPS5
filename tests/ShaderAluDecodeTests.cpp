@@ -847,6 +847,93 @@ void TestPreciseDivision() {
 	CompileToValidSpirv(code, "precise division", 32);
 }
 
+// ---- Integer VOP3 long tail, V_LDEXP_F16 and the F16 norm conversions ----
+
+void TestIntegerLongTail() {
+	CheckEncodings({
+	    {"v_mad_i64_i32 v[0:1], s0, v2, v3, v[4:5]", {0xd5770000u, 0x04120702u}, Opcode::V_MAD_I64_I32},
+	    {"v_mad_i64_i32 v[0:1], null, v2, v3, 0x12345", {0xd5777d00u, 0x03fe0702u, 0x00012345u}, Opcode::V_MAD_I64_I32},
+	    {"v_mad_u32_u16 v0, v1, v2, v3", {0xd7730000u, 0x040e0501u}, Opcode::V_MAD_U32_U16},
+	    {"v_mad_u32_u16 v0, v1, v2, v3 op_sel:[1,1,0,0] clamp", {0xd7739800u, 0x040e0501u}, Opcode::V_MAD_U32_U16},
+	    {"v_mad_i32_i16 v0, v1, v2, v3", {0xd7750000u, 0x040e0501u}, Opcode::V_MAD_I32_I16},
+	    {"v_add_nc_i32 v0, v1, v2", {0xd77f0000u, 0x00020501u}, Opcode::V_ADD_NC_I32},
+	    {"v_add_nc_i32 v0, v1, v2 clamp", {0xd77f8000u, 0x00020501u}, Opcode::V_ADD_NC_I32},
+	    {"v_sub_nc_i32 v0, v1, v2 clamp", {0xd7768000u, 0x00020501u}, Opcode::V_SUB_NC_I32},
+	    {"v_ldexp_f16 v0, v1, v2", {0x76000501u}, Opcode::V_LDEXP_F16},
+	    {"v_ldexp_f16_e64 v0, -v1, v2 clamp", {0xd53b8000u, 0x20020501u}, Opcode::V_LDEXP_F16},
+	    {"v_cvt_pknorm_i16_f16 v0, v1, v2", {0xd7120000u, 0x00020501u}, Opcode::V_CVT_PKNORM_I16_F16},
+	    {"v_cvt_pknorm_u16_f16 v0, -v1, |v2| op_sel:[1,0,0]", {0xd7130a00u, 0x20020501u}, Opcode::V_CVT_PKNORM_U16_F16},
+	    {"v_sat_pk_u8_i16 v0, v1", {0x7e00c501u}, Opcode::V_SAT_PK_U8_I16},
+	    {"v_cvt_norm_i16_f16 v0, v1", {0x7e00c701u}, Opcode::V_CVT_NORM_I16_F16},
+	    {"v_cvt_norm_u16_f16 v0, v1", {0x7e00c901u}, Opcode::V_CVT_NORM_U16_F16},
+	    {"v_cvt_norm_u16_f16_e64 v0, -v1", {0xd5e40000u, 0x20000101u}, Opcode::V_CVT_NORM_U16_F16},
+	});
+	const uint32_t mad64[] = {0xd5777d00u, 0x03fe0702u, 0x00012345u};
+	auto           inst    = DecodeOne(mad64);
+	Check(inst.dst2.kind == Decoder::OperandKind::Null && inst.src2.kind == Decoder::OperandKind::LiteralConstant &&
+	          inst.src2.value == 0x12345u && inst.src_count == 3u,
+	      "V_MAD_I64_I32 lost its null SDST or literal addend");
+	const uint32_t mad16[] = {0xd7739800u, 0x040e0501u}; // op_sel:[1,1,0,0] clamp
+	inst                   = DecodeOne(mad16);
+	Check(inst.src0.op_sel && inst.src1.op_sel && !inst.src2.op_sel && inst.dst.clamp &&
+	          inst.dst.sdwa_sel == 6u,
+	      "V_MAD_U32_U16 lost its OP_SEL halves or CLAMP, or narrowed its result");
+	const uint32_t pknorm[] = {0xd7130a00u, 0x20020501u}; // -v1, |v2| op_sel:[1,0,0]
+	inst                    = DecodeOne(pknorm);
+	Check(inst.src0.negate && inst.src1.absolute && inst.src0.op_sel && !inst.src1.op_sel,
+	      "V_CVT_PKNORM_U16_F16 lost its NEG/ABS or OP_SEL");
+	const uint32_t ldexp[] = {0xd53b8000u, 0x20020501u}; // -v1, v2 clamp
+	inst                   = DecodeOne(ldexp);
+	Check(inst.src0.negate && !inst.src1.negate && inst.dst.clamp,
+	      "V_LDEXP_F16 lost its NEG or CLAMP");
+	// Unimplemented: NEG on the exponent, OP_SEL on the 32-bit addend, NEG on an integer add.
+	const uint32_t bad_ldexp[] = {EncodeVop3Word0(0x13bu, 0), EncodeVop3Word1(Vgpr(1), Vgpr(2), 0, 0, 2)};
+	const uint32_t bad_mad[]   = {EncodeVop3Word0(0x373u, 0, 0, 4), EncodeVop3Word1(Vgpr(1), Vgpr(2), Vgpr(3))};
+	const uint32_t bad_add[]   = {EncodeVop3Word0(0x37fu, 0), EncodeVop3Word1(Vgpr(1), Vgpr(2), 0, 0, 1)};
+	for (const auto words: {std::span<const uint32_t>(bad_ldexp), std::span<const uint32_t>(bad_mad),
+	                        std::span<const uint32_t>(bad_add)}) {
+		Check(DecodeOne(words).opcode == Opcode::UNSUPPORTED,
+		      "an integer or ldexp opcode accepted a modifier it does not implement");
+	}
+
+	const uint32_t code[] = {
+	    0x7e0202ffu, 0x8001fffeu, // v_mov_b32 v1, 0x8001fffe
+	    0x7e0402ffu, 0x7fff0003u, // v_mov_b32 v2, 0x7fff0003
+	    0xd5770804u, 0x04020501u, // v_mad_i64_i32 v[4:5], s8, v1, v2, v[0:1]
+	    0xd5777d06u, 0x03fe0501u, 0x00012345u, // v_mad_i64_i32 v[6:7], null, v1, v2, 0x12345
+	    0xd7739808u, 0x04020501u, // v_mad_u32_u16 v8, v1, v2, v0 op_sel:[1,1,0,0] clamp
+	    0xd7750009u, 0x04020501u, // v_mad_i32_i16 v9, v1, v2, v0
+	    0xd77f800au, 0x00020501u, // v_add_nc_i32 v10, v1, v2 clamp
+	    0xd776800bu, 0x00020501u, // v_sub_nc_i32 v11, v1, v2 clamp
+	    0xd77f000cu, 0x00020501u, // v_add_nc_i32 v12, v1, v2
+	    0x761a0501u, // v_ldexp_f16 v13, v1, v2
+	    0xd53b800du, 0x20020501u, // v_ldexp_f16_e64 v13, -v1, v2 clamp
+	    0xd712000eu, 0x00020501u, // v_cvt_pknorm_i16_f16 v14, v1, v2
+	    0xd7130a0fu, 0x20020501u, // v_cvt_pknorm_u16_f16 v15, -v1, |v2| op_sel:[1,0,0]
+	    0x7e20c501u, // v_sat_pk_u8_i16 v16, v1
+	    0x7e22c701u, // v_cvt_norm_i16_f16 v17, v1
+	    0xd5e40011u, 0x20000102u, // v_cvt_norm_u16_f16_e64 v17, -v2
+	    0x7e240208u, // v_mov_b32 v18, s8
+	    0x7e3e0280u, // v_mov_b32 v31, 0
+	    0xe0701000u, 0x8000041fu, // buffer_store_dword v4, v31, s[0:3], 0 offen
+	    0xe0701004u, 0x8000051fu, // buffer_store_dword v5, v31, s[0:3], 0 offen offset:4
+	    0xe0701008u, 0x8000061fu, // buffer_store_dword v6, v31, s[0:3], 0 offen offset:8
+	    0xe070100cu, 0x8000081fu, // buffer_store_dword v8, v31, s[0:3], 0 offen offset:12
+	    0xe0701010u, 0x8000091fu, // buffer_store_dword v9, v31, s[0:3], 0 offen offset:16
+	    0xe0701014u, 0x80000a1fu, // buffer_store_dword v10, v31, s[0:3], 0 offen offset:20
+	    0xe0701018u, 0x80000b1fu, // buffer_store_dword v11, v31, s[0:3], 0 offen offset:24
+	    0xe070101cu, 0x80000c1fu, // buffer_store_dword v12, v31, s[0:3], 0 offen offset:28
+	    0xe0701020u, 0x80000d1fu, // buffer_store_dword v13, v31, s[0:3], 0 offen offset:32
+	    0xe0701024u, 0x80000e1fu, // buffer_store_dword v14, v31, s[0:3], 0 offen offset:36
+	    0xe0701028u, 0x80000f1fu, // buffer_store_dword v15, v31, s[0:3], 0 offen offset:40
+	    0xe070102cu, 0x8000101fu, // buffer_store_dword v16, v31, s[0:3], 0 offen offset:44
+	    0xe0701030u, 0x8000111fu, // buffer_store_dword v17, v31, s[0:3], 0 offen offset:48
+	    0xe0701034u, 0x8000121fu, // buffer_store_dword v18, v31, s[0:3], 0 offen offset:52
+	    0xbf810000u, // s_endpgm
+	};
+	CompileToValidSpirv(code, "integer long tail", 32);
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -865,6 +952,7 @@ int main() {
 	TestScalarMemoryNops();
 	TestVopcGaps();
 	TestPreciseDivision();
+	TestIntegerLongTail();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }
