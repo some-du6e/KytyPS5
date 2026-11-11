@@ -1,6 +1,7 @@
 #include "graphics/shader/recompiler/ir/passes/ResourceTracking.h"
 
 #include "common/assert.h"
+#include "common/hackNotice.h"
 #include "graphics/shader/recompiler/ir/ShaderIR.h"
 #include "graphics/shader/recompiler/ir/passes/DeadCodeElimination.h"
 #include "graphics/shader/recompiler/ir/passes/SrtWalker.h"
@@ -108,6 +109,70 @@ bool IsNoncanonicalFlatAddress(Value high, Value active) {
 	}
 	// Leave one high DWORD on each side for the signed instruction offset/carry.
 	return lower > 0x00008000u && upper < 0xffff7fffu;
+}
+
+// A constant-index extract of a composite constructor names one of its operands.
+const Inst* ExtractedComponent(const Inst& inst) {
+	const auto op = inst.GetOpcode();
+	if (op != ValueOpcode::CompositeExtractU32x2 && op != ValueOpcode::CompositeExtractU32x3 &&
+	    op != ValueOpcode::CompositeExtractU32x4) {
+		return nullptr;
+	}
+	const auto  index     = inst.Arg(1).Resolve();
+	const auto* composite = inst.Arg(0).Resolve().TryInstruction();
+	if (!index.IsImmediate() || composite == nullptr) {
+		return nullptr;
+	}
+	const auto construct = composite->GetOpcode();
+	if (construct != ValueOpcode::CompositeConstructU32x2 &&
+	    construct != ValueOpcode::CompositeConstructU32x3 &&
+	    construct != ValueOpcode::CompositeConstructU32x4) {
+		return nullptr;
+	}
+	const auto component = index.U32();
+	return component < composite->NumArgs() ? composite->Arg(component).Resolve().TryInstruction()
+	                                        : nullptr;
+}
+
+// The user-data registers an address dword derives from, within a bounded walk of its
+// operands. Lane masks and conditions (U1 operands) select between values rather than compute
+// them, and memory results are data, so the walk does not follow them. A constant-index extract
+// of a composite constructor follows only the selected operand, so the dwords of a pair built
+// with CompositeConstruct keep their own sources.
+std::vector<uint32_t> AddressUserDataSources(Value root) {
+	constexpr size_t         MaxVisited = 256;
+	std::vector<uint32_t>    registers;
+	std::vector<const Inst*> visited;
+	const auto               visit = [&](const Inst* inst) {
+		if (inst != nullptr && inst->GetType() != Type::U1 && visited.size() < MaxVisited &&
+		    std::ranges::find(visited, inst) == visited.end()) {
+			visited.push_back(inst);
+		}
+	};
+	visit(root.Resolve().TryInstruction());
+	for (size_t next = 0; next < visited.size(); next++) {
+		const auto* inst = visited[next];
+		const auto  op   = inst->GetOpcode();
+		if (op == ValueOpcode::GetUserData) {
+			if (inst->Arg(0).GetType() == Type::ScalarReg) {
+				registers.push_back(RegIndex(inst->Arg(0).ScalarRegister()));
+			}
+			continue;
+		}
+		if (BufferAccessOf(op) != BufferAccess::None ||
+		    AddressOpcodeInfoOf(op).access != AddressAccess::None ||
+		    ImageOpcodeInfoOf(op).access != ImageAccess::None) {
+			continue;
+		}
+		if (const auto* component = ExtractedComponent(*inst)) {
+			visit(component);
+			continue;
+		}
+		for (size_t i = 0; i < inst->NumArgs(); i++) {
+			visit(inst->Arg(i).Resolve().TryInstruction());
+		}
+	}
+	return registers;
 }
 
 Value CanonicalizeSampleAdjustDword3(Value value) {
@@ -386,6 +451,11 @@ public:
 		m_info.samplers.clear();
 		m_info.sampled_pairs.clear();
 		m_info.address_bases.clear();
+		m_info.dma_base_registers.clear();
+		m_info.dma_windows.clear();
+		m_info.dma_tables.clear();
+		m_info.self_sized_buffers.clear();
+		m_info.dma_bounded = false;
 		m_shader_writes = HasShaderMemoryWrites(program);
 	}
 
@@ -395,14 +465,23 @@ public:
 		}
 		ForwardPrivateLds();
 		FoldBoundedLoopSelectors();
+		// The planning passes add no memory operations, but dead code elimination removes some.
+		m_memory_index_uses.clear();
 		PlanScalarReads();
 		EliminateDeadCode(m_program.blocks);
+		m_memory_index_uses.clear();
 		PlanIndirectDescriptors();
 		for (auto* block: m_program.blocks) {
 			for (auto& inst: *block) {
 				Collect(inst);
 			}
 		}
+		m_info.dma_bounded = m_dma_tracked && !m_dma_unbounded && !m_program.has_address_writes;
+		if (!m_info.dma_bounded) {
+			m_info.dma_windows.clear();
+			m_info.dma_tables.clear();
+		}
+		LinkIndirectWriteTables();
 		for (const auto& patch: m_handle_patches) {
 			patch.handle->SetFlags<uint32_t>(patch.resource);
 		}
@@ -519,6 +598,9 @@ public:
 			} else if (plan.handle->NumArgs() == 4u) {
 				plan.handle->SetArg(0, key);
 				for (uint32_t word = 1; word < 4u; ++word) plan.handle->SetArg(word, Value(0u));
+				// Record tables carry the element next to the record's key.
+				if (const auto& pointer = m_sources[plan.source].indirect_descriptor->pointer_table;
+				    pointer && pointer->buffer) plan.handle->SetArg(1, plan.roots[4]);
 			} else {
 				if (plan.reads[0] == nullptr) plan.handle->SetArg(0, key);
 				for (uint32_t dword = 0; dword < 4u; dword++) {
@@ -529,8 +611,10 @@ public:
 				}
 			}
 			if (plan.reads[0] != nullptr && !plan.retain_reads) {
-				for (uint32_t word = 0; word < plan.read_dwords; ++word)
-					m_program.memory_info[plan.memory[word]].planning_only = true;
+				for (uint32_t word = 0; word < plan.read_dwords; ++word) {
+					if ((plan.kept_reads & (1u << word)) == 0u)
+						m_program.memory_info[plan.memory[word]].planning_only = true;
+				}
 			}
 		}
 		// Project descriptor-only SSA onto its key. Existing Phis preserve dominance;
@@ -590,6 +674,8 @@ private:
 		Value                      key;
 		std::array<Value, 8>       roots {};
 		std::array<uint32_t, 8>    memory {};
+		// T# reads that stay ordinary scalar loads for their non-image users (bit per dword).
+		uint32_t                   kept_reads = 0;
 		std::array<const Inst*, 8> reads {};
 		bool split_offsets = false;
 		bool retain_reads = false;
@@ -606,19 +692,23 @@ private:
 		std::abort();
 	}
 
-	Value NativeDescriptorSource(Value value, uint32_t reg, uint32_t use_pc) const {
+	// follow_copies: a reaching S_MOV_B32/S_MOV_B64 from another SGPR continues the search at
+	// its source register (inlined calls pass their arguments in copies), and a V_READLANE_B32 of
+	// a spilled lane at the SGPR the V_WRITELANE_B32 of that lane stored.
+	Value NativeDescriptorSource(Value value, uint32_t reg, uint32_t use_pc,
+	                             bool follow_copies = false) const {
 		value = value.Resolve();
 		const auto* phi = value.TryInstruction();
 		if (phi == nullptr || phi->GetOpcode() != ValueOpcode::Phi || m_native_cfg.blocks.empty())
 			return value;
 		std::vector<const Inst*> candidates;
-		std::vector<const Inst*> visited;
+		// A set: inlined calls merge registers in Phi webs of thousands of nodes.
+		std::unordered_set<const Inst*> visited;
 		std::vector<const Inst*> pending {phi};
 		while (!pending.empty()) {
 			const auto* inst = pending.back();
 			pending.pop_back();
-			if (std::ranges::find(visited, inst) != visited.end()) continue;
-			visited.push_back(inst);
+			if (!visited.insert(inst).second) continue;
 			if (inst->GetOpcode() == ValueOpcode::Phi) {
 				for (size_t i = 0; i < inst->NumArgs(); ++i) {
 					const auto* arg = inst->Arg(i).Resolve().TryInstruction();
@@ -708,6 +798,16 @@ private:
 				--write;
 				if (write->pc < block.start_pc) break;
 				if (RegIndex(write->reg) != reg) continue;
+				if (const auto copied = follow_copies ? CopiedRegister(write->pc, reg) : std::nullopt) {
+					const auto source = NativeDescriptorSource(value, copied->first, copied->second, true);
+					if (source == value.Resolve() || source.IsEmpty() ||
+					    (!selected.IsEmpty() && !EquivalentValue(m_program, selected, source)))
+						return value;
+					selected    = source;
+					selected_pc = write->pc;
+					found       = true;
+					break;
+				}
 				if (!select(write->pc)) return value;
 				found = true;
 				break;
@@ -811,7 +911,7 @@ private:
 		descriptor.dword_count = width;
 		for (uint32_t i = 0; i < width; i++) {
 			const auto value = base_reg != UINT32_MAX
-			    ? NativeDescriptorSource(handle.Arg(i), base_reg + i, pc) : handle.Arg(i);
+			    ? NativeDescriptorSource(handle.Arg(i), base_reg + i, pc, true) : handle.Arg(i);
 			descriptor.dwords[i] = LowerDescriptorValue(value);
 		}
 		if (sample_adjust) {
@@ -824,6 +924,123 @@ private:
 			descriptor.dwords[3] = Value(0u);
 		}
 		m_resolved_handles.push_back({&handle, pc, descriptor, {}});
+	}
+
+	// The native instructions whose write of a scalar operand (an SGPR or VCC_LO/VCC_HI) reaches
+	// use_pc; empty when the entry value reaches it on some path.
+	std::vector<const Decoder::Instruction*> ReachingNativeWrites(const Decoder::Operand& operand,
+	                                                              uint32_t use_pc) const {
+		const auto writes = [&](const Decoder::Instruction& inst) {
+			for (const auto* dst: {&inst.dst, &inst.dst2}) {
+				if (dst->kind != operand.kind) continue;
+				if (operand.kind != Decoder::OperandKind::Sgpr) return true;
+				const auto width = inst.family == Decoder::Family::SMEM ? std::max(inst.data_dwords, 1u) : 2u;
+				if (operand.reg >= dst->reg && operand.reg < dst->reg + width) return true;
+			}
+			return false;
+		};
+		std::vector<const Decoder::Instruction*> found;
+		const auto use = std::ranges::find_if(m_native_cfg.blocks, [&](const auto& block) {
+			return block.start_pc <= use_pc && use_pc < block.end_pc;
+		});
+		if (use == m_native_cfg.blocks.end()) return {};
+		struct Position { uint32_t block; uint32_t before; };
+		std::vector<Position> positions {{use->id, use_pc}};
+		std::vector<bool> reached(m_native_cfg.blocks.size());
+		while (!positions.empty()) {
+			const auto position = positions.back();
+			positions.pop_back();
+			const auto& block = m_native_cfg.blocks[position.block];
+			if (position.before == block.end_pc) {
+				if (reached[block.id]) continue;
+				reached[block.id] = true;
+			}
+			auto inst = std::ranges::lower_bound(m_decoded.instructions, position.before, {},
+			                                     &Decoder::Instruction::pc);
+			bool written = false;
+			while (inst != m_decoded.instructions.begin()) {
+				--inst;
+				if (inst->pc < block.start_pc) break;
+				if (!writes(*inst)) continue;
+				if (std::ranges::find(found, &*inst) == found.end()) found.push_back(&*inst);
+				written = true;
+				break;
+			}
+			if (written) continue;
+			if (block.id == m_native_cfg.entry_block) return {};
+			for (const auto pred: block.predecessors)
+				positions.push_back({pred, m_native_cfg.blocks[pred].end_pc});
+		}
+		return found;
+	}
+
+	// The SGPR whose value the write of reg at pc copies, and where it holds it: an
+	// S_MOV_B32/S_MOV_B64 from another SGPR, or a V_READLANE_B32 of a lane that one
+	// V_WRITELANE_B32 of a constant lane stored on every path to it.
+	std::optional<std::pair<uint32_t, uint32_t>> CopiedRegister(uint32_t pc, uint32_t reg) const {
+		const auto native = std::ranges::lower_bound(m_decoded.instructions, pc, {},
+		                                            &Decoder::Instruction::pc);
+		if (native == m_decoded.instructions.end() || native->pc != pc ||
+		    native->dst.kind != Decoder::OperandKind::Sgpr || reg < native->dst.reg) return {};
+		const auto lane = reg - native->dst.reg;
+		if (native->src0.kind == Decoder::OperandKind::Sgpr &&
+		    ((native->opcode == Decoder::Opcode::S_MOV_B32 && lane == 0u) ||
+		     (native->opcode == Decoder::Opcode::S_MOV_B64 && lane < 2u))) {
+			const auto source = native->src0.reg + lane;
+			if (source != reg) return std::pair {source, pc};
+			return {};
+		}
+		const auto constant = [](const Decoder::Operand& operand) {
+			return operand.kind == Decoder::OperandKind::IntegerInlineConstant ||
+			       operand.kind == Decoder::OperandKind::LiteralConstant;
+		};
+		if (native->opcode != Decoder::Opcode::V_READLANE_B32 || lane != 0u ||
+		    native->src0.kind != Decoder::OperandKind::Vgpr || !constant(native->src1)) return {};
+		const auto vgpr      = native->src0.reg;
+		const auto read_lane = native->src1.value % m_program.wave_size;
+		// The V_WRITELANE_B32 of that lane that reaches the read on every path.
+		const Decoder::Instruction* spill = nullptr;
+		const auto use = std::ranges::find_if(m_native_cfg.blocks, [&](const auto& block) {
+			return block.start_pc <= pc && pc < block.end_pc;
+		});
+		if (use == m_native_cfg.blocks.end()) return {};
+		struct Position { uint32_t block; uint32_t before; };
+		std::vector<Position> positions {{use->id, pc}};
+		std::vector<bool> reached(m_native_cfg.blocks.size());
+		while (!positions.empty()) {
+			const auto position = positions.back();
+			positions.pop_back();
+			const auto& block = m_native_cfg.blocks[position.block];
+			if (position.before == block.end_pc) {
+				if (reached[block.id]) continue;
+				reached[block.id] = true;
+			}
+			auto inst = std::ranges::lower_bound(m_decoded.instructions, position.before, {},
+			                                     &Decoder::Instruction::pc);
+			bool written = false;
+			while (inst != m_decoded.instructions.begin()) {
+				--inst;
+				if (inst->pc < block.start_pc) break;
+				// Writes of unknown width count as two registers.
+				const auto width = inst->opcode == Decoder::Opcode::V_WRITELANE_B32
+				                       ? 1u : std::max(inst->data_dwords, 2u);
+				if (inst->dst.kind != Decoder::OperandKind::Vgpr || inst->dst.reg > vgpr ||
+				    vgpr >= inst->dst.reg + width) continue;
+				if (inst->opcode != Decoder::Opcode::V_WRITELANE_B32 || inst->dst.reg != vgpr ||
+				    !constant(inst->src1) || inst->src0.kind != Decoder::OperandKind::Sgpr) return {};
+				if (inst->src1.value % m_program.wave_size != read_lane) continue; // Another lane.
+				if (spill != nullptr && spill != &*inst) return {};
+				spill   = &*inst;
+				written = true;
+				break;
+			}
+			if (written) continue;
+			if (block.id == m_native_cfg.entry_block) return {};
+			for (const auto pred: block.predecessors)
+				positions.push_back({pred, m_native_cfg.blocks[pred].end_pc});
+		}
+		if (spill == nullptr) return {};
+		return std::pair {spill->src0.reg, spill->pc};
 	}
 
 	uint32_t ScalarReadBase(const Inst& read) const {
@@ -1034,6 +1251,7 @@ private:
 				    a.workgroup_multiplier != b.workgroup_multiplier ||
 				    a.workgroup_shift != b.workgroup_shift || a.sources != b.sources ||
 				    a.signed_count != b.signed_count ||
+				    a.table_mask != b.table_mask || a.table_array != b.table_array ||
 				    !EquivalentValue(m_program, a.key_count, b.key_count) ||
 				    a.selector_first.IsEmpty() != b.selector_first.IsEmpty() ||
 				    (!a.selector_first.IsEmpty() &&
@@ -1072,6 +1290,19 @@ private:
 		}
 		result = value.U32();
 		return true;
+	}
+
+	// Whether the read is a T# for an image instruction and otherwise only reaches Phis.
+	static bool ImageDescriptorUsesDirectly(const Inst& read) {
+		bool image = false;
+		for (const auto& use: read.Uses()) {
+			if (use.user->GetOpcode() == ValueOpcode::GetImageResource) {
+				image = true;
+			} else if (use.user->GetOpcode() != ValueOpcode::Phi) {
+				return false;
+			}
+		}
+		return image;
 	}
 
 	static bool UsesOnlyImageDescriptors(const Inst& value) {
@@ -1242,8 +1473,14 @@ private:
 		return true;
 	}
 
-	bool MatchTableOffset(Value value, Value& key, uint32_t& offset, uint32_t& stride) const {
+	// Matches key * stride + offset. With a mask output it also accepts an outermost
+	// ((key * stride) & mask) + offset, as a shader clamps a key's bits before indexing.
+	bool MatchTableOffset(Value value, Value& key, uint32_t& offset, uint32_t& stride,
+	                      uint32_t* mask = nullptr) const {
 		offset = 0;
+		if (mask != nullptr) {
+			*mask = UINT32_MAX;
+		}
 		for (;;) {
 			const auto* inst = value.Resolve().TryInstruction();
 			if (inst == nullptr || inst->NumArgs() != 2u) {
@@ -1262,7 +1499,20 @@ private:
 				else return false;
 				return stride != 0u && key.GetType() == Type::U32;
 			}
-			if (inst->GetOpcode() != ValueOpcode::IAdd32) {
+			if (inst->GetOpcode() == ValueOpcode::BitwiseAnd32 && mask != nullptr &&
+			    *mask == UINT32_MAX) {
+				if (ImmediateU32(inst->Arg(1), immediate)) {
+					value = inst->Arg(0);
+				} else if (ImmediateU32(inst->Arg(0), immediate)) {
+					value = inst->Arg(1);
+				} else {
+					return false;
+				}
+				*mask = immediate;
+				continue;
+			}
+			// An addition inside the mask would be masked too.
+			if (inst->GetOpcode() != ValueOpcode::IAdd32 || (mask != nullptr && *mask != UINT32_MAX)) {
 				return false;
 			}
 			if (ImmediateU32(inst->Arg(0), immediate)) {
@@ -2959,7 +3209,7 @@ private:
 	bool MatchDescriptorReads(Inst& handle, const DescriptorSource& descriptor,
 	                          IndirectDescriptorPlan& plan, Value& key, uint32_t& table_offset,
 	                          uint32_t& table_stride, uint32_t& table_immediate,
-	                          bool allow_fixed = false) {
+	                          bool allow_fixed = false, uint32_t* table_mask = nullptr) {
 		Inst* table_handle = nullptr;
 		Value table_guard;
 		const uint32_t alignment_mask = allow_fixed ? ~3u : UINT32_MAX;
@@ -3002,6 +3252,7 @@ private:
 			Value current_key;
 			uint32_t offset = 0;
 			uint32_t stride = 0;
+			uint32_t mask   = UINT32_MAX;
 			if (current_handle == nullptr ||
 			    current_handle->GetOpcode() != (memory->kind == ResourceKind::ScalarAddress
 			                                      ? ValueOpcode::GetAddressResource
@@ -3010,7 +3261,9 @@ private:
 			    (table_handle != nullptr &&
 			     !EquivalentValue(m_program, Value(table_handle), Value(current_handle))) ||
 			    (!indexed && !(allow_fixed && ImmediateU32(read->Arg(1), offset)) &&
-			     !MatchTableOffset(read->Arg(1), current_key, offset, stride))) {
+			     !MatchTableOffset(read->Arg(1), current_key, offset, stride,
+			                       table_mask != nullptr ? &mask : nullptr)) ||
+			    (dword != 0u && table_mask != nullptr && mask != *table_mask)) {
 				return false;
 			}
 			if (indexed) {
@@ -3024,6 +3277,7 @@ private:
 				table_offset = offset;
 				table_immediate = memory->offset;
 				table_stride = stride;
+				if (table_mask != nullptr) *table_mask = mask;
 			} else if (plan.table_indexed != indexed || table_stride != stride ||
 			           !EquivalentValue(m_program, key, current_key) ||
 			           uint64_t {table_offset & alignment_mask} + (table_immediate & alignment_mask) +
@@ -3033,9 +3287,14 @@ private:
 			}
 			plan.split_offsets |= !indexed && offset != table_offset;
 			table_handle = current_handle;
+			// A register the shader also uses for other data before or after the T# merges with it
+			// in Phis of those other lifetimes (GTA V's ray tracing any-hit shaders): the read stays
+			// an ordinary scalar load for them and only its image uses take the table path.
+			const bool images_only =
+			    handle.GetOpcode() != ValueOpcode::GetImageResource || UsesOnlyImageDescriptors(*read);
 			if (handle.GetOpcode() != ValueOpcode::GetBufferResource) {
 				plan.retain_reads |= handle.GetOpcode() == ValueOpcode::GetSamplerResource ||
-				    (memory->kind == ResourceKind::ScalarAddress && !UsesOnlyImageDescriptors(*read));
+				    (memory->kind == ResourceKind::ScalarAddress && !images_only);
 			} else if (std::ranges::any_of(read->Uses(), [&](const Use& use) {
 				return use.user->GetOpcode() != ValueOpcode::GetBufferResource ||
 				       std::ranges::any_of(use.user->Uses(), [&](const Use& consumer) {
@@ -3045,6 +3304,7 @@ private:
 				plan.retain_reads = true;
 			}
 			plan.memory[dword] = memory_index;
+			plan.kept_reads |= images_only ? 0u : 1u << dword;
 			plan.reads[dword] = read;
 		}
 
@@ -3234,6 +3494,282 @@ private:
 		return UINT32_MAX;
 	}
 
+	// A T# or S# read from a descriptor table whose V# a record holds, the record being the one
+	// a key selects from a pointer table: table V# -> pointer row -> record V# -> descriptor.
+	// Marvel's Wolverine's ray-tracing compute 0xe6d76d24f59f8015 reads the textures of a hit
+	// group this way: the call table row of the hit gives its record, the record the V# of its
+	// T# table, and the material key the T# in that table. Its calls are inlined, so the
+	// registers of every callee meet in Phis: the native reaching definitions name the reads
+	// each step uses, and the key follows the same Phis (UINT32_MAX, which maps nothing, on
+	// the edges of the other callees).
+	bool TryMakeRecordTableDescriptor(Inst& handle, const DescriptorSource& descriptor,
+	                                  IndirectDescriptorPlan& plan) {
+		const bool sampler = handle.GetOpcode() == ValueOpcode::GetSamplerResource;
+		if ((!sampler && handle.GetOpcode() != ValueOpcode::GetImageResource) ||
+		    handle.NumArgs() != (sampler ? 4u : 8u)) return false;
+		// The descriptor: reads of one table V# at element_offset + key * element_stride. The
+		// offset register may itself meet in Phis: its key then follows them.
+		std::array<Inst*, 8> element_reads {};
+		for (uint32_t dword = 0; dword < plan.read_dwords; ++dword) {
+			auto* read = descriptor.dwords[dword].Resolve().TryInstruction();
+			uint32_t index = 0;
+			const auto* memory = read != nullptr ? ScalarReadMemory(*read, index) : nullptr;
+			if (memory == nullptr || memory->kind != ResourceKind::ScalarBuffer ||
+			    memory->offset > INT32_MAX || !MemoryIndexBelongsTo(index, *read) ||
+			    (dword != 0u &&
+			     (!EquivalentValue(m_program, read->Arg(0), element_reads[0]->Arg(0)) ||
+			      !EquivalentValue(m_program, read->Arg(1), element_reads[0]->Arg(1)) ||
+			      memory->offset != m_program.memory_info[element_reads[0]->Flags<MemoryFlags>().index].offset +
+			                            dword * 4u))) return false;
+			element_reads[dword] = read;
+		}
+		const uint32_t element_immediate =
+		    m_program.memory_info[element_reads[0]->Flags<MemoryFlags>().index].offset;
+		Value element_key;
+		uint32_t element_offset = 0, element_stride = 0;
+		const auto offset_value = element_reads[0]->Arg(1).Resolve();
+		if (!ImmediateU32(offset_value, element_offset) &&
+		    !MatchTableOffset(offset_value, element_key, element_offset, element_stride)) {
+			// A Phi of key * stride + offset terms: the shifts that write the offset register and
+			// reach the read give the stride, so terms of other callees' paths do not count.
+			uint32_t native_stride = 0;
+			{
+				const auto element_pc = element_reads[0]->Flags<MemoryFlags>().pc;
+				const auto native = std::ranges::lower_bound(m_decoded.instructions, element_pc, {},
+				                                            &Decoder::Instruction::pc);
+				if (native == m_decoded.instructions.end() || native->pc != element_pc) return false;
+				for (const auto* write: ReachingNativeWrites(native->src1, element_pc)) {
+					if (write->opcode != Decoder::Opcode::S_LSHL_B32 ||
+					    (write->src1.kind != Decoder::OperandKind::IntegerInlineConstant &&
+					     write->src1.kind != Decoder::OperandKind::LiteralConstant) ||
+					    write->src1.value >= 32u ||
+					    (native_stride != 0u && native_stride != (1u << write->src1.value))) return false;
+					native_stride = 1u << write->src1.value;
+				}
+				if (native_stride == 0u) return false;
+			}
+			std::vector<const Inst*> pending {offset_value.TryInstruction()};
+			std::unordered_set<const Inst*> seen;
+			bool found = false;
+			while (!pending.empty()) {
+				const auto* inst = pending.back();
+				pending.pop_back();
+				if (inst == nullptr || !seen.insert(inst).second) continue;
+				if (inst->GetOpcode() == ValueOpcode::Phi) {
+					for (size_t arm = 0; arm < inst->NumArgs(); ++arm)
+						pending.push_back(inst->Arg(arm).Resolve().TryInstruction());
+					continue;
+				}
+				Value key;
+				uint32_t offset = 0, stride = 0;
+				// Terms of a descriptor-sized stride name the table layout; any other offset gets
+				// its key computed (see the projection below).
+				// A shift has no offset of its own.
+				if (!MatchTableOffset(Value(const_cast<Inst*>(inst)), key, offset, stride) || key.IsEmpty() ||
+				    stride != native_stride || offset != 0u)
+					continue;
+				if (found && (offset != element_offset || stride != element_stride)) return false;
+				element_offset = offset;
+				element_stride = stride;
+				found = true;
+			}
+			if (!found || !std::has_single_bit(element_stride)) return false;
+			element_key = offset_value; // Projected below, once the projection helper exists.
+		}
+		if (element_key.IsEmpty() ? element_stride != 0u
+		                          : element_stride < plan.read_dwords * 4u || (element_stride & 3u) != 0u)
+			return false;
+		const bool element_phi = !element_key.IsEmpty() && element_key == offset_value;
+		auto* element_read = element_reads[0];
+		const auto* table = element_read->Arg(0).Resolve().TryInstruction();
+		const auto table_reg = ScalarReadBase(*element_read);
+		if (table == nullptr || table->GetOpcode() != ValueOpcode::GetBufferResource ||
+		    table->NumArgs() != 4u || table_reg == UINT32_MAX) return false;
+		// The table V#: four scalar-address reads of one record at a fixed offset.
+		const auto element_pc = element_read->Flags<MemoryFlags>().pc;
+		std::array<const Inst*, 4> record_reads {};
+		const Inst* pointer = nullptr;
+		uint32_t record_offset = 0;
+		for (uint32_t dword = 0; dword < 4u; ++dword) {
+			const auto* read =
+			    NativeDescriptorSource(table->Arg(dword), table_reg + dword, element_pc, true).TryInstruction();
+			uint32_t index = 0, immediate = 0;
+			const auto* memory = read != nullptr ? ScalarReadMemory(*read, index) : nullptr;
+			if (memory == nullptr || memory->kind != ResourceKind::ScalarAddress ||
+			    !ImmediateU32(read->Arg(1), immediate) || memory->offset > INT32_MAX) return false;
+			const auto* current = read->Arg(0).Resolve().TryInstruction();
+			const auto offset = immediate + memory->offset;
+			if (current == nullptr || current->GetOpcode() != ValueOpcode::GetAddressResource ||
+			    current->NumArgs() < 2u ||
+			    (dword == 0u ? (offset & 3u) != 0u
+			                 : !EquivalentValue(m_program, Value(const_cast<Inst*>(pointer)),
+			                                    Value(const_cast<Inst*>(current))) ||
+			                       offset != record_offset + dword * 4u)) return false;
+			if (dword == 0u) {
+				pointer = current;
+				record_offset = offset;
+			}
+			record_reads[dword] = read;
+		}
+		// The record pointer: two scalar-buffer reads of one pointer table row.
+		const auto pointer_reg = ScalarReadBase(*record_reads[0]);
+		const auto record_pc   = record_reads[0]->Flags<MemoryFlags>().pc;
+		if (pointer_reg == UINT32_MAX) return false;
+		const auto* low =
+		    NativeDescriptorSource(pointer->Arg(0), pointer_reg, record_pc, true).TryInstruction();
+		const auto* high =
+		    NativeDescriptorSource(pointer->Arg(1), pointer_reg + 1u, record_pc, true).TryInstruction();
+		uint32_t low_index, high_index;
+		const auto* low_memory = low != nullptr ? ScalarReadMemory(*low, low_index) : nullptr;
+		const auto* high_memory = high != nullptr ? ScalarReadMemory(*high, high_index) : nullptr;
+		DescriptorSource::IndirectDescriptor indirect;
+		DescriptorSource table_source;
+		Value row_key;
+		if (low_memory == nullptr || high_memory == nullptr ||
+		    low_memory->kind != ResourceKind::ScalarBuffer ||
+		    high_memory->kind != ResourceKind::ScalarBuffer ||
+		    low_memory->offset > INT32_MAX || high_memory->offset > INT32_MAX ||
+		    (low_memory->offset & ~3u) + 4u != (high_memory->offset & ~3u) ||
+		    !EquivalentValue(m_program, low->Arg(0), high->Arg(0)) ||
+		    !EquivalentValue(m_program, low->Arg(1), high->Arg(1)) ||
+		    !MatchTableOffset(low->Arg(1), row_key, indirect.table_offset, indirect.table_stride) ||
+		    row_key.IsEmpty() || indirect.table_stride < 8u || (indirect.table_stride & 3u) != 0u ||
+		    !MakeRuntimeTableSource(*low, table_source) || table_source.dword_count != 4u) return false;
+		indirect.table_immediate = low_memory->offset & ~3u;
+		indirect.table_source = InternSource(table_source);
+		indirect.table_scalar = true;
+		uint64_t              function = 0;
+		std::vector<uint64_t> functions;
+		for (const auto& body: m_decoded.call_bodies) {
+			if (body.begin <= element_pc && element_pc < body.end) {
+				function  = body.address;
+				functions = body.aliases;
+			}
+		}
+		indirect.pointer_table = DescriptorSource::IndirectDescriptor::PointerTable {
+		    .offset = record_offset,
+		    .buffer = true,
+		    .element_stride = element_stride,
+		    .element_offset = (element_offset & ~3u) + (element_immediate & ~3u),
+		    .function = function,
+		    .functions = std::move(functions)};
+		DescriptorSource source;
+		source.dword_count = handle.NumArgs();
+		source.dwords.fill(Value(0u));
+		std::copy_n(table_source.dwords.begin(), 4u, source.dwords.begin());
+		source.indirect_descriptor = indirect;
+		// Mirrors a register's Phi web: leaf(inst) where it names a value, UINT32_MAX elsewhere.
+		// Only the Phis that some named value reaches are mirrored; the webs of inlined calls
+		// span the whole program.
+		const auto project = [&](Value root, auto&& leaf) -> Value {
+			std::unordered_map<const Inst*, Value> leaves;
+			const auto leaf_value = [&](const Inst* inst) -> Value {
+				const auto [found, inserted] = leaves.try_emplace(inst);
+				if (inserted) found->second = leaf(inst);
+				return found->second;
+			};
+			root = root.Resolve();
+			const auto* top = root.TryInstruction();
+			if (const auto named = leaf_value(top); !named.IsEmpty()) return named;
+			if (top == nullptr || top->GetOpcode() != ValueOpcode::Phi) return Value(UINT32_MAX);
+			// The web, and for each Phi the Phis it is an operand of.
+			std::vector<const Inst*> web {top};
+			std::unordered_map<const Inst*, std::vector<const Inst*>> users {{top, {}}};
+			std::vector<const Inst*> reaching;
+			for (size_t next = 0; next < web.size(); ++next) {
+				const auto* phi = web[next];
+				bool direct = false;
+				for (size_t arm = 0; arm < phi->NumArgs(); ++arm) {
+					const auto* arg = phi->Arg(arm).Resolve().TryInstruction();
+					if (arg != nullptr && arg->GetOpcode() == ValueOpcode::Phi) {
+						const auto [found, inserted] = users.try_emplace(arg);
+						found->second.push_back(phi);
+						if (inserted) web.push_back(arg);
+					} else if (!leaf_value(arg).IsEmpty()) {
+						direct = true;
+					}
+				}
+				if (direct) reaching.push_back(phi);
+			}
+			std::unordered_set<const Inst*> relevant(reaching.begin(), reaching.end());
+			for (size_t next = 0; next < reaching.size(); ++next) {
+				for (const auto* user: users[reaching[next]]) {
+					if (relevant.insert(user).second) reaching.push_back(user);
+				}
+			}
+			if (!relevant.contains(top)) return Value(UINT32_MAX);
+			std::unordered_map<const Inst*, Inst*> mirror;
+			for (const auto* phi: reaching) {
+				auto* parent = phi->Parent();
+				const auto position = std::ranges::find_if(parent->Instructions(),
+				    [&](const Inst& candidate) { return &candidate == phi; });
+				auto& selected = *parent->PrependNewInst(position, ValueOpcode::Phi);
+				selected.SetFlags(Type::U32);
+				mirror.emplace(phi, &selected);
+			}
+			for (const auto& [phi, selected]: mirror) {
+				for (uint32_t arm = 0; arm < phi->NumArgs(); ++arm) {
+					const auto* arg = phi->Arg(arm).Resolve().TryInstruction();
+					Value operand(UINT32_MAX);
+					if (const auto found = mirror.find(arg); found != mirror.end()) {
+						operand = Value(found->second);
+					} else if (arg == nullptr || arg->GetOpcode() != ValueOpcode::Phi) {
+						if (const auto named = leaf_value(arg); !named.IsEmpty()) operand = named;
+					}
+					selected->AddPhiOperand(phi->PhiBlock(arm), operand);
+				}
+			}
+			return Value(mirror.at(top));
+		};
+		if (element_phi) {
+			element_key = project(offset_value, [&](const Inst* inst) -> Value {
+				if (inst == nullptr || inst->GetOpcode() == ValueOpcode::Phi) return {};
+				Value key;
+				uint32_t offset = 0, stride = 0;
+				if (MatchTableOffset(Value(const_cast<Inst*>(inst)), key, offset, stride) && !key.IsEmpty() &&
+				    offset == element_offset && stride == element_stride)
+					return key;
+				// Any other offset selects the element it is aligned to, and none if it is not.
+				auto* parent = const_cast<Inst*>(inst)->Parent();
+				auto next = std::ranges::find_if(parent->Instructions(),
+				    [&](const Inst& candidate) { return &candidate == inst; });
+				++next;
+				const Value value(const_cast<Inst*>(inst));
+				const auto relative = Value(&*parent->PrependNewInst(next, ValueOpcode::ISub32,
+				                                                      {value, Value(element_offset)}));
+				const auto index = Value(&*parent->PrependNewInst(next, ValueOpcode::ShiftRightLogical32,
+				    {relative, Value(static_cast<uint32_t>(std::countr_zero(element_stride)))}));
+				const auto rest = Value(&*parent->PrependNewInst(next, ValueOpcode::BitwiseAnd32,
+				                                                  {relative, Value(element_stride - 1u)}));
+				const auto aligned = Value(&*parent->PrependNewInst(next, ValueOpcode::IEqual32, {rest, Value(0u)}));
+				return Value(&*parent->PrependNewInst(next, ValueOpcode::SelectU32,
+				                                      {aligned, index, Value(UINT32_MAX)}));
+			});
+		}
+		// The key is the first word of the table V# the descriptor is read through, the word the
+		// GPU itself uses: its value where the record is read when that read reaches the
+		// descriptor read on every structured path, else the table V# word at the descriptor
+		// read. Mirroring the record's address through the Phis instead gave every descriptor
+		// read its own copy of the register's Phi web across the inlined callees (699 K Phis
+		// for 0xe6d76d24f59f8015); the element travels in the handle's second word.
+		const auto record_at_table = AvailableBefore(*record_reads[0], *element_read)
+		                                 ? Value(const_cast<Inst*>(record_reads[0]))
+		                                 : table->Arg(0).Resolve();
+		const auto element_value = element_key.IsEmpty() ? Value(0u) : element_key;
+		const auto key = project(handle.Arg(0), [&](const Inst* inst) -> Value {
+			return inst == element_read ? record_at_table : Value {};
+		});
+		const auto element_at_handle = project(handle.Arg(0), [&](const Inst* inst) -> Value {
+			return inst == element_read ? element_value : Value {};
+		});
+		plan.handle = &handle;
+		plan.source = InternSource(source);
+		plan.key = key;
+		plan.roots = source.dwords;
+		plan.roots[4] = element_at_handle;
+		return true;
+	}
+
 	bool TryMakeTableDescriptor(Inst& handle, const DescriptorSource& descriptor,
 	                            IndirectDescriptorPlan& plan) {
 		const bool sampler = handle.GetOpcode() == ValueOpcode::GetSamplerResource;
@@ -3244,16 +3780,19 @@ private:
 		uint32_t table_offset = 0;
 		uint32_t table_stride = 0;
 		uint32_t table_immediate = 0;
+		uint32_t table_mask = UINT32_MAX;
 		if (!MatchDescriptorReads(handle, descriptor, plan, key, table_offset,
-		                          table_stride, table_immediate) ||
+		                          table_stride, table_immediate, false, &table_mask) ||
 		    !MakeRuntimeTableSource(*plan.reads[0], table_source)) return false;
 		DescriptorSource material_source;
 		DescriptorSource::IndirectDescriptor indirect;
 		indirect.table_offset = table_offset;
 		indirect.table_immediate = table_immediate;
 		indirect.table_stride = table_stride;
+		indirect.table_mask   = table_mask;
 		indirect.workgroup_axis = WorkgroupAxis(key);
-		if (indirect.workgroup_axis != UINT32_MAX && !plan.table_indexed) {
+		// A masked table maps key & mask to its T#s; the workgroup projection would drop the mask.
+		if (indirect.workgroup_axis != UINT32_MAX && !plan.table_indexed && table_mask == UINT32_MAX) {
 			// The descriptor also supplies dimensions to shader arithmetic. Keep its reads;
 			// only the image handle is projected onto the bounded workgroup key.
 			plan.retain_reads = true;
@@ -3276,6 +3815,7 @@ private:
 			indirect.table_scalar = true;
 			plan.retain_reads = true;
 		} else if (table_source.dword_count == 2u) {
+			if (table_mask != UINT32_MAX) return false;
 			auto guarded_count = UnsignedBoundOnEntry(key, handle.Parent());
 			if (guarded_count.IsEmpty()) guarded_count = UnsignedResourceBound(key, handle);
 			// A runtime count can describe fewer rows than the mask's static bit range.
@@ -3345,54 +3885,91 @@ private:
 			}
 			if ((table_offset & 3u) != 0u) return false;
 		} else {
-			// Keep the GPU selector and descriptor reads, and preserve the proven scalar
-			// offset domain within the bounded image table.
-			if (sampler || plan.split_offsets) return false;
-			bool shared_selector = false;
-			if (!plan.table_indexed) {
-				for (const auto& owner: m_indirect_descriptors) {
-					const auto& selected = *m_sources[owner.source].indirect_descriptor;
-					if (!selected.selector || !EquivalentValue(m_program, key, owner.key) ||
-					    !std::ranges::all_of(handle.Uses(), [&](const Use& target) {
-						    const auto target_active = AccessPredicate(target, false);
-						    return !target_active.IsEmpty() &&
-						        std::ranges::any_of(owner.handle->Uses(), [&](const Use& witness) {
-							        const auto owner_active = AccessPredicate(witness,
-							            owner.handle->GetOpcode() == ValueOpcode::GetSamplerResource);
-							        return !owner_active.IsEmpty() && AvailableBefore(*witness.user, *target.user) &&
-							            Implies(target_active, owner_active);
-						        });
-					    })) continue;
-					// These exact keys are already required wherever this image is accessed.
-					// Reuse their proven domain without adding selector reads or a second plan.
-					indirect.selector = selected.selector;
-					indirect.key_count = selected.key_count;
-					indirect.selector_first = selected.selector_first;
-					indirect.selector_mask = selected.selector_mask;
-					indirect.signed_count = selected.signed_count;
-					indirect.workgroup_axis = selected.workgroup_axis;
-					if (selected.table_scalar) {
-						indirect.table_scalar = true;
-						plan.table_read = plan.reads[0];
+			// A 32-byte T# table read through scalar loads at (key * 32) & mask, such as a bindless
+			// heap indexed by a material word or by a bitfield of GPU-written material data: bind
+			// every T# of the table and let the shader map entry key & mask to its descriptor. This
+			// reads only the table, never the material data. The direct image-table lookup below
+			// would make each distinct T# its own specialized image instead: GTA V's ray tracing
+			// heaps hold thousands of T#s (and words that only look like T#s), and a specialization
+			// with one image per material T# took the driver minutes to compile.
+			const auto* address = !plan.table_indexed && plan.reads[0] != nullptr
+			                          ? plan.reads[0]->Arg(1).Resolve().TryInstruction() : nullptr;
+			const auto* key_read = key.Resolve().TryInstruction();
+			uint32_t    key_memory_index = 0;
+			const auto* key_memory =
+			    key_read != nullptr ? ScalarReadMemory(*key_read, key_memory_index) : nullptr;
+			const auto table_base = uint64_t {table_offset} + table_immediate;
+			const bool table_array =
+			    !sampler && indirect.workgroup_axis == UINT32_MAX && table_stride == 32u &&
+			    (key_memory == nullptr || key_memory->offset <= INT32_MAX) &&
+			    table_base <= UINT32_MAX && (table_base & 31u) == 0u && address != nullptr &&
+			    std::ranges::all_of(plan.reads, [&](const Inst* read) {
+				    return read != nullptr && (UsesOnlyImageDescriptors(*read) ||
+				                               ImageDescriptorUsesDirectly(*read));
+			    }) &&
+			    std::ranges::all_of(address->Uses(), [&](const Use& use) {
+				    return std::ranges::find(plan.reads, use.user) != plan.reads.end();
+			    }) &&
+			    // The table binding only samples and queries its elements.
+			    std::ranges::all_of(handle.Uses(), [](const Use& use) {
+				    const auto op = use.user->GetOpcode();
+				    return ImageOpcodeInfoOf(op).access == ImageAccess::None ||
+				           op == ValueOpcode::ImageSampleRaw || op == ValueOpcode::ImageQueryDimensions;
+			    });
+			if (table_array) {
+				indirect.table_offset    = static_cast<uint32_t>(table_base);
+				indirect.table_immediate = 0u;
+				indirect.table_array     = true;
+			} else {
+				// Keep the GPU selector and descriptor reads, and preserve the proven scalar
+				// offset domain within the bounded image table.
+				if (sampler || plan.split_offsets) return false;
+				bool shared_selector = false;
+				if (!plan.table_indexed) {
+					for (const auto& owner: m_indirect_descriptors) {
+						const auto& selected = *m_sources[owner.source].indirect_descriptor;
+						if (!selected.selector || !EquivalentValue(m_program, key, owner.key) ||
+						    !std::ranges::all_of(handle.Uses(), [&](const Use& target) {
+							    const auto target_active = AccessPredicate(target, false);
+							    return !target_active.IsEmpty() &&
+							        std::ranges::any_of(owner.handle->Uses(), [&](const Use& witness) {
+								        const auto owner_active = AccessPredicate(witness,
+								            owner.handle->GetOpcode() == ValueOpcode::GetSamplerResource);
+								        return !owner_active.IsEmpty() && AvailableBefore(*witness.user, *target.user) &&
+								            Implies(target_active, owner_active);
+							        });
+						    })) continue;
+						// These exact keys are already required wherever this image is accessed.
+						// Reuse their proven domain without adding selector reads or a second plan.
+						indirect.selector = selected.selector;
+						indirect.key_count = selected.key_count;
+						indirect.selector_first = selected.selector_first;
+						indirect.selector_mask = selected.selector_mask;
+						indirect.signed_count = selected.signed_count;
+						indirect.workgroup_axis = selected.workgroup_axis;
+						if (selected.table_scalar) {
+							indirect.table_scalar = true;
+							plan.table_read = plan.reads[0];
+						}
+						material_source = m_sources[selected.selector->source];
+						shared_selector = true;
+						break;
 					}
-					material_source = m_sources[selected.selector->source];
-					shared_selector = true;
-					break;
 				}
-			}
-			if (!shared_selector) {
-				indirect.workgroup_axis = UINT32_MAX;
-				plan.table_read = plan.reads[0];
-				if (plan.table_indexed) {
-					indirect.table_stride = 0u;
-					indirect.table_offset = 0u;
-					indirect.table_immediate = 0u;
-					indirect.table_record_bytes = table_immediate + plan.read_dwords * 4u;
-				} else {
-					indirect.table_scalar = true;
+				if (!shared_selector) {
+					indirect.workgroup_axis = UINT32_MAX;
+					plan.table_read = plan.reads[0];
+					if (plan.table_indexed) {
+						indirect.table_stride = 0u;
+						indirect.table_offset = 0u;
+						indirect.table_immediate = 0u;
+						indirect.table_record_bytes = table_immediate + plan.read_dwords * 4u;
+					} else {
+						indirect.table_scalar = true;
+					}
 				}
+				plan.retain_reads = true;
 			}
-			plan.retain_reads = true;
 		}
 
 		if (plan.retain_reads) plan.reads.fill(nullptr);
@@ -3973,9 +4550,12 @@ private:
 	bool IsIndirectPlanningMemory(uint32_t index) const {
 		return std::any_of(m_indirect_descriptors.begin(), m_indirect_descriptors.end(),
 		                   [&](const IndirectDescriptorPlan& plan) {
-			return plan.reads[0] != nullptr && !plan.retain_reads &&
-			       std::find(plan.memory.begin(), plan.memory.begin() + plan.read_dwords, index) !=
-			           plan.memory.begin() + plan.read_dwords;
+			if (plan.reads[0] == nullptr || plan.retain_reads) return false;
+			// A T# read that stays an ordinary scalar load is a buffer access like any other.
+			for (uint32_t word = 0; word < plan.read_dwords; ++word) {
+				if (plan.memory[word] == index && (plan.kept_reads & (1u << word)) == 0u) return true;
+			}
+			return false;
 		});
 	}
 
@@ -4012,6 +4592,7 @@ private:
 						plan.read_dwords = 4u;
 					}
 					if (TryMakeNestedDescriptor(*handle, descriptor, plan) ||
+					    TryMakeRecordTableDescriptor(*handle, descriptor, plan) ||
 					    (sampler && TryMakeFiniteDescriptor(*handle, plan)) ||
 					    TryMakeTableDescriptor(*handle, descriptor, plan) ||
 					    (!sampler && (TryMakeFiniteDescriptor(*handle, plan) ||
@@ -4034,6 +4615,103 @@ private:
 		}
 	}
 
+	// Matches a V# whose four DWORDs are scalar-buffer reads of one descriptor table at
+	// (key << 4) + table_offset + 4 * dword, as emitted for S_BUFFER_LOAD_DWORDX4 selection.
+	bool MatchIndirectWriteTable(const Inst& handle, uint32_t& table_source,
+	                             uint32_t& table_offset) {
+		if (handle.GetOpcode() != ValueOpcode::GetBufferResource || handle.NumArgs() != 4u) {
+			return false;
+		}
+		const Inst* table      = nullptr;
+		const Inst* first_read = nullptr;
+		Value       key;
+		for (uint32_t dword = 0; dword < 4u; ++dword) {
+			const auto* read = handle.Arg(dword).Resolve().TryInstruction();
+			uint32_t    memory_index = 0;
+			const auto* memory = read != nullptr ? ScalarReadMemory(*read, memory_index) : nullptr;
+			if (memory == nullptr || read->GetOpcode() != ValueOpcode::ReadConstBuffer) {
+				return false;
+			}
+			const auto* current = read->Arg(0).Resolve().TryInstruction();
+			Value       current_key;
+			uint32_t    offset = 0;
+			uint32_t    stride = 0;
+			if (current == nullptr || current->GetOpcode() != ValueOpcode::GetBufferResource ||
+			    (table != nullptr &&
+			     !EquivalentValue(m_program, Value(const_cast<Inst*>(table)),
+			                      Value(const_cast<Inst*>(current)))) ||
+			    !MatchTableOffset(read->Arg(1), current_key, offset, stride) || stride != 16u ||
+			    memory->offset > UINT32_MAX - offset) {
+				return false;
+			}
+			offset += memory->offset;
+			if (dword == 0u) {
+				key          = current_key;
+				table_offset = offset;
+				first_read   = read;
+			} else if (!EquivalentValue(m_program, key, current_key) ||
+			           static_cast<uint64_t>(table_offset) + dword * sizeof(uint32_t) != offset) {
+				return false;
+			}
+			table = current;
+		}
+		DescriptorSource descriptor;
+		if (!MakeRuntimeTableSource(*first_read, descriptor)) {
+			return false;
+		}
+		table_source = InternSource(descriptor);
+		return true;
+	}
+
+	void AddIndirectWriteTable(uint32_t source, uint32_t offset, uint32_t pc) {
+		for (const auto& table: m_indirect_write_tables) {
+			if (table.source == source) {
+				if (table.offset != offset) {
+					Fail(pc, "V# table stores use inconsistent table offsets");
+				}
+				return;
+			}
+		}
+		m_indirect_write_tables.push_back({source, offset, pc});
+	}
+
+	void LinkIndirectWriteTables() {
+		for (const auto& table: m_indirect_write_tables) {
+			const auto buffer = std::ranges::find_if(
+			    m_info.buffers,
+			    [&](const BufferResource& resource) { return resource.source == table.source; });
+			if (buffer == m_info.buffers.end()) {
+				Fail(table.pc, "V# table stores require the table to be a bound buffer");
+			}
+			buffer->indirect_write_table  = true;
+			buffer->indirect_table_offset = table.offset;
+		}
+	}
+
+	// The runtime-valid operand of an OR whose other operand is not, recursively; zero if none.
+	Value RuntimeOrOperand(Value value) const {
+		value = value.Resolve();
+		if (ValidateRuntimeValue(m_program, value)) {
+			return value;
+		}
+		const auto* inst = value.TryInstruction();
+		if (inst == nullptr || inst->GetOpcode() != ValueOpcode::BitwiseOr32) {
+			return Value(0u);
+		}
+		const auto a      = RuntimeOrOperand(inst->Arg(0));
+		const auto b      = RuntimeOrOperand(inst->Arg(1));
+		const bool a_zero = a.IsImmediate() && a.U32() == 0u;
+		const bool b_zero = b.IsImmediate() && b.U32() == 0u;
+		if (a_zero) {
+			return b;
+		}
+		if (b_zero) {
+			return a;
+		}
+		// Both sides keep runtime bits but the OR itself is not trackable: keep neither.
+		return Value(0u);
+	}
+
 	bool GetHandle(Value value, ValueOpcode expected, uint32_t width, uint32_t pc,
 	               uint32_t base_reg, Inst*& handle, uint32_t& source, bool sampler = false,
 	               bool sample_adjust = false) {
@@ -4044,6 +4722,19 @@ private:
 		DescriptorSource descriptor;
 		MakeSource(*handle, width, sampler, sample_adjust, base_reg, descriptor, pc);
 		uint32_t bad_dword = 0;
+		if (expected == ValueOpcode::GetSamplerResource && !ValidateSource(descriptor, bad_dword) &&
+		    bad_dword == 3u) {
+			// S# word 3 only holds the border color pointer and type. A shader that ORs lane data
+			// into it (reserved or border bits) still samples correctly inside the texture: keep
+			// the runtime part of the OR, or use a transparent black border.
+			descriptor.dwords[3] = RuntimeOrOperand(descriptor.dwords[3]);
+			Common::HackNotice::Report(
+			    "sampler border color word changed", "ResourceTracking::GetHandle",
+			    m_program.shader_hash, pc,
+			    fmt::format("pc=0x{:08x}: the S# border color word is not a runtime value; its "
+			                "lane-dependent bits were dropped",
+			                pc));
+		}
 		if (!ValidateSource(descriptor, bad_dword)) {
 			if (expected == ValueOpcode::GetBufferResource &&
 			    std::all_of(descriptor.dwords.begin(), descriptor.dwords.begin() + width,
@@ -4065,6 +4756,232 @@ private:
 		if (handle->NumArgs() != 2) {
 			Fail(pc, "GetAddressResource must have two address dwords");
 		}
+	}
+
+	// The user-data register N of a GetAddressResource(user data N, user data N + 1) base pair.
+	static bool UserDataBasePair(const Inst& handle, uint32_t& reg) {
+		if (handle.GetOpcode() != ValueOpcode::GetAddressResource || handle.NumArgs() != 2u) {
+			return false;
+		}
+		const auto* low  = handle.Arg(0).Resolve().TryInstruction();
+		const auto* high = handle.Arg(1).Resolve().TryInstruction();
+		if (low == nullptr || high == nullptr || low->GetOpcode() != ValueOpcode::GetUserData ||
+		    high->GetOpcode() != ValueOpcode::GetUserData ||
+		    low->Arg(0).GetType() != Type::ScalarReg || high->Arg(0).GetType() != Type::ScalarReg) {
+			return false;
+		}
+		reg = RegIndex(low->Arg(0).ScalarRegister());
+		return RegIndex(high->Arg(0).ScalarRegister()) == reg + 1u;
+	}
+
+	// DMA footprint (see ShaderInfo::dma_windows): an address read at base + offset + immediate,
+	// where the base is a user-data pair and the offset has known possible bits (GuestAddress()
+	// in the SPIR-V emitter computes the address so), reads a bounded window from the base.
+	// Anything else leaves the footprint unknown.
+	void NoteDmaWindow(const Inst& inst, const MemoryInfo& memory) {
+		// The widest address read; the window ends past it.
+		constexpr uint64_t MaxAccessBytes = 16;
+		// Larger windows are no better than synchronizing everything.
+		constexpr uint64_t MaxWindowBytes = 16u << 20u;
+		const auto* handle = inst.Arg(0).Resolve().TryInstruction();
+		uint32_t    reg    = 0;
+		if (memory.address_is_full || inst.NumArgs() < 2u || handle == nullptr ||
+		    !UserDataBasePair(*handle, reg)) {
+			m_dma_unbounded = true;
+			return;
+		}
+		const auto bits = PossibleU32Bits(inst.Arg(1));
+		if (bits >= MaxWindowBytes) {
+			m_dma_unbounded = true;
+			return;
+		}
+		const auto immediate = static_cast<int64_t>(static_cast<int32_t>(memory.offset));
+		const auto first     = std::min<int64_t>(immediate, 0);
+		const auto last      = static_cast<uint64_t>(std::max<int64_t>(immediate, 0)) + bits +
+		                       MaxAccessBytes;
+		for (auto& window: m_info.dma_windows) {
+			if (window.base_register == reg) {
+				window.first = std::min(window.first, first);
+				window.last  = std::max(window.last, last);
+				return;
+			}
+		}
+		m_info.dma_windows.push_back({reg, first, last});
+	}
+
+	// A V# of an indirect buffer access whose first three DWORDs are scalar address reads of one
+	// table entry at base + offset + immediate (+4, +8): the shader reads the buffer the entry
+	// describes. The fourth DWORD only holds the format and selects, which a shader may patch.
+	void NoteDmaDescriptorTable(const Inst& handle) {
+		// Entries the host would decode per draw: more are no better than a full synchronization.
+		constexpr uint32_t MaxOffsetBits = 12;
+		const Inst*        first_read    = nullptr;
+		uint32_t           first_offset  = 0;
+		for (uint32_t dword = 0; dword < 3u && handle.NumArgs() == 4u; dword++) {
+			const auto* read  = handle.Arg(dword).Resolve().TryInstruction();
+			uint32_t    index = 0;
+			const auto* memory = read != nullptr ? ScalarReadMemory(*read, index) : nullptr;
+			if (memory == nullptr || memory->kind != ResourceKind::ScalarAddress) {
+				break;
+			}
+			if (dword == 0u) {
+				first_read   = read;
+				first_offset = memory->offset;
+			} else if (!EquivalentValue(m_program, read->Arg(0), first_read->Arg(0)) ||
+			           !EquivalentValue(m_program, read->Arg(1), first_read->Arg(1)) ||
+			           memory->offset != first_offset + dword * 4u) {
+				break;
+			}
+			if (dword != 2u) {
+				continue;
+			}
+			const auto* address = first_read->Arg(0).Resolve().TryInstruction();
+			uint32_t    reg     = 0;
+			const auto  bits    = PossibleU32Bits(first_read->Arg(1)) & ~3u;
+			if (address == nullptr || !UserDataBasePair(*address, reg) ||
+			    std::popcount(bits) > static_cast<int>(MaxOffsetBits)) {
+				break;
+			}
+			// Scalar address reads drop the low two bits of the offset and immediate.
+			const ShaderInfo::DmaDescriptorTable table {
+			    reg, static_cast<int64_t>(static_cast<int32_t>(first_offset & ~3u)), bits};
+			if (std::ranges::find(m_info.dma_tables, table) == m_info.dma_tables.end()) {
+				m_info.dma_tables.push_back(table);
+			}
+			return;
+		}
+		m_dma_unbounded = true;
+	}
+
+	// A DMA address is usually a 64-bit base from a user-data register pair plus a per-lane
+	// offset: the low dword derives from register N and the high dword from register N + 1 (and,
+	// through the carry, from everything the low dword does). Record N so the host can cache the
+	// memory at the base before the shader runs; an access to memory without a cached buffer only
+	// records a fault and reads zero.
+	// Whether a user-data register pair is the base of the V#; it is recorded as a DMA base.
+	bool CollectDmaBase(const Inst& handle) {
+		const auto low      = AddressUserDataSources(handle.Arg(0));
+		const auto high     = AddressUserDataSources(handle.Arg(1));
+		const auto contains = [](const std::vector<uint32_t>& registers, uint32_t reg) {
+			return std::ranges::find(registers, reg) != registers.end();
+		};
+		bool found = false;
+		for (const auto reg: low) {
+			if (contains(high, reg + 1u) && !contains(low, reg + 1u)) {
+				found = true;
+				if (!contains(m_info.dma_base_registers, reg)) {
+					m_info.dma_base_registers.push_back(reg);
+				}
+			}
+		}
+		return found;
+	}
+
+	static bool UserDataRegister(Value value, uint32_t& reg) {
+		const auto* inst = value.Resolve().TryInstruction();
+		if (inst == nullptr || inst->GetOpcode() != ValueOpcode::GetUserData ||
+		    inst->Arg(0).GetType() != Type::ScalarReg) {
+			return false;
+		}
+		reg = RegIndex(inst->Arg(0).ScalarRegister());
+		return true;
+	}
+
+	// A V# whose base is user data and whose record count is the dword a scalar read takes at a
+	// fixed offset of that same base: a buffer that holds its own size in a header (see
+	// ShaderInfo::SelfSizedBuffer). GTA V's cs c421273ce118f4a5 (a pass of Psr over the nodes of a
+	// BVH) builds s[48:51] = {s6, s1 | stride 64, [s[6:7] + 0x58], format} after the BVH build
+	// before it wrote that header on the GPU.
+	bool MatchSelfSizedBuffer(const Inst& handle, uint32_t& low_reg, uint32_t& high_reg) const {
+		if (handle.GetOpcode() != ValueOpcode::GetBufferResource || handle.NumArgs() != 4u) {
+			return false;
+		}
+		const auto* flat = handle.Arg(2).Resolve().TryInstruction();
+		if (flat == nullptr || flat->GetOpcode() != ValueOpcode::ReadConst || flat->NumArgs() < 2u) {
+			return false;
+		}
+		const auto* srt  = flat->Arg(0).Resolve().TryInstruction();
+		const auto  slot = flat->Arg(1).Resolve();
+		if (srt == nullptr || srt->GetOpcode() != ValueOpcode::GetSrtResource || !slot.IsImmediate() ||
+		    slot.GetType() != Type::U32 || slot.U32() >= m_program.srt_reads.size()) {
+			return false;
+		}
+		const auto* read   = m_program.srt_reads[slot.U32()].value.Resolve().TryInstruction();
+		uint32_t    index  = 0;
+		const auto* memory = read != nullptr ? ScalarReadMemory(*read, index) : nullptr;
+		if (memory == nullptr || memory->kind != ResourceKind::ScalarAddress ||
+		    !read->Arg(1).Resolve().IsImmediate()) {
+			return false;
+		}
+		const auto* address = read->Arg(0).Resolve().TryInstruction();
+		if (address == nullptr || address->GetOpcode() != ValueOpcode::GetAddressResource ||
+		    address->NumArgs() != 2u) {
+			return false;
+		}
+		// DWORD 1 holds the high 16 base bits, often ORed with the stride or swizzle bits above them.
+		auto high = handle.Arg(1).Resolve();
+		if (const auto* inst = high.TryInstruction();
+		    inst != nullptr && inst->GetOpcode() == ValueOpcode::BitwiseOr32) {
+			const auto left  = inst->Arg(0).Resolve();
+			const auto right = inst->Arg(1).Resolve();
+			const auto above_base = [](Value value) {
+				return value.IsImmediate() && value.GetType() == Type::U32 && (value.U32() & 0xffffu) == 0u;
+			};
+			if (above_base(right)) {
+				high = left;
+			} else if (above_base(left)) {
+				high = right;
+			}
+		}
+		return EquivalentValue(m_program, handle.Arg(0), address->Arg(0)) &&
+		       EquivalentValue(m_program, high, address->Arg(1)) &&
+		       UserDataRegister(handle.Arg(0), low_reg) && UserDataRegister(high, high_reg);
+	}
+
+	// Compute shaders only (the host prepares them at dispatch): accesses of a self-sized buffer
+	// become device-address accesses when every use of its V# is one an indirect buffer supports.
+	bool TryMakeSelfSizedBuffer(const Inst& handle) {
+		if (m_program.stage != ShaderType::Compute || handle.Uses().empty()) {
+			return false;
+		}
+		bool written = false;
+		for (const auto& use: handle.Uses()) {
+			const auto& user = *use.user;
+			const auto  op   = user.GetOpcode();
+			if (use.operand != 0u || BufferAccessOf(op) == BufferAccess::None ||
+			    op == ValueOpcode::ReadConstBuffer) {
+				return false;
+			}
+			const auto index = user.Flags<MemoryFlags>().index;
+			if (index >= m_program.memory_info.size()) {
+				return false;
+			}
+			const auto& memory = m_program.memory_info[index];
+			if (memory.planning_only ||
+			    (memory.kind != ResourceKind::Buffer && memory.kind != ResourceKind::IndirectBuffer)) {
+				return false;
+			}
+			if (memory.SupportsIndirectBufferStore(op)) {
+				written = true;
+			} else if (!memory.SupportsIndirectBufferLoad(op)) {
+				return false;
+			}
+		}
+		uint32_t low_reg  = 0;
+		uint32_t high_reg = 0;
+		if (!MatchSelfSizedBuffer(handle, low_reg, high_reg)) {
+			return false;
+		}
+		auto& buffers = m_info.self_sized_buffers;
+		const auto found = std::ranges::find_if(buffers, [&](const ShaderInfo::SelfSizedBuffer& buffer) {
+			return buffer.base_low_register == low_reg && buffer.base_high_register == high_reg;
+		});
+		if (found != buffers.end()) {
+			found->written |= written;
+		} else {
+			buffers.push_back({low_reg, high_reg, written});
+		}
+		return true;
 	}
 
 	uint32_t AddBuffer(uint32_t source, const MemoryInfo& memory, ValueOpcode op, uint32_t pc) {
@@ -4221,6 +5138,13 @@ private:
 
 	void Collect(Inst& inst) {
 		const auto op           = inst.GetOpcode();
+		if (op == ValueOpcode::BvhIntersect || op == ValueOpcode::Bvh8Intersect ||
+		    op == ValueOpcode::RayQueryInit) {
+			// Device addresses: the BVH nodes, or the native ray tracing context.
+			m_dma_tracked   = true;
+			m_dma_unbounded = true;
+			return;
+		}
 		const auto buffer       = BufferAccessOf(op);
 		const auto address_info = AddressOpcodeInfoOf(op);
 		const auto image_info   = ImageOpcodeInfoOf(op);
@@ -4237,6 +5161,15 @@ private:
 		}
 		const auto& memory = m_program.memory_info[flags.index];
 		if (memory.planning_only || IsIndirectPlanningMemory(flags.index)) {
+			// The planned descriptor reads that stay in the shader read through device addresses.
+			if (!memory.planning_only && address_info.access == AddressAccess::Read &&
+			    IsAddressResourceKind(memory.kind)) {
+				m_dma_tracked = true;
+				NoteDmaWindow(inst, memory);
+			} else if (!memory.planning_only && address_info.access != AddressAccess::None) {
+				m_dma_tracked   = true;
+				m_dma_unbounded = true;
+			}
 			return;
 		}
 		Inst*    handle   = nullptr;
@@ -4250,14 +5183,48 @@ private:
 				source = indirect->source;
 			} else if (!GetHandle(inst.Arg(0), ValueOpcode::GetBufferResource, 4, flags.pc,
 			               memory.resource * 4u, handle, source)) {
-				if (memory.kind != (op == ValueOpcode::ReadConstBuffer ? ResourceKind::ScalarBuffer
-				                                                        : ResourceKind::Buffer) ||
-				    !memory.SupportsIndirectBufferLoad(op)) {
+				uint32_t   table_source = 0;
+				uint32_t   table_offset = 0;
+				// The host prepares V# table targets at compute dispatch only.
+				const bool indirect_store =
+				    m_program.stage == ShaderType::Compute && memory.kind == ResourceKind::Buffer &&
+				    memory.SupportsIndirectBufferStore(op) &&
+				    MatchIndirectWriteTable(*handle, table_source, table_offset);
+				if (indirect_store) {
+					AddIndirectWriteTable(table_source, table_offset, flags.pc);
+				} else if (m_program.stage == ShaderType::Compute && handle != nullptr &&
+				           memory.kind == ResourceKind::Buffer && memory.SupportsIndirectBufferStore(op) &&
+				           CollectDmaBase(*handle)) {
+					// A raw store through a V# whose fields the GPU computes from a base in user data:
+					// Gran Turismo 7's cs f0ff5e4576313e72 (PS5 Pro mode, loading a race) writes lists
+					// at its user-data base + 0x100 with a record count it sums from two counters it
+					// loads. Such a store writes guest memory by device address, like a FLAT store: the
+					// host caches the memory at the base before the shader runs, and the pages it really
+					// wrote come back through the write bitmap. Compute shaders only, as V# table
+					// stores: the host prepares them at dispatch.
+					m_program.has_address_writes = true;
+				} else if (memory.kind != (op == ValueOpcode::ReadConstBuffer ? ResourceKind::ScalarBuffer
+				                                                               : ResourceKind::Buffer) ||
+				           !memory.SupportsIndirectBufferLoad(op)) {
 					Fail(flags.pc,
 					     "buffer descriptor is not a valid runtime value; GPU-selected access "
-					     "requires a scalar, raw 8/16-bit, raw DWORD x1/x2/x3/x4, or formatted X load");
+					     "requires a scalar, raw 8/16-bit, raw DWORD x1/x2/x3/x4, or 32-bit formatted load "
+					     "or a raw DWORD store");
 				}
 				m_program.memory_info[flags.index].kind = ResourceKind::IndirectBuffer;
+				m_dma_tracked                           = true;
+				if (handle != nullptr) {
+					NoteDmaDescriptorTable(*handle);
+				} else {
+					m_dma_unbounded = true;
+				}
+				return;
+			}
+			if (indirect == nullptr && TryMakeSelfSizedBuffer(*handle)) {
+				m_program.memory_info[flags.index].kind = ResourceKind::IndirectBuffer;
+				m_dma_tracked                           = true;
+				// The record count bounds the reach, and the host does not know it.
+				m_dma_unbounded = true;
 				return;
 			}
 			resource = AddBuffer(source, memory, op, flags.pc);
@@ -4308,6 +5275,13 @@ private:
 			if (std::ranges::max(base) != UINT32_MAX &&
 			    std::ranges::find(bases, base) == bases.end())
 				bases.push_back(base);
+			m_dma_tracked = true;
+			CollectDmaBase(*inst.Arg(0).Resolve().TryInstruction());
+			if (address_info.access == AddressAccess::Read) {
+				NoteDmaWindow(inst, memory);
+			} else {
+				m_dma_unbounded = true;
+			}
 			return;
 		}
 
@@ -4380,7 +5354,18 @@ private:
 	std::vector<IndirectDescriptorPlan>             m_indirect_descriptors;
 	std::map<const Inst*, Value>              m_descriptor_values;
 	mutable std::unordered_map<const Inst*, bool>   m_loop_proofs; // By loop-bound comparison.
+	struct IndirectWriteTable {
+		uint32_t source = 0;
+		uint32_t offset = 0;
+		uint32_t pc     = 0;
+	};
+	std::vector<IndirectWriteTable>            m_indirect_write_tables;
 	bool                                       m_shader_writes = false;
+	// A DMA access whose footprint is not bounded (see NoteDmaWindow()).
+	bool                                       m_dma_unbounded = false;
+	// A DMA access this pass saw. uses_dma comes later, from the live IR (ShaderInfoCollection):
+	// a DMA access this pass did not see leaves the shader unbounded.
+	bool                                       m_dma_tracked = false;
 };
 
 UniformFillPlan RecognizePatternFill(Program& program, const Decoder::Program& decoded,
@@ -4442,12 +5427,75 @@ UniformFillPlan RecognizePatternFill(Program& program, const Decoder::Program& d
 	return result;
 }
 
+// Verified variants implement, for id = workgroup * 64 + lane below count:
+// destination[id] = source[id % pattern_size], with count and pattern_size the first two dwords
+// of a scalar buffer and both buffers read and written as formatted single components.
+UniformFillPlan RecognizeReplicateFill(Program& program, const Decoder::Program& decoded,
+                                     ShaderStageInputInfo input) {
+	struct Pattern {
+		size_t   code_words;
+		uint64_t hash;
+	};
+	constexpr std::array patterns {
+		// Demon's Souls (PPSA01341): s[0:3] source, s[4:7] destination, s[8:11] count and size.
+		Pattern {.code_words = 38, .hash = 0x545178a4c2031fa2ull},
+	};
+	if (program.stage != ShaderType::Compute || input.compute == nullptr ||
+	    decoded.instructions.empty() || program.user_data_base != 0 ||
+	    program.user_data_count < 12 || !program.info.images.empty() || program.wave_size != 64)
+		return {};
+	const auto& cs = *input.compute;
+	if (cs.workgroup_register != 12 || cs.thread_ids_num != 1 || !cs.group_id[0] ||
+	    cs.group_id[1] || cs.group_id[2] || cs.threads_num[0] != 64 || cs.threads_num[1] != 1 ||
+	    cs.threads_num[2] != 1 || cs.dispatch_thread_dimensions)
+		return {};
+	const auto&  last  = decoded.instructions.back();
+	const size_t words = last.pc / sizeof(uint32_t) + last.word_count;
+	if (words > decoded.code.size()) return {};
+	const auto hash = XXH3_64bits(decoded.code.data(), words * sizeof(uint32_t));
+	if (std::ranges::none_of(patterns, [&](const Pattern& candidate) {
+		    return candidate.code_words == words && candidate.hash == hash;
+	    }))
+		return {};
+	// The two scalar loads, in program order: the count, then the pattern size.
+	std::vector<Value> loads;
+	for (auto* block: program.blocks) {
+		for (auto& inst: *block) {
+			if (inst.GetOpcode() == ValueOpcode::ReadConstBuffer) loads.emplace_back(&inst);
+		}
+	}
+	uint32_t source = UINT32_MAX, destination = UINT32_MAX;
+	for (uint32_t index = 0; index < program.info.buffers.size(); ++index) {
+		const auto& buffer = program.info.buffers[index];
+		if (buffer.written) {
+			if (destination != UINT32_MAX) return {};
+			destination = index;
+		} else if (buffer.read && buffer.formatted && !buffer.scalar) {
+			if (source != UINT32_MAX) return {};
+			source = index;
+		}
+	}
+	if (loads.size() != 2 || source == UINT32_MAX || destination == UINT32_MAX) return {};
+	UniformFillPlan result;
+	result.fill.kind            = UniformFillKind::Replicate;
+	result.fill.words           = 1;
+	result.fill.group_stride[0] = 64;
+	result.fill.resource        = destination;
+	result.fill.source          = source;
+	result.element_count        = loads[0];
+	result.pattern_size         = loads[1];
+	return result;
+}
+
 } // namespace
 
 void TrackResources(Program& program, const Decoder::Program& decoded, const CFG::Graph& native_cfg,
                     ShaderStageInputInfo input) {
 	Tracker(program, decoded, native_cfg, input).Run();
 	program.uniform_fill = RecognizePatternFill(program, decoded, input);
+	if (program.uniform_fill.fill.kind == UniformFillKind::None) {
+		program.uniform_fill = RecognizeReplicateFill(program, decoded, input);
+	}
 }
 
 } // namespace Libs::Graphics::ShaderRecompiler::IR

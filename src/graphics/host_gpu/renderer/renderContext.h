@@ -11,14 +11,20 @@
 #include "graphics/host_gpu/renderer/cache/samplerCache.h"
 #include "graphics/host_gpu/renderer/cache/textureCache.h"
 #include "graphics/host_gpu/renderer/commandScheduler.h"
+#include "graphics/host_gpu/renderer/indirectWriteTables.h"
+#include "graphics/host_gpu/renderer/lodStats.h"
+#include "graphics/host_gpu/renderer/nativeRayTracing.h"
 #include "graphics/host_gpu/renderer/occlusionQueries.h"
 #include "graphics/host_gpu/renderer/pipeline/descriptorHeap.h"
 #include "graphics/host_gpu/renderer/pipeline/imageHeap.h"
 #include "graphics/host_gpu/renderer/pipeline/pipelineCache.h"
 #include "kernel/eventQueue.h"
 
+#include <array>
 #include <memory>
 #include <shared_mutex>
+#include <span>
+#include <utility>
 #include <vector>
 
 namespace Libs::VideoOut {
@@ -50,15 +56,54 @@ public:
 	SamplerCache&       GetSamplerCache() { return m_sampler_cache; }
 	BufferCache&        GetBufferCache() { return m_buffer_cache; }
 	TextureCache&       GetTextureCache() { return m_texture_cache; }
+	IndirectWriteTables& GetIndirectWriteTables() { return m_indirect_write_tables; }
+	NativeRayTracing&   GetNativeRayTracing() { return m_native_ray_tracing; }
 	RenderExecutor&     GetRenderExecutor() { return m_render_executor; }
 	OcclusionQueries&   GetOcclusionQueries() { return m_occlusion_queries; }
+	LodStatsCounter&    GetLodStats() { return m_lod_stats; }
 
 	[[nodiscard]] bool HandleFault(PageFaultAccess access, uint64_t fault_vaddr) noexcept;
+	// Before the emulated GPU writes guest memory (labels, WRITE_DATA): resolves a tracked page
+	// as its write fault would, without raising the exception.
+	void PrepareGpuWrite(const void* destination, uint64_t size) noexcept;
+	// A completion's store of guest memory (labels, query results). A completion cannot read
+	// memory back and later GPU work may own the page again at any moment, so the bytes go
+	// through the backing store, which never faults; the caches then treat it as a CPU write,
+	// except on pages the GPU owns.
+	void WriteFromCompletion(void* destination, const void* data, uint64_t size) noexcept;
+	// WriteFromCompletion() of values[i] at destination + i * stride (8-byte aligned qwords),
+	// values[0] last.
+	void WriteQwordsFromCompletion(void* destination, const uint64_t* values, uint32_t count,
+	                               uint64_t stride) noexcept;
+	// Execution thread, before each operation (see PrepareBda()).
+	void NoteOperation(uint64_t submit_id, bool after_wait) noexcept {
+		if (submit_id != m_bda_submit || after_wait) {
+			m_bda_submit = submit_id;
+			m_bda_generation++;
+		}
+	}
+	// A small command-processor write that GPU-owned pages would turn into a readback of all
+	// queued GPU work (see BufferCache::WriteAroundGpuWrites()); false when the caller must
+	// PrepareGpuWrite() and store the bytes itself.
+	[[nodiscard]] bool WriteAroundGpuWrites(void* destination, const void* data, uint64_t size);
 	[[nodiscard]] bool InvalidateMemory(uint64_t vaddr, uint64_t size);
 	[[nodiscard]] bool IsMapped(uint64_t vaddr, uint64_t size) const noexcept;
+	// Advances whenever a range is mapped or unmapped.
+	[[nodiscard]] uint64_t MappedRangesVersion() const noexcept;
 	void               MapMemory(uint64_t vaddr, uint64_t size);
 	void               UnmapMemory(uint64_t vaddr, uint64_t size);
-	void               PrepareBda();
+	void               CacheDmaBases(const ShaderStageRuntime& runtime);
+	// Caches the memory from the base of each buffer the program sizes from a header (see
+	// ShaderInfo::SelfSizedBuffer); returns whether the program stores to one.
+	bool               CacheSelfSizedBuffers(const ShaderStageRuntime& runtime);
+	// Uploads the CPU writes of the guest memory that the device-address reads of the stages can
+	// reach (see ShaderInfo::dma_windows); false when a stage's reach is not known, and nothing
+	// was uploaded.
+	[[nodiscard]] bool SynchronizeDmaFootprint(std::span<const ShaderStageRuntime* const> stages);
+	// may_write: a shader of the operation may store through device addresses. full_sync: upload
+	// the CPU writes of all cached memory first (SynchronizeDmaFootprint() did not cover the
+	// operation).
+	void               PrepareBda(bool may_write, bool full_sync = true);
 	void               RunGarbageCollector();
 
 	void AddInterruptEq(LibKernel::EventQueue::KernelEqueue eq, int event_id);
@@ -66,6 +111,10 @@ public:
 	void TriggerInterrupt(int event_id, uint32_t context_id);
 
 private:
+	// CacheDmaBases() for the guest TLAS of a program (see NativeRayTracing::FindGuestTlasSource()),
+	// with m_mapped_ranges_mutex held.
+	void CacheTlasMemory(const ShaderStageRuntime& runtime);
+
 	struct InterruptEqRegistration {
 		LibKernel::EventQueue::KernelEqueue eq       = LibKernel::EventQueue::KERNEL_EQUEUE_INVALID;
 		int                                 event_id = 0;
@@ -85,12 +134,34 @@ private:
 	BufferCache               m_buffer_cache;
 	TextureCache              m_texture_cache;
 	ImageHeap                 m_image_heap;
-	OcclusionQueries          m_occlusion_queries;
+	IndirectWriteTables       m_indirect_write_tables {*this};
+	OcclusionQueries          m_occlusion_queries {*this};
+	LodStatsCounter           m_lod_stats {*this};
+	NativeRayTracing          m_native_ray_tracing {m_graphics, m_command_scheduler, m_buffer_cache};
 	mutable std::shared_mutex m_mapped_ranges_mutex;
 	RangeSet                  m_mapped_ranges;
+	uint64_t                  m_mapped_ranges_version = 0;
+	// Ranges mapped since the last BDA synchronization (under m_mapped_ranges_mutex): that
+	// synchronization forces their regions (BufferCache::ForceSynchronization()).
+	std::vector<std::pair<uint64_t, uint64_t>> m_bda_mapped_since_sync;
+	// SynchronizeDmaFootprint(): the spans of an operation.
+	std::vector<std::pair<uint64_t, uint64_t>> m_dma_spans;
+	// Epochs (CPU dirty, buffer registrations, mapped ranges) read before the last full BDA
+	// synchronization.
+	std::array<uint64_t, 3> m_bda_sync_epochs {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+	// Advances with each guest submission an operation belongs to, after each WAIT_REG_MEM the
+	// command processor resolved and whenever the execution thread itself writes guest memory
+	// the CPU tracks (see PrepareBda()).
+	uint64_t m_bda_generation        = 1;
+	uint64_t m_bda_synced_generation = 0;
+	uint64_t m_bda_submit            = UINT64_MAX;
 	std::unique_ptr<GuestGpu> m_gpu;
 	VideoOut::VideoOutDriver* m_video_out = nullptr;
 	bool                      m_fault_process_pending = false;
+	// Device-address accesses ran since the use bitmap was last read; reads one in UseScanPeriod
+	// collections (the buffer cache's age collection waits much longer).
+	bool                      m_use_scan_pending      = false;
+	uint32_t                  m_use_scan_countdown    = 0;
 
 	Common::Mutex                        m_interrupt_mutex;
 	std::vector<InterruptEqRegistration> m_interrupt_eqs;

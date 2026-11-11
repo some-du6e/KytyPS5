@@ -18,6 +18,12 @@ public:
 
 	KYTY_CLASS_NO_COPY(PageManager);
 
+	// Whether cache tracking currently restricts access to the page holding vaddr.
+	[[nodiscard]] bool IsWatched(uint64_t vaddr) const;
+	// The watchers' protections carry no execute permission: puts it back on the page holding
+	// vaddr, with their access. False while read watchers keep the page inaccessible.
+	[[nodiscard]] bool AllowExecute(uint64_t vaddr);
+
 	template <bool track, bool is_read = false>
 	void UpdatePageWatchers(uint64_t vaddr, uint64_t size);
 	template <bool track, bool is_read = false>

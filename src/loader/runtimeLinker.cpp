@@ -15,10 +15,13 @@
 #include "common/threads.h"
 #include "common/virtualMemory.h"
 #include "graphics/host_gpu/pageManager.h"
+#include "graphics/host_gpu/renderer/pipeline/pipelineCache.h"
+#include "graphics/presentation/frameStepHack.h"
 #include "graphics/shader/recompiler/ir/passes/SrtWalker.h"
 #include "kernel/fileSystem.h"
 #include "kernel/memory.h"
 #include "kernel/pthread.h"
+#include "loader/demonsSoulsIdle.h"
 #include "loader/elf.h"
 #include "loader/gamePatch.h"
 #include "loader/guestInstructionPatcher.h"
@@ -27,6 +30,7 @@
 #include "loader/x64InstructionEmulator.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdio>
@@ -35,6 +39,7 @@
 #include <fmt/format.h>
 #include <magic_enum.hpp>
 #include <memory>
+#include <string>
 #include <vector>
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
@@ -648,6 +653,77 @@ static bool IsReadableRange(uint64_t addr, uint64_t size) {
 	return true;
 }
 
+// An SRT walker load of a GPU-owned page reads bytes the GPU did not write from the backing
+// store, as the fault below would, without the fault. A walk ahead of execution takes the
+// backing store's bytes whatever wrote them: it logs every load, and the execution thread checks
+// the logged bytes against the GPU's before it uses the walk (GuestReadLog::StillValid()).
+static Libs::Graphics::ShaderRecompiler::IR::SrtWalkerPage WalkerGuestPage(uint64_t address,
+                                                                            bool     ahead,
+                                                                            const uint8_t*& backing) {
+	using Libs::Graphics::ShaderRecompiler::IR::SrtWalkerPage;
+	// Tracking regions without GPU writes never fault on reads.
+	if (!Libs::LibKernel::Memory::MayBeGpuWritten(address, sizeof(uint32_t))) {
+		return SrtWalkerPage::Direct;
+	}
+	constexpr uint64_t PageSize = 4096;
+	if (ahead) {
+		backing = static_cast<const uint8_t*>(
+		    Libs::LibKernel::Memory::FindBackingPointer(address & ~(PageSize - 1), PageSize));
+		return backing != nullptr ? SrtWalkerPage::Backing : SrtWalkerPage::PerLoad;
+	}
+	// Pages the GPU does not own read directly.
+	if (!Libs::LibKernel::Memory::MayFaultOnGpuRead(address & ~(PageSize - 1), PageSize)) {
+		return SrtWalkerPage::Direct;
+	}
+	backing = Libs::LibKernel::Memory::FindAroundBackingPage(address);
+	return SrtWalkerPage::PerLoad;
+}
+
+static bool ReadWalkerGuestMemory(uint64_t address, uint32_t& value, bool ahead,
+                                  const uint8_t* backing) {
+	if (backing != nullptr) {
+		return Libs::LibKernel::Memory::TryReadAroundGpuWritesOnPage(address, &value, sizeof(value),
+		                                                             backing);
+	}
+	if (!Libs::LibKernel::Memory::MayBeGpuWritten(address, sizeof(value))) {
+		return false;
+	}
+	return ahead ? Libs::LibKernel::Memory::TryReadBacking(address, &value, sizeof(value))
+	             : Libs::LibKernel::Memory::TryReadAroundGpuWrites(address, &value, sizeof(value));
+}
+
+// "<module file name>+0x<offset>" for an address in a module of the host process (a driver DLL),
+// else empty.
+static std::string HostModuleAddress(uint64_t address) {
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	HMODULE module = nullptr;
+	if (address == 0 ||
+	    ::GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+	                         reinterpret_cast<LPCWSTR>(static_cast<uintptr_t>(address)), &module) == 0 ||
+	    module == nullptr) {
+		return {};
+	}
+	std::array<wchar_t, MAX_PATH> path {};
+	const auto length = ::GetModuleFileNameW(module, path.data(), static_cast<DWORD>(path.size()));
+	if (length == 0 || length >= path.size()) {
+		return {};
+	}
+	std::string name;
+	for (DWORD i = 0; i < length; i++) {
+		const auto c = path[i];
+		if (c == L'\\' || c == L'/') {
+			name.clear();
+		} else {
+			name.push_back(c >= 0x20 && c < 0x7f ? static_cast<char>(c) : '?');
+		}
+	}
+	return fmt::format("{}+0x{:x}", name, address - reinterpret_cast<uintptr_t>(module));
+#else
+	(void)address;
+	return {};
+#endif
+}
+
 static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exception_info) {
 	const auto* info = &exception_info;
 
@@ -658,6 +734,10 @@ static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exc
 	}
 
 	if (info->type == Common::HostException::ExceptionType::AccessViolation) {
+		// A guest range briefly unmapped while the emulator replaced its mapping: wait until it
+		// is mapped again, then retry the access unless the GPU tracking resolves the fault.
+		const auto transient =
+		    Libs::LibKernel::Memory::WaitForTransientUnmap(info->access_violation_vaddr);
 		using CoreAccess = Common::HostException::AccessViolationType;
 		using GpuAccess  = Libs::Graphics::PageFaultAccess;
 		GpuAccess access;
@@ -667,8 +747,35 @@ static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exc
 			case CoreAccess::Execute: access = GpuAccess::Execute; break;
 			case CoreAccess::Unknown: return false;
 		}
+		// A walker load of a GPU-owned page reads bytes the GPU did not write from the backing
+		// store instead of reading all the GPU's queued work back.
+		if (access == GpuAccess::Read) {
+			if (const auto length = Libs::Graphics::ShaderRecompiler::IR::SrtWalkerLoadLength(
+			        info->exception_address)) {
+				uint32_t value = 0;
+				if (Libs::LibKernel::Memory::MayFaultOnGpuRead(info->access_violation_vaddr,
+				                                               sizeof(value)) &&
+				    Libs::LibKernel::Memory::TryReadAroundGpuWrites(info->access_violation_vaddr,
+				                                                    &value, sizeof(value))) {
+					Loader::X64InstructionEmulator::CompleteLoad(info->native_context, length,
+					                                             value);
+					return true;
+				}
+			}
+		}
+		// A walk ahead of execution does not resolve faults: the load reads zero and the walk
+		// fails.
+		if (const auto length = Libs::Graphics::ShaderRecompiler::IR::SrtWalkerAheadLoadLength(
+		        info->exception_address, info->access_violation_vaddr)) {
+			Loader::X64InstructionEmulator::SkipLoad(info->native_context, length);
+			return true;
+		}
 		if (Libs::LibKernel::Memory::HandleGpuFault(access, info->access_violation_vaddr)) {
 			Common::DebugCounters::Add(Common::DebugCounters::Counter::GpuFaults);
+			return true;
+		}
+		if (transient != 0 && Libs::LibKernel::Memory::RetryTransientUnmapFault(
+		                          info->access_violation_vaddr, transient)) {
 			return true;
 		}
 		if (const auto length =
@@ -686,32 +793,42 @@ static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exc
 				std::snprintf(thread_name, sizeof(thread_name), "(unnamed guest thread)");
 			}
 		}
-		std::printf("--- Guest fault context ---\n");
-		std::printf("thread: %s\n", thread_name);
-		std::printf("rax=%016" PRIx64 " rbx=%016" PRIx64 " rcx=%016" PRIx64 " rdx=%016" PRIx64 "\n"
-		            "rsi=%016" PRIx64 " rdi=%016" PRIx64 " rbp=%016" PRIx64 " rsp=%016" PRIx64 "\n"
-		            "r8 =%016" PRIx64 " r9 =%016" PRIx64 " r10=%016" PRIx64 " r11=%016" PRIx64 "\n"
-		            "r12=%016" PRIx64 " r13=%016" PRIx64 " r14=%016" PRIx64 " r15=%016" PRIx64 "\n",
-		            info->rax, info->rbx, info->rcx, info->rdx, info->rsi, info->rdi, info->rbp,
-		            info->rsp, info->r8, info->r9, info->r10, info->r11, info->r12, info->r13,
-		            info->r14, info->r15);
+		// One message, so that the session log keeps it too.
+		std::string report = fmt::format("--- Guest fault context ---\nthread: {}\n", thread_name);
+		// A fault in a driver: where, and the pipeline it was creating.
+		if (const auto where = HostModuleAddress(info->exception_address); !where.empty()) {
+			report += fmt::format("pc: {:016x} ({})\n", info->exception_address, where);
+		}
+		Libs::Graphics::DescribeDriverPipelineCreation(report);
+		report += fmt::format("rax={:016x} rbx={:016x} rcx={:016x} rdx={:016x}\n"
+		                      "rsi={:016x} rdi={:016x} rbp={:016x} rsp={:016x}\n"
+		                      "r8 ={:016x} r9 ={:016x} r10={:016x} r11={:016x}\n"
+		                      "r12={:016x} r13={:016x} r14={:016x} r15={:016x}\n",
+		                      info->rax, info->rbx, info->rcx, info->rdx, info->rsi, info->rdi,
+		                      info->rbp, info->rsp, info->r8, info->r9, info->r10, info->r11,
+		                      info->r12, info->r13, info->r14, info->r15);
 		if (IsReadableRange(info->exception_address - 48, 96)) {
 			const auto* code = reinterpret_cast<const uint8_t*>(info->exception_address - 48);
-			std::printf("code (pc-48 .. pc+48, fault at byte 48):");
+			report += "code (pc-48 .. pc+48, fault at byte 48):";
 			for (int i = 0; i < 96; i++) {
-				std::printf("%s%02x", (i % 16 == 0) ? "\n " : " ", code[i]);
+				report += fmt::format("{}{:02x}", (i % 16 == 0) ? "\n " : " ", code[i]);
 			}
-			std::printf("\n");
+			report += "\n";
 		}
 		if (IsReadableRange(info->rsp, 32 * sizeof(uint64_t))) {
 			const auto* stack = reinterpret_cast<const uint64_t*>(info->rsp);
-			std::printf("stack:");
+			report += "stack:";
 			for (int i = 0; i < 32; i++) {
-				std::printf("%s %016" PRIx64, (i % 4 == 0) ? "\n " : "", stack[i]);
+				report += fmt::format("{} {:016x}", (i % 4 == 0) ? "\n " : "", stack[i]);
 			}
-			std::printf("\n");
+			report += "\n";
+			for (int i = 0; i < 32; i++) {
+				if (const auto where = HostModuleAddress(stack[i]); !where.empty()) {
+					report += fmt::format(" [rsp+0x{:02x}] {:016x} ({})\n", i * 8, stack[i], where);
+				}
+			}
 		}
-		std::fflush(stdout);
+		Log::WriteToConsoleAndLog(report);
 	}
 	EXIT("Unhandled host exception: type=%u code=%u pc=0x%016" PRIx64
 	     " access=%u address=0x%016" PRIx64 "\n",
@@ -1274,6 +1391,22 @@ void RuntimeLinker::Execute(const std::filesystem::path& game_patch) {
 			EXIT("Failed to apply game cheat\n");
 		}
 	}
+	if (!m_programs.empty()) {
+		const auto* main_program = m_programs.front();
+		std::vector<Libs::VideoOut::FrameStepHack::CodeRange> code;
+		const auto* ehdr = main_program->elf->GetEhdr();
+		const auto* phdr = main_program->elf->GetPhdr();
+		for (Elf64_Half i = 0; ehdr != nullptr && phdr != nullptr && i < ehdr->e_phnum; i++) {
+			if (phdr[i].p_type == PT_LOAD && (phdr[i].p_flags & PF_X) != 0) {
+				code.push_back({phdr[i].p_vaddr, phdr[i].p_vaddr + phdr[i].p_filesz});
+			}
+		}
+		Libs::VideoOut::FrameStepHack::PatchMainProgram(main_program->base_vaddr,
+		                                                main_program->base_size,
+		                                                main_program->mapped_size, code,
+		                                                !game_patch.empty());
+	}
+	DemonsSoulsIdle::Install(m_programs.empty() ? nullptr : m_programs.front());
 	Common::WriteFpEnv(Common::GuestFpEnv);
 	if (libc != nullptr && libc->dynamic_info->init_vaddr != 0) {
 		StartModule(libc, 0, nullptr, nullptr);
@@ -1490,6 +1623,23 @@ Program* RuntimeLinker::FindProgramByFileName(const std::filesystem::path& elf_n
 	}
 
 	return nullptr;
+}
+
+std::vector<std::pair<uint64_t, uint64_t>> RuntimeLinker::GetCodeRanges() {
+	Common::LockGuard lock(m_mutex);
+
+	std::vector<std::pair<uint64_t, uint64_t>> ranges;
+	for (const auto* p: m_programs) {
+		const auto* ehdr = p->elf->GetEhdr();
+		const auto* phdr = p->elf->GetPhdr();
+		for (Elf64_Half i = 0; ehdr != nullptr && phdr != nullptr && i < ehdr->e_phnum; i++) {
+			if (phdr[i].p_type == PT_LOAD && (phdr[i].p_flags & PF_X) != 0 && phdr[i].p_memsz != 0) {
+				const uint64_t begin = phdr[i].p_vaddr + p->base_vaddr;
+				ranges.emplace_back(begin, begin + GetAlignedSize(phdr + i));
+			}
+		}
+	}
+	return ranges;
 }
 
 Program* RuntimeLinker::FindProgramByAddr(uint64_t vaddr) {
@@ -1740,6 +1890,8 @@ void RuntimeLinker::LoadProgramToMemory(Program* program) {
 	if (!Common::HostException::InstallHandler(KytyExceptionHandler)) {
 		EXIT("Failed to install the required vectored exception handler\n");
 	}
+	Libs::Graphics::ShaderRecompiler::IR::SetSrtWalkerGuestMemory(
+	    {.page = WalkerGuestPage, .read = ReadWalkerGuestMemory});
 
 	std::vector<std::pair<uint64_t, uint64_t>> executable_segments;
 	uint64_t                                   eh_frame_header_addr = 0;

@@ -268,7 +268,7 @@ static QStringList CreateEmulatorArgs(const Configuration& info) {
 	AddFlag(args, info.hdr_enabled, "--hdr");
 	AddFlag(args, info.hide_cursor_enabled, "--hide-cursor");
 	AddFlag(args, info.stretch_enabled, "--stretch");
-	AddFlag(args, info.readback_linear_images, "--readback-linear-images");
+	AddFlag(args, !info.readback_linear_images, "--no-readback-linear-images");
 	AddFlag(args, info.readback_tiled_images, "--readback-tiled-images");
 	AddFlag(args, info.readback_storage_images, "--readback-storage-images");
 	AddFlag(args, info.sync_raw_image_buffers, "--sync-raw-image-buffers");
@@ -279,10 +279,13 @@ static QStringList CreateEmulatorArgs(const Configuration& info) {
 	AddFlag(args, info.skip_notice_screen, "--skip-notice-screen");
 	AddFlag(args, info.network_connected, "--network-connected");
 	AddFlag(args, info.psn_emulation_enabled, "--emulate-psn");
-	AddFlag(args, info.tessellation_enabled, "--tessellation");
-	AddFlag(args, info.occlusion_queries_enabled, "--occlusion-queries");
+	AddFlag(args, !info.tessellation_enabled, "--no-tessellation");
+	AddFlag(args, !info.occlusion_queries_enabled, "--no-occlusion-queries");
 	AddFlag(args, info.relaxed_shader_float, "--relaxed-shader-float");
 	AddFlag(args, info.shader_cache_enabled, "--shader-cache");
+	AddFlag(args, !info.async_pipelines_enabled, "--no-async-pipelines");
+	AddFlag(args, info.native_ray_tracing_enabled, "--native-raytracing");
+	AddFlag(args, info.pipeline_manifest_record, "--record-pipeline-manifest");
 	args << "--vblank-frequency" << QString::number(info.vblank_frequency);
 	args << "--console-language" << QString::number(info.console_language);
 	AddFlag(args, info.vulkan_validation_enabled, "--vulkan-validation");
@@ -299,9 +302,9 @@ static QStringList CreateEmulatorArgs(const Configuration& info) {
 		args << "--dlss" << info.dlss_folder;
 	}
 	AddFlag(args, info.amd_cpu_enabled, "--amd-cpu");
-	AddFlag(args, info.guest_tsc_enabled, "--guest-tsc");
+	AddFlag(args, !info.guest_tsc_enabled, "--no-guest-tsc");
 #if defined(_WIN32)
-	AddFlag(args, info.red_zone_protection_enabled, "--redzone");
+	AddFlag(args, !info.red_zone_protection_enabled, "--no-redzone");
 #endif
 	for (const auto& binding: info.host_input_mapping) {
 		args << "--keymap" << binding;

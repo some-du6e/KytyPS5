@@ -1,0 +1,385 @@
+#ifndef EMULATOR_SRC_GRAPHICS_SHADER_RECOMPILER_FRONTEND_DECODE_RAYTRACINGPATCH_H_
+#define EMULATOR_SRC_GRAPHICS_SHADER_RECOMPILER_FRONTEND_DECODE_RAYTRACINGPATCH_H_
+
+#include "graphics/shader/recompiler/frontend/decode/ShaderDecoder.h"
+
+#include <array>
+#include <cstdint>
+#include <vector>
+
+namespace Libs::Graphics::ShaderRecompiler::Decoder {
+
+// Native ray tracing of guest BVH traversal loops.
+//
+// Games using sce::Psr traverse its BVHs in software, with a traversal loop of the library
+// compiled into their shaders (the variants of GTA V, Astro Bot and Astro's Playroom are
+// recognized, in waves of 64 or 32 lanes).
+// In the packet variant a wave-wide loop pops a node from a stack kept in
+// VGPR lanes, tests it with IMAGE_BVH_INTERSECT_RAY and pushes the children the lanes hit. Box nodes
+// are 9 of 10 node visits. The patch keeps the guest code that sets up an instance (object
+// space ray, BLAS descriptors) and the code of a leaf (triangle tests, alpha test, results), and
+// replaces the stack walk with ray queries over host acceleration structures whose primitives
+// are the guest leaves (see NativeRayTracing): each lane's query yields the leaves its ray
+// reaches, the wave runs the guest leaf code for one (instance, leaf) at a time with the lanes
+// that reached it, and a lane whose leaf code accepted a hit stops its query.
+//
+// The original loop stays in the shader: RT_INIT falls back to it when the host has no
+// acceleration structure for the TLAS the shader traces.
+//
+// Pseudo instructions (Instruction::offset = site):
+//   RT_INIT    image_nsa_addr[0..7] = origin xyz, direction xyz, t max and cull mask VGPRs ([8]
+//              the constant mask without a mask VGPR, src2 the SGPR mask; [9..11] the SGPRs of the
+//              origin components without a VGPR, NoRegister), src0 = SGPR pair of the
+//              guest TLAS header address, src1 = alpha test off, src3 = the SGPR (dmask 4) or lane
+//              mask (dmask 8) of the lanes that cull facings. dmask 1: both facings; dmask 2:
+//              opacity from the geometry; dmask 16: no guest leaf code (PacketLane sites), with
+//              secondary_offset = the SGPR that flips the culled facing | the SGPR without which
+//              the traversal is the guest's << 16 (0xffff: none). SCC = native traversal.
+//   RT_SELECT  dst = SGPR of the instance node, dst2 = SGPR pair of the lane mask; advances the
+//              queries, picks the candidate of the first lane that has one and sets EXEC (and
+//              the mask) to the lanes with the same candidate. SCC = some lane has a candidate.
+//   RT_LEAF    dst = SGPR of the leaf node, dst2 = SGPR pair that receives EXEC, src0 = SGPR pair
+//              of the lanes entering the leaf (or EXEC).
+//   RT_RESOLVE src0 = SGPR pair of the lanes still searching after the leaf: the other lanes that
+//              entered it accepted a hit and stop. dmask 1: the instance setup culled the lanes;
+//              dmask 2: every lane keeps searching (closest hit sites).
+//   RT_MODE    SCC = the site is traversing natively.
+//   RT_EXIT    EXEC = the lanes that started the traversal; ends the native traversal.
+//   RT_ALPHA   before RT_INIT of a site with a RayTracingAlphaTest: image_nsa_addr[0] = the level
+//              of detail VGPR, [1] = material V# offset, [2] = buffer table V# offset,
+//              [3] = threshold, [4] = level of detail offset, [5] = reference VGPR (NoRegister:
+//              threshold and factor); src0 = spread register, src1 = factor SGPR (none for a
+//              reference VGPR; with dmask 4 the reference SGPR), src2 / src3 = SGPR pairs of the
+//              material and buffer table user pointers (or, with offset RayTracingAlphaDirect, the
+//              first SGPR of the V#); dmask = RayTracingAlphaLayout, | 2 for the Lane layout with
+//              threshold and factor, | 4 for the Lane layout with a reference SGPR, | 8 for the
+//              reference threshold * factor of every material; 16 for the Entry layout (src2 and
+//              src3 are the first SGPRs of the V#s, [3] the threshold and [4] the level of the
+//              samples; no level of detail VGPR (NoRegister) and no spread).
+//
+// A closest hit site (RayTracingKind::ClosestOpaque) is a per lane traversal whose leaf code
+// accepts the nearest triangle of either facing: the hardware finds the hit and RT_COMMIT writes
+// every register the guest leaf code writes for it. When the leaf code alpha tests the triangles
+// whose primitive word is not marked opaque (the site has a RayTracingAlphaTest with the Lane
+// layout), the query takes every triangle as a candidate (the guest ignores the instance's
+// opacity flags) and confirms the opaque ones and the alpha tested ones the alpha test accepts.
+//
+// A closest hit site with guest leaf code (RayTracingKind::ClosestLeaf, Gran Turismo 7) is a
+// wave-wide traversal of the BVH library's later generation whose instance code holds a BLAS walk
+// of its own: the leaf code tests one leaf entry, calls the game's any-hit function for the
+// triangles not opaque and keeps the nearest accepted hit in registers. It runs like a Packet
+// site (the instance setup and the leaf code are the guest's, for the alpha tested candidates
+// the hardware reports) except that a lane that accepts a hit keeps searching, and at the exit
+// RT_COMMIT writes the opaque hit the hardware found when it is nearer than the registers' hit.
+//
+// A packet site with a per lane BLAS walk (RayTracingKind::PacketLane, GTA V's performance mode
+// with ray tracing) walks the TLAS wave-wide as a Packet site does, but each lane then walks the
+// BLAS of the instance on its own (a stack per lane in LDS and scratch) and runs the leaf code for
+// its own triangles: any accepted hit ends the lane's search. The guest leaf code cannot run for
+// one candidate at a time, so the native traversal runs only with the per-lane alpha test (else it
+// is the guest's): like a closest hit site, the hardware finds the hit, with the opacity and the
+// facing of the instance flags as for Packet sites, and RT_COMMIT writes it.
+//
+// A closest hit site with a per lane BLAS walk (RayTracingKind::ClosestLane, Marvel's Wolverine,
+// sce::Psr BVH version 10) walks the TLAS wave-wide and runs the guest instance setup, then each
+// lane walks the instance's BLAS on its own and runs the leaf code for its own triangles (the
+// alpha test included), keeping the nearest accepted hit in registers. Its native traversal runs
+// like a ClosestLeaf site's, with every triangle a candidate (both facings, none opaque: the guest
+// leaf code decides): the wave takes the smallest instance any lane has, runs its setup once, and
+// each lane with a candidate of that instance runs the guest leaf code for its own smallest one
+// (its leaf list entry, loaded as the guest walk loads it), until no lane has candidates left.
+// When the leaf code is Resident Evil Village's (RayTracingAlphaLayout::Entry), the native traversal
+// runs no guest code at all: the hardware finds the nearest hit, the per lane alpha test confirms
+// or drops each non opaque candidate, and RT_COMMIT writes the registers of the accepted hit, like a
+// PacketLane site's.
+//
+// A packet site whose lanes each walk the BLAS and run the guest leaf code (RayTracingKind::AnyLane,
+// Marvel's Wolverine's shadow rays, waves of 32 lanes) keeps a stack of (node, lane mask) pairs in
+// the TLAS loop; its native traversal is a ClosestLane one (every triangle a candidate, the wave
+// takes the smallest instance, each lane its own leaf) that ends a lane's query when the guest leaf
+// code accepts a hit: it clears the lane from the lane mask the instance setup copied from EXEC.
+enum class RayTracingKind : uint32_t {
+	Packet,        // Wave-wide traversal, the guest leaf code tests the alpha tested triangles.
+	ClosestOpaque, // Closest hit, both facings.
+	ClosestLeaf,   // Closest hit, wave-wide, the guest leaf code tests the alpha tested triangles.
+	PacketLane,    // Wave-wide TLAS, per lane BLAS: no guest code runs in the native traversal.
+	ClosestLane,   // Closest hit, wave-wide TLAS, per lane BLAS: each lane runs the guest leaf code.
+	AnyLane,       // Any hit, wave-wide TLAS with lane masks, per lane BLAS: each lane runs the guest leaf code.
+};
+
+// A register a site does not have.
+constexpr uint32_t NoRegister = 0xffffffffu;
+
+// The alpha test of a Packet site's leaf code, when it is GTA V's (see DeriveAlphaTest in
+// RayTracingPatch.cpp): the native traversal runs it per lane on each alpha tested candidate the
+// hardware reports and confirms the candidates it accepts, so the guest leaf code never runs.
+// Per triangle (node N, primitive word W) of instance record R:
+//   B  = ((R[0x34] & 0x3fffff) << 32 | R[0x30]) << 3      the BLAS
+//   m  = B[B[0x28] + ((N >> 3) - B[0x7c]) * 4] + R[0x78]    the material index
+//   M  = 12 bytes of the material table at m * 12
+//   indices: V# (M1 >> 8) * 16 of the buffer table, formatted elements (W & 0x3fffffff) * 3 + k
+//   uv:      V# (M0 >> 8) * 16 of the buffer table, two floats at (M1 & 0xfc) + (M0 & 0xfc) * index
+//   level:   min(M2 & 15, log2(2 * (spread * t + lod)) + lod_offset)
+//   accepted when the W channel of T# (M2 >> 4) of the leaf code's bindless table at uv exceeds
+//   threshold * (M0 bit 0 ? factor : 1), or the lane's reference.
+// Every register holds its value from the site entry through the traversal. A leaf code whose
+// level of detail depends on a wave-wide condition (`level_sgpr`, not 0: the level above) is
+// recognized on the path where it holds; the site keeps the guest traversal where it does not.
+enum class RayTracingAlphaLayout : uint32_t {
+	// A packet site's scalar leaf code: the material record is 12 bytes at m * 12, the vertices
+	// are read through their V#, the reference is threshold * (M0 bit 0 ? factor : 1).
+	Scalar = 0,
+	// A closest hit site's per lane leaf code: the material record is dwords m * 3 + k of a
+	// structured buffer, the vertices are read at the base address of their V# (from the buffer
+	// table as a structured buffer), the reference is a VGPR (or, without one, threshold *
+	// (M0 bit 0 ? factor : 1) as in the Scalar layout).
+	Lane = 1,
+	// A closest hit site of the BVH library's first version (ClosestLane, Resident Evil Village): the
+	// instance record holds the index of its material entry, whose strides and offsets select the
+	// index and texture coordinate buffers and a material with two texture lookups (see
+	// DeriveEntryAlphaTest in RayTracingPatch.cpp and AlphaTestEntry in the SPIR-V emitter). The V#s
+	// of the tables are SGPRs of the program (RayTracingAlphaDirect), `lod_offset` is the level of
+	// its samples and `threshold` the alpha it exceeds (float bits). The instance flags are the
+	// record's dword `flags_dword` of the layout, as for the other sites.
+	Entry = 2,
+};
+
+// A V# offset of RayTracingAlphaTest: the V# is in the four SGPRs from `*_user` at the site entry.
+constexpr uint32_t RayTracingAlphaDirect = 0xffffffffu;
+
+// How the guest's top-level BVH is laid out, as the traversal code reads it (see DeriveLayout in
+// RayTracingPatch.cpp); versions of the BVH library differ. The instance records are
+// `record_stride` bytes at header + the 64-bit offset at header + `instance_offset`, one per
+// instance leaf (node >> 3). Fields are record dwords:
+//   transform    the world to object 3x4 matrix: row r (object x, y, z) and column c (world x,
+//                y, z, then the translation) at transform[r * 4 + c]
+//   BLAS         the BLAS address: dwords blas, blas + 1 as they are (raw), or packed as
+//                ((lo | (hi & 0x3fffff) << 32) << 3)
+//   root         the BLAS root node
+//   mask         the instance mask: (dword >> mask_shift) & 0xff, which the ray's mask selects
+//                (NoRegister: the traversal tests no mask, every instance counts); with a
+//                `mask_width`, the instance counts for every ray when any of the `mask_width` bits
+//                from `mask_shift` is set
+//   flags        the instance flags: (dword >> flags_shift); bit 0 opaque, bit 1 alpha tested
+//                anyway, bit 2 both facings, bit 3 the culled facing (NoRegister: the program never
+//                reads them; its sites do not depend on them)
+// `flip_facing`: whether the guest's triangle test accepts, with flags bit 3 clear, the triangles
+// whose test sign is set (the host's back faces).
+struct RayTracingLayout {
+	bool                    valid           = false;
+	uint32_t                instance_offset = 0;
+	uint32_t                record_stride   = 128;
+	std::array<uint8_t, 12> transform {};
+	uint32_t                blas_dword      = 0;
+	bool                    blas_packed     = false;
+	uint32_t                root_dword      = 0;
+	uint32_t                mask_dword      = 0;
+	uint32_t                mask_shift      = 0;
+	uint32_t                mask_width      = 0;
+	uint32_t                flags_dword     = 0xffffffffu;
+	uint32_t                flags_shift     = 0;
+	bool                    flip_facing     = true;
+	// Instance leaves of node type `inline_type` (NoRegister: none) have their record at header
+	// + `inline_offset` and the BLAS root `inline_root`.
+	uint32_t                inline_type     = 0xffffffffu;
+	uint32_t                inline_offset   = 0;
+	uint32_t                inline_root     = 0;
+	// Where the guest's BVH headers (the TLAS's and the BLASes') hold their node count: the T#
+	// size at header + 88, or (`node_count_80`) the count at header + 80, one more than that size.
+	bool                    node_count_80   = false;
+
+	bool operator==(const RayTracingLayout&) const = default;
+	// Four words for the host passes (see LoadGuestInstance in rt_common.inc).
+	[[nodiscard]] std::array<uint32_t, 4> Pack() const;
+	[[nodiscard]] uint32_t                TransformBase() const;
+};
+
+// The fields of the guest BVH the alpha tests read beyond the instance record's (see
+// RayTracingAlphaTest): record dword of the material base, BLAS header dwords of the table of the
+// geometry of each triangle node and of the first triangle node, and how the vertex offsets are
+// formed: (M1 & mask) + index * (M0 & mask), aligned down to 4 bytes when `align`.
+struct RayTracingAlphaFields {
+	uint32_t material_dword = 0;
+	uint32_t table_dword    = 0;
+	uint32_t first_dword    = 0;
+	uint32_t vertex_mask    = 0xfc;
+	bool     vertex_align   = false;
+	// Packed with the BLAS location of the layout into one word (RayQueryAlpha's format).
+	[[nodiscard]] uint32_t Pack(const RayTracingLayout& layout) const;
+};
+
+struct RayTracingAlphaTest {
+	bool                  valid  = false;
+	RayTracingAlphaLayout layout = RayTracingAlphaLayout::Scalar;
+	RayTracingAlphaFields fields;
+	// The lane's level of detail term (VGPR), the cone spread (an SGPR, or in the Lane layout an
+	// SGPR or a VGPR) and the threshold factor (SGPR, Scalar layout or Lane layout without a
+	// reference) or reference (VGPR, Lane layout; NoRegister: none).
+	uint32_t lod_vgpr       = 0;
+	uint32_t spread_reg     = 0;
+	bool     spread_vector  = false;
+	uint32_t factor_sgpr    = 0;
+	// The reference is threshold * factor for every material, not only those with M0 bit 0 (GTA V
+	// 01.005's Fidelity sites).
+	bool     factor_always  = false;
+	uint32_t reference_vgpr = NoRegister;
+	// Lane layout: a reference the same for every lane, in an SGPR the traversal keeps (NoRegister:
+	// none).
+	uint32_t reference_sgpr = NoRegister;
+	// The V#s of the material table and of the vertex and index buffer table: 16 bytes at user
+	// data pointer (SGPR pair) `*_user` + `*_offset` (RayTracingAlphaDirect: SGPRs `*_user`).
+	uint32_t material_user   = 0;
+	uint32_t material_offset = 0;
+	uint32_t buffer_user     = 0;
+	uint32_t buffer_offset   = 0;
+	// Float bits.
+	uint32_t threshold  = 0;
+	uint32_t lod_offset = 0;
+	// The SGPR of the condition the level above holds under (NoRegister: always).
+	uint32_t level_sgpr = NoRegister;
+};
+
+struct RayTracingSite {
+	RayTracingKind kind = RayTracingKind::Packet;
+	// The instruction that falls through to the loop header; the patch enters there.
+	uint32_t entry_pc = 0;
+	// The loop header (the fallback target).
+	uint32_t loop_pc = 0;
+	// The VGPRs of the ray's origin, or (NoRegister) the SGPR of the component in `origin_sgpr`:
+	// a ray origin the same for every lane, which the loop copies into the box test's VGPRs.
+	uint32_t origin[3] {};
+	uint32_t origin_sgpr[3] {NoRegister, NoRegister, NoRegister};
+	uint32_t direction[3] {};
+	// AnyLane sites: a direction component the loop reads from a VGPR lane into the box test's VGPR
+	// (the same for every lane): RT_INIT reads that lane (`direction_sgpr`: 0x80000000 | lane << 8 |
+	// VGPR; NoRegister: the component is in its VGPR); and a constant t max (`t_max_constant`, set
+	// when `t_max_is_constant`) the loop moves into its VGPR.
+	uint32_t direction_sgpr[3] {NoRegister, NoRegister, NoRegister};
+	// The VGPR and lane the program reads a direction component from (during the derivation).
+	uint32_t direction_lane_vgpr[3] {NoRegister, NoRegister, NoRegister};
+	uint32_t direction_lane[3] {};
+	bool     t_max_is_constant = false;
+	uint32_t t_max_constant    = 0;
+	uint32_t t_max     = 0;
+	// The VGPR of the ray's instance mask (NoRegister: the SGPR or, without one, the constant
+	// mask below).
+	uint32_t cull_mask = 0;
+	uint32_t cull_mask_sgpr     = NoRegister;
+	uint32_t cull_mask_constant = 0xff;
+	// SGPR pair of the TLAS header address at entry_pc.
+	uint32_t header_sgpr = 0;
+	// Closest hit and PacketLane sites: the guest's load of the TLAS header address
+	// (S_LOAD_DWORDX2), run again at the entry into SGPR pair `header_load_sgpr` (one the program
+	// does not use, or RT_SELECT's) when the header pair holds another value there (0: it holds
+	// the address).
+	uint32_t header_load_pc   = 0;
+	uint32_t header_load_sgpr = 0;
+	// SGPR that turns the alpha test off (every triangle opaque) when not 0 (NoAlphaOff: none).
+	uint32_t alpha_off_sgpr = 0;
+	// PacketLane sites: the V_READLANE_B32s that read the alpha test switch and the ray's instance
+	// mask back from the VGPR lanes the program keeps them in through the traversal, run again at
+	// the entry into `alpha_off_sgpr` and `cull_mask_sgpr` (SGPRs the program does not use; 0: the
+	// value is in that SGPR at the entry).
+	uint32_t alpha_off_load_pc = 0;
+	uint32_t cull_mask_load_pc = 0;
+	// The lanes that cull the facing the instance flags select (Packet sites; closest hit sites
+	// take both facings): all of them, those of the SGPR pair `facing_mask`, or none when SGPR
+	// `facing_sgpr` is 0 (NoRegister: not a condition).
+	uint32_t facing_sgpr = NoRegister;
+	uint32_t facing_mask = NoRegister;
+	// Closest hit sites: every triangle counts with both facings (else the instance flags and
+	// the facing condition above select the facing, as for Packet sites).
+	bool     both_facings = true;
+	// PacketLane sites: the SGPR that, when not 0, makes the lanes that cull a facing cull the
+	// other one (NoRegister: none).
+	uint32_t flip_sgpr = NoRegister;
+	// The VGPRs of an accepted hit: distance, primitive word, instance record address (pair).
+	uint32_t result_t        = 0;
+	uint32_t result_word     = 0;
+	uint32_t result_instance = 0;
+	// The VGPR of the instance record address's high DWORD (NoRegister: result_instance + 1).
+	uint32_t result_instance_hi = NoRegister;
+	// Closest hit sites: the VGPRs of its barycentrics (as the guest leaf code divides them) and
+	// of its guest triangle node.
+	uint32_t result_u    = NoRegister;
+	uint32_t result_v    = NoRegister;
+	uint32_t result_node = NoRegister;
+	// The instance setup and the register it reads the instance node from.
+	uint32_t setup_pc      = 0;
+	uint32_t instance_sgpr = 0;
+	// Where the instance setup leaves when the instance mask culls every lane.
+	uint32_t cull_exit_pc = 0;
+	// The BLAS loop header, replaced by the entry to the leaf code.
+	uint32_t blas_head_pc = 0;
+	// The leaf code, the registers it reads the leaf from, the lane mask and the saved EXEC.
+	uint32_t leaf_pc         = 0;
+	uint32_t leaf_sgpr       = 0;
+	uint32_t mask_sgpr       = 0;
+	uint32_t saved_exec_sgpr = 0;
+	// The end of the leaf code (the BLAS loop latch), replaced by the end of the iteration.
+	uint32_t tail_pc = 0;
+	// Instructions run after each leaf (copies; 0 = none), e.g. restoring a spilled SGPR: the one at
+	// `after_leaf_pc`, or those up to `after_leaf_end_pc` (ClosestLeaf sites: the V_READLANE_B32s
+	// that restore every SGPR the instance setup spilled).
+	uint32_t after_leaf_pc     = 0;
+	uint32_t after_leaf_end_pc = 0;
+	// ClosestLeaf sites: the end of the BLAS loop (after its backward branch); the leaf code's
+	// branches into the rest of it (the BLAS box code, the pop) end the leaf.
+	uint32_t blas_end_pc = 0;
+	// ClosestLane sites: the VGPR of the lane's leaf list entry pointer (the BLAS walk's node
+	// VGPR) and the instructions that load the entry from it into that VGPR and the next one
+	// [leaf_load_pc, leaf_load_end_pc), run before the leaf code (NoRegister: not such a site).
+	// Instructions in that range that write EXEC (the guest walk restoring its lanes) are not run.
+	uint32_t leaf_vgpr        = NoRegister;
+	uint32_t leaf_load_pc     = 0;
+	uint32_t leaf_load_end_pc = 0;
+	// ClosestLane sites: the per lane walk's box code [leaf_box_pc, leaf_box_end_pc), from the
+	// S_CBRANCH_EXECZ that skips it when no lane has a box node, which the copy of the leaf code
+	// leaves out (every lane has a triangle node there; 0: none).
+	uint32_t leaf_box_pc      = 0;
+	uint32_t leaf_box_end_pc  = 0;
+	// AnyLane sites: the setup's S_MOV_B32 <mask>, exec (`mask_copy_pc`), run again after each
+	// RT_LEAF: the guest leaf code clears from the mask the lanes that accept a hit.
+	uint32_t mask_copy_pc = 0;
+	// AnyLane sites: a second copy of the BLAS loop that the compiler made and that the setup jumps
+	// to under one condition: [blas_copy_pc, blas_copy_end_pc] from the copy's prologue (the same
+	// instructions as the first copy's) to its loop head (0: none). The native traversal runs the
+	// first copy's leaf code for both.
+	uint32_t blas_copy_pc     = 0;
+	uint32_t blas_copy_end_pc = 0;
+	// Where the loop exits to.
+	uint32_t exit_pc = 0;
+	// The alpha test the native traversal runs instead of the leaf code.
+	RayTracingAlphaTest alpha;
+	// The instance records as this site reads them.
+	RayTracingLayout layout;
+};
+
+constexpr uint32_t NoAlphaOff = 0xffffffffu;
+
+struct RayTracingPatch {
+	std::vector<RayTracingSite> sites;
+	// The guest TLAS header: the 64-bit value at user data pointer `user_sgpr` + `header_offset`,
+	// or (`header_vsharp` not NoRegister) at the base of the V# at that pointer + `header_vsharp`,
+	// + `header_offset`.
+	uint32_t                    user_sgpr     = 0;
+	uint32_t                    header_offset = 0;
+	uint32_t                    header_vsharp = NoRegister;
+	uint32_t                    root          = 0;
+	RayTracingLayout            layout;
+};
+
+// Finds the traversal loops of a decoded program of waves of `wave_size` lanes (lane masks of
+// 64 bits in two SGPRs, or of 32 bits in one) by their structure (see RayTracingPatch.cpp); false
+// when the program has none, or one that does not match in every detail (the program keeps its
+// own traversal).
+bool DeriveRayTracingPatch(const Program& program, RayTracingPatch& patch, uint32_t wave_size = 64);
+
+// Applies `patch` to a decoded program (and records its TLAS source in
+// Program::ray_tracing_source). Returns false, leaving the program unchanged, when the program
+// does not match what the patch expects.
+bool ApplyRayTracingPatch(const RayTracingPatch& patch, Program& program);
+
+} // namespace Libs::Graphics::ShaderRecompiler::Decoder
+
+#endif // EMULATOR_SRC_GRAPHICS_SHADER_RECOMPILER_FRONTEND_DECODE_RAYTRACINGPATCH_H_

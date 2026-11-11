@@ -84,23 +84,7 @@ ImageHeap::ImageHeap(RenderContext& context, PageManager& page_manager)
 	                               limits.maxPerStageUpdateAfterBindResources}) <
 	                     IR::ImageHeapCapacity);
 
-	const vk::DescriptorBindingFlags binding_flags =
-	    vk::DescriptorBindingFlagBits::ePartiallyBound |
-	    vk::DescriptorBindingFlagBits::eUpdateAfterBind |
-	    vk::DescriptorBindingFlagBits::eUpdateUnusedWhilePending;
-	vk::DescriptorSetLayoutBindingFlagsCreateInfo flags_info {};
-	flags_info.bindingCount  = 1;
-	flags_info.pBindingFlags = &binding_flags;
-	const vk::DescriptorSetLayoutBinding binding {0, vk::DescriptorType::eSampledImage,
-	                                              IR::ImageHeapCapacity,
-	                                              vk::ShaderStageFlagBits::eAll, nullptr};
-	vk::DescriptorSetLayoutCreateInfo layout_info {};
-	layout_info.pNext        = &flags_info;
-	layout_info.flags        = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
-	layout_info.bindingCount = 1;
-	layout_info.pBindings    = &binding;
-	EXIT_IF(graphics.device.createDescriptorSetLayout(&layout_info, nullptr, &m_layout) !=
-	        vk::Result::eSuccess);
+	m_layout = CreateLayout(graphics.device);
 	const vk::DescriptorPoolSize pool_size {vk::DescriptorType::eSampledImage,
 	                                        IR::ImageHeapCapacity};
 	vk::DescriptorPoolCreateInfo pool_info {};
@@ -120,6 +104,27 @@ ImageHeap::ImageHeap(RenderContext& context, PageManager& page_manager)
 	m_elements.push_back({.binding = {.layout = vk::ImageLayout::eShaderReadOnlyOptimal}});
 	m_writes.push_back(0u);
 	WriteDescriptors();
+}
+
+vk::DescriptorSetLayout ImageHeap::CreateLayout(vk::Device device) {
+	const vk::DescriptorBindingFlags binding_flags =
+	    vk::DescriptorBindingFlagBits::ePartiallyBound |
+	    vk::DescriptorBindingFlagBits::eUpdateAfterBind |
+	    vk::DescriptorBindingFlagBits::eUpdateUnusedWhilePending;
+	vk::DescriptorSetLayoutBindingFlagsCreateInfo flags_info {};
+	flags_info.bindingCount  = 1;
+	flags_info.pBindingFlags = &binding_flags;
+	const vk::DescriptorSetLayoutBinding binding {0, vk::DescriptorType::eSampledImage,
+	                                              IR::ImageHeapCapacity,
+	                                              vk::ShaderStageFlagBits::eAll, nullptr};
+	vk::DescriptorSetLayoutCreateInfo layout_info {};
+	layout_info.pNext        = &flags_info;
+	layout_info.flags        = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
+	layout_info.bindingCount = 1;
+	layout_info.pBindings    = &binding;
+	vk::DescriptorSetLayout layout = nullptr;
+	EXIT_IF(device.createDescriptorSetLayout(&layout_info, nullptr, &layout) != vk::Result::eSuccess);
+	return layout;
 }
 
 ImageHeap::~ImageHeap() {
@@ -196,6 +201,59 @@ bool ImageHeap::Acquire(const IR::ImageHeapRequest& request, IR::ImageHeapView& 
 	result = {.slots      = selected.buffer->BufferDeviceAddress(),
 	          .slot_count = static_cast<uint32_t>(selected.slots.size() - 1u),
 	          .kinds      = selected.kinds};
+	return true;
+}
+
+bool ImageHeap::AcquireList(const IR::ImageHeapList& list, IR::ImageHeapView& result) {
+	KYTY_PROFILER_FUNCTION();
+	if (list.root == nullptr) {
+		return false;
+	}
+	const auto profile = IR::ImageHeapResource(*list.root, 0u);
+	auto       memory  = std::ranges::find_if(m_list_memories, [&](const auto& candidate) {
+		       return candidate->views.front()->profile == profile;
+	       });
+	if (memory == m_list_memories.end()) {
+		const auto epoch   = Image::heap_epoch.load(std::memory_order_relaxed);
+		auto       created = std::make_unique<Memory>();
+		created->views.push_back(std::make_unique<View>(View {.memory        = *created,
+		                                                      .profile       = profile,
+		                                                      .resolve_epoch = epoch,
+		                                                      .layout_epoch  = epoch}));
+		memory = m_list_memories.insert(m_list_memories.end(), std::move(created));
+	}
+	auto& view = *(*memory)->views.front();
+	auto& held = m_lists[{list.owner, list.resource}];
+	held.view  = &view;
+	// The new references come first, so elements both lists select stay alive.
+	m_scratch.clear();
+	m_scratch.reserve(list.values.size());
+	for (auto value: list.values) {
+		const auto kind = IR::ImageHeapKind(view.profile, value);
+		m_scratch.push_back(kind == 0u ? 0u : Intern(view, kind, value));
+	}
+	const auto slots = list.values.size() + 2u;
+	for (auto slot = slots - 1u; slot < held.slots.size(); ++slot) Assign(held, slot, 0u);
+	const auto previous = held.slots.size();
+	held.slots.resize(slots, 0u);
+	if (previous < slots) Widen(held.dirty_begin, held.dirty_end, previous, slots);
+	held.dirty_end   = std::min(held.dirty_end, slots);
+	held.dirty_begin = std::min(held.dirty_begin, held.dirty_end);
+	for (size_t value = 0; value < m_scratch.size(); ++value) Assign(held, value + 1u, m_scratch[value]);
+	if (held.buffer == nullptr || slots * sizeof(uint32_t) > held.buffer->Size()) {
+		if (held.buffer != nullptr && m_context.GetCommandScheduler().Active()) {
+			m_context.GetCommandScheduler().DeferOperation([buffer = std::move(held.buffer)] {});
+		}
+		held.buffer = SlotBuffer(m_context, (slots - 1u) * sizeof(uint32_t));
+		Widen(held.dirty_begin, held.dirty_end, 0u, slots);
+	}
+	if (std::ranges::find(m_active, &view) == m_active.end()) m_active.push_back(&view);
+	if (std::ranges::find(m_active_lists, &held) == m_active_lists.end()) {
+		m_active_lists.push_back(&held);
+	}
+	result = {.slots      = held.buffer->BufferDeviceAddress(),
+	          .slot_count = static_cast<uint32_t>(slots - 1u),
+	          .kinds      = view.kinds};
 	return true;
 }
 
@@ -309,6 +367,12 @@ void ImageHeap::Assign(View& view, size_t slot, uint32_t entry) {
 	if (previous != entry) Widen(view.dirty_begin, view.dirty_end, slot, slot + 1u);
 }
 
+void ImageHeap::Assign(List& list, size_t slot, uint32_t entry) {
+	const auto previous = std::exchange(list.slots[slot], entry);
+	Release(*list.view, previous);
+	if (previous != entry) Widen(list.dirty_begin, list.dirty_end, slot, slot + 1u);
+}
+
 void ImageHeap::Bury() {
 	if (m_unmapped.empty()) return;
 	for (const auto& memory: m_memories) {
@@ -329,6 +393,27 @@ void ImageHeap::Bury() {
 				if (!element.stale) continue;
 				memory->dead[slot] = DescriptorHash {}(element.value);
 				Assign(*view, slot, 0u);
+			}
+		}
+	}
+	// Record-table candidates of unmapped textures read null; a later list resolves them again.
+	for (const auto& memory: m_list_memories) {
+		auto& view   = *memory->views.front();
+		bool  buried = false;
+		for (const auto& [value, index]: view.elements) {
+			const auto& binding = m_elements[index].binding;
+			if (binding.image_id && std::ranges::any_of(m_unmapped, [&](GuestRange range) {
+				    return ImageRangeOverlaps(binding.desc.info.data, range);
+			    })) {
+				m_elements[index].stale = buried = true;
+			}
+		}
+		if (!buried) continue;
+		std::erase_if(view.elements, [&](const auto& item) { return m_elements[item.second].stale; });
+		for (auto& [key, list]: m_lists) {
+			if (list.view != &view) continue;
+			for (size_t slot = 1; slot + 1u < list.slots.size(); ++slot) {
+				if (m_elements[list.slots[slot] & ElementMask].stale) Assign(list, slot, 0u);
 			}
 		}
 	}
@@ -501,6 +586,17 @@ void ImageHeap::Rebind(RenderExecutor& executor) {
 				const auto value = element.value; // Intern may grow m_elements.
 				Assign(*view, slot, Intern(*view, element.kind, value));
 			}
+			// Lists of record-table candidates take the new elements as table slots do.
+			for (auto& [key, list]: m_lists) {
+				if (list.view != view) continue;
+				for (size_t slot = 1; slot + 1u < list.slots.size(); ++slot) {
+					const auto& element = m_elements[list.slots[slot] & ElementMask];
+					if (!element.stale) continue;
+					const auto value = element.value;
+					const auto kind  = element.kind;
+					Assign(list, slot, Intern(*view, kind, value));
+				}
+			}
 		}
 		for (const auto index: view->pending) {
 			if (m_elements[index].refs == 0u) continue;
@@ -547,19 +643,27 @@ void ImageHeap::WriteDescriptors() {
 	m_writes.clear();
 }
 
+void ImageHeap::Upload(CommandBuffer& buffer, const std::vector<uint32_t>& slots, Buffer& device,
+                       size_t& dirty_begin, size_t& dirty_end) {
+	if (dirty_begin == dirty_end) return;
+	const auto words  = std::span(slots).subspan(dirty_begin, dirty_end - dirty_begin);
+	auto&      stream = m_context.GetBufferCache().GetUtilityBuffer(MemoryUsage::Stream);
+	const auto offset = stream.Copy(words.data(), words.size_bytes(), sizeof(uint32_t));
+	device.CopyFrom(buffer, stream, offset, dirty_begin * sizeof(uint32_t), words.size_bytes());
+	dirty_begin = dirty_end = 0;
+}
+
 void ImageHeap::Commit(CommandBuffer& buffer, vk::PipelineBindPoint bind_point,
                        vk::PipelineLayout layout) {
 	KYTY_PROFILER_FUNCTION();
 	const auto epoch = Image::heap_epoch.load(std::memory_order_relaxed);
+	for (auto* list: m_active_lists) {
+		Upload(buffer, list->slots, *list->buffer, list->dirty_begin, list->dirty_end);
+	}
+	m_active_lists.clear();
 	for (auto* view: m_active) {
-		if (view->dirty_begin != view->dirty_end) {
-			const auto slots = std::span(view->slots).subspan(view->dirty_begin,
-			                                                  view->dirty_end - view->dirty_begin);
-			auto& stream = m_context.GetBufferCache().GetUtilityBuffer(MemoryUsage::Stream);
-			const auto offset = stream.Copy(slots.data(), slots.size_bytes(), sizeof(uint32_t));
-			view->buffer->CopyFrom(buffer, stream, offset, view->dirty_begin * sizeof(uint32_t),
-			                       slots.size_bytes());
-			view->dirty_begin = view->dirty_end = 0;
+		if (view->buffer != nullptr) {
+			Upload(buffer, view->slots, *view->buffer, view->dirty_begin, view->dirty_end);
 		}
 		Retire(*view);
 		if (view->layout_epoch != epoch) {

@@ -5,6 +5,7 @@
 #include "common/assert.h"
 #include "common/slotVector.h"
 #include "graphics/host_gpu/graphicContext.h"
+#include "graphics/host_gpu/renderer/commandRecorder.h"
 #include "graphics/host_gpu/renderer/image/imageInfo.h"
 
 #include <atomic>
@@ -57,7 +58,7 @@ public:
 	                                   vk::PipelineStageFlags2              destination_stage,
 	                                   std::optional<ImageSubresourceRange> range);
 	void Transit(vk::ImageLayout destination_layout, vk::AccessFlags2 destination_access,
-	             std::optional<ImageSubresourceRange> range, vk::CommandBuffer command_buffer);
+	             std::optional<ImageSubresourceRange> range, CommandRecorder command_buffer);
 	void Upload(std::span<const vk::BufferImageCopy> copies, vk::Buffer buffer, uint64_t offset,
 	            uint64_t size);
 	void Download(std::span<const vk::BufferImageCopy> copies, vk::Buffer buffer, uint64_t offset,
@@ -87,23 +88,40 @@ public:
 	void ResolveMaybeCpuHash(uint64_t hash) {
 		m_maybe_cpu_dirty = false;
 		m_cpu_dirty       = hash != m_maybe_cpu_hash;
+		StateChanged();
 	}
 
 	void RefreshComplete() {
 		m_cpu_dirty       = false;
 		m_maybe_cpu_dirty = false;
+		StateChanged();
 	}
 
 	[[nodiscard]] bool IsGpuModified() const noexcept { return m_gpu_modified; }
-	void               MarkGpuModified() noexcept { m_gpu_modified = true; }
-	void               ClearGpuModified() noexcept { m_gpu_modified = false; }
+	void               MarkGpuModified() noexcept {
+		if (!m_gpu_modified) {
+			m_gpu_modified = true;
+			StateChanged();
+		}
+	}
+	void ClearGpuModified() noexcept {
+		if (m_gpu_modified) {
+			m_gpu_modified = false;
+			StateChanged();
+		}
+	}
 
 	[[nodiscard]] bool IsBufferModified() const noexcept { return m_buffer_modified; }
 	void               MarkBufferModified() noexcept {
 		m_buffer_modified = true;
 		HeapChanged();
 	}
-	void               ClearBufferModified() noexcept { m_buffer_modified = false; }
+	void ClearBufferModified() noexcept {
+		if (m_buffer_modified) {
+			m_buffer_modified = false;
+			StateChanged();
+		}
+	}
 
 	[[nodiscard]] bool Overlaps(uint64_t address, uint64_t size) const noexcept {
 		return info.data.address < address + size && address < info.data.End();
@@ -120,9 +138,17 @@ public:
 		return info.IsDepth() ? vk::ImageLayout::eDepthStencilReadOnlyOptimal
 		                      : vk::ImageLayout::eShaderReadOnlyOptimal;
 	}
+	// Advances the image's version (see TextureCache::ImageVersion()): what a binding of one of
+	// its views, as it was bound, depends on changed.
+	void StateChanged() const noexcept {
+		if (version != nullptr) {
+			version->fetch_add(1u, std::memory_order_release);
+		}
+	}
 	// Resident image heaps sample an image without rediscovering it until one changes its
 	// contents, tracking, identity or layout.
 	void HeapChanged() const noexcept {
+		StateChanged();
 		if (heap_refs.load(std::memory_order_relaxed) != 0u) {
 			heap_epoch.fetch_add(1u, std::memory_order_relaxed);
 		}
@@ -142,6 +168,19 @@ public:
 	uint64_t         track_addr     = 0;
 	uint64_t         track_addr_end = 0;
 	ImageId          depth_id {};
+	// Counts the transitions to a write access: every GPU or host write of the image takes one.
+	uint64_t         write_count        = 0;
+	// A depth copy (see TextureCache::FindDepthCopy()): the color image it copies, and the
+	// write_count of that image the copy holds. depth_copy_source is reset when the color image
+	// is deleted.
+	bool             is_depth_copy      = false;
+	ImageId          depth_copy_source {};
+	uint64_t         depth_copy_writes  = UINT64_MAX;
+	// A stencil copy (see TextureCache::FindStencilCopy()): depth_copy_source names the stencil
+	// association it copies, depth_copy_writes the write_count of its depth image it holds, and
+	// stencil_copy_writes its own write_count when it last matched that stencil.
+	bool             is_stencil_copy     = false;
+	uint64_t         stencil_copy_writes = 0;
 	// Stencil associations that refer to this depth image.
 	std::vector<ImageId> stencil_ids;
 	// The current stencil plane's mapping into the depth image, also retained by its association.
@@ -150,6 +189,19 @@ public:
 	size_t           lru_id             = 0;
 	// Resident image heap elements that select this image.
 	std::atomic<uint32_t> heap_refs {0};
+	// The tick of the image's last LRU touch (as in the texture cache's LRU list, without
+	// loading its entry).
+	uint64_t         lru_tick           = 0;
+	// Bindless table bindings that keep binding the image without looking it up again (see
+	// TextureCache::PinImage()).
+	uint32_t         table_pins         = 0;
+	// The pages whose access is watched while the image is read back lazily (see
+	// TextureCache::ArmLazyReadback()); both zero while it is not.
+	uint64_t         readback_begin     = 0;
+	uint64_t         readback_end       = 0;
+	// The texture cache's version counter of the image's slot (see StateChanged()); null outside
+	// a texture cache.
+	std::atomic<uint32_t>* version = nullptr;
 
 private:
 	friend struct ImageTestAccess;

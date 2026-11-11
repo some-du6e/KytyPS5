@@ -4,6 +4,7 @@
 #include "gpu_blit_shaders/gpu_mesh_indirect_spv.h"
 #include "graphics/guest_gpu/gpu_defs.h"
 #include "graphics/host_gpu/graphicContext.h"
+#include "graphics/host_gpu/renderer/pipeline/descriptorHeap.h"
 #include "graphics/host_gpu/renderer/pipeline/descriptors.h"
 #include "graphics/host_gpu/renderer/pipeline/pipelineCache.h"
 #include "graphics/host_gpu/renderer/pipeline/shaderResourceBarrier.h"
@@ -18,10 +19,56 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cinttypes>
+#include <fmt/format.h>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace Libs::Graphics {
+
+namespace {
+
+// The guest pipeline the driver is creating on this thread (DescribeDriverPipelineCreation).
+struct DriverCreation {
+	bool        active = false;
+	const char* names[4] {};
+	uint64_t    hashes[4] {};
+};
+
+thread_local DriverCreation t_driver_creation;
+
+class ScopedDriverCreation {
+public:
+	ScopedDriverCreation(const std::array<const char*, 4>& names,
+	                     const std::array<uint64_t, 4>&    hashes) {
+		t_driver_creation.active = true;
+		for (size_t i = 0; i < 4; i++) {
+			t_driver_creation.names[i]  = names[i];
+			t_driver_creation.hashes[i] = hashes[i];
+		}
+	}
+	~ScopedDriverCreation() { t_driver_creation = {}; }
+
+	ScopedDriverCreation(const ScopedDriverCreation&)            = delete;
+	ScopedDriverCreation& operator=(const ScopedDriverCreation&) = delete;
+};
+
+} // namespace
+
+void DescribeDriverPipelineCreation(std::string& report) {
+	const auto& creation = t_driver_creation;
+	if (!creation.active) {
+		return;
+	}
+	report += "pipeline being created by the driver:";
+	for (size_t i = 0; i < 4; i++) {
+		if (creation.names[i] != nullptr) {
+			report += fmt::format(" {} 0x{:016x}", creation.names[i], creation.hashes[i]);
+		}
+	}
+	report += "\n";
+}
 
 static vk::BlendFactor GetBlendFactor(uint32_t factor) {
 	switch (static_cast<Prospero::BlendFactor>(factor)) {
@@ -113,6 +160,25 @@ static void CreateLayouts(GraphicContext& graphics, PipelineCache::Pipeline& pip
 		EXIT("native sampler descriptors exceed device limit: %" PRIu64 "/%u\n",
 		     samplers, limits.maxDescriptorSetSamplers);
 	}
+	// Bindless image tables can need more sampled images than the device or a descriptor pool
+	// provides: fail clearly instead of creating an invalid layout.
+	uint64_t                 sampled_images = 0;
+	std::array<uint64_t, 32> stage_sampled {};
+	for (const auto& binding: bindings) {
+		if (binding.descriptorType != vk::DescriptorType::eSampledImage) continue;
+		sampled_images += binding.descriptorCount;
+		for (auto stages = static_cast<uint32_t>(binding.stageFlags); stages != 0; stages &= stages - 1u)
+			stage_sampled[std::countr_zero(stages)] += binding.descriptorCount;
+	}
+	const auto max_stage_sampled = *std::ranges::max_element(stage_sampled);
+	if (sampled_images > limits.maxDescriptorSetSampledImages ||
+	    max_stage_sampled > limits.maxPerStageDescriptorSampledImages ||
+	    sampled_images > DescriptorHeap::MaxSampledImages) {
+		EXIT("pipeline needs %" PRIu64 " sampled images (%" PRIu64 " in one stage); the device allows "
+		     "%u per set and %u per stage, a descriptor pool holds %u\n",
+		     sampled_images, max_stage_sampled, limits.maxDescriptorSetSampledImages,
+		     limits.maxPerStageDescriptorSampledImages, DescriptorHeap::MaxSampledImages);
+	}
 	pipeline.uses_push_descriptors = descriptor_count <= graphics.max_push_descriptors;
 
 	vk::DescriptorSetLayoutCreateInfo create {};
@@ -123,6 +189,9 @@ static void CreateLayouts(GraphicContext& graphics, PipelineCache::Pipeline& pip
 	create.pBindings    = bindings.data();
 	EXIT_IF(graphics.device.createDescriptorSetLayout(
 	            &create, nullptr, &pipeline.descriptor_set_layout) != vk::Result::eSuccess);
+	if (!pipeline.uses_push_descriptors) {
+		DescriptorHeap::RegisterLayout(pipeline.descriptor_set_layout, bindings);
+	}
 	const vk::PushConstantRange push_constants {pipeline.push_stages, 0,
 	                                            ShaderRecompiler::IR::NativePushConstantSize};
 	const std::array set_layouts {pipeline.descriptor_set_layout, graphics.image_heap_layout};
@@ -353,17 +422,35 @@ void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& p
 	pipeline_info.pDynamicState       = &dynamic_state;
 	pipeline_info.layout              = pipeline.pipeline_layout;
 
-	const auto result = graphics.device.createGraphicsPipelines(driver_cache, 1, &pipeline_info,
-	                                                            nullptr, &pipeline.pipeline);
-	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess);
+	const auto hash = [&](size_t stage) {
+		return stages[stage] != nullptr ? stages[stage]->info.shader_hash : uint64_t {0};
+	};
+	const auto name = [&](size_t stage, const char* stage_name) {
+		return stages[stage] != nullptr ? stage_name : nullptr;
+	};
+	vk::Result result = vk::Result::eSuccess;
+	{
+		const ScopedDriverCreation creation(
+		    {name(0, mesh ? "ms" : "vs"), name(1, "hs"), name(2, "ds"), name(3, "ps")},
+		    {hash(0), hash(1), hash(2), hash(3)});
+		result = graphics.device.createGraphicsPipelines(driver_cache, 1, &pipeline_info, nullptr,
+		                                                 &pipeline.pipeline);
+	}
+	if (result != vk::Result::eSuccess) {
+		EXIT("vkCreateGraphicsPipelines failed: %s, %s 0x%016" PRIx64 ", hs 0x%016" PRIx64
+		     ", ds 0x%016" PRIx64 ", ps 0x%016" PRIx64 "\n",
+		     vk::to_string(result).c_str(), mesh ? "ms" : "vs", hash(0), hash(1), hash(2), hash(3));
+	}
 
 	graphics.device.destroyShaderModule(tess_control_shader_module, nullptr);
 	graphics.device.destroyShaderModule(tess_eval_shader_module, nullptr);
 	graphics.device.destroyShaderModule(task_module, nullptr);
 }
 
-void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& pipeline,
-                            const ShaderModule& module, vk::PipelineCache driver_cache) {
+// With `lookup`, only from the cache (VK_PIPELINE_COMPILE_REQUIRED when it does not hold it).
+static vk::Result CreateComputePipeline(GraphicContext& graphics, PipelineCache::Pipeline& pipeline,
+                                        const ShaderModule& module, vk::PipelineCache driver_cache,
+                                        bool lookup) {
 	vk::PipelineShaderStageCreateInfo                     comp_shader_stage_info {};
 	vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo comp_subgroup_size {};
 	comp_shader_stage_info.stage  = vk::ShaderStageFlagBits::eCompute;
@@ -386,12 +473,40 @@ void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& p
 	if (module.info.info.uses_gds) {
 		info.flags = vk::PipelineCreateFlagBits::eDispatchBase;
 	}
+	if (lookup) {
+		info.flags |= vk::PipelineCreateFlagBits::eFailOnPipelineCompileRequired;
+	}
 	info.stage  = comp_shader_stage_info;
 	info.layout = pipeline.pipeline_layout;
 
-	const auto result =
-	    graphics.device.createComputePipelines(driver_cache, 1, &info, nullptr, &pipeline.pipeline);
-	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess);
+	const ScopedDriverCreation creation({"cs", nullptr, nullptr, nullptr},
+	                                    {module.info.shader_hash, 0, 0, 0});
+	return graphics.device.createComputePipelines(driver_cache, 1, &info, nullptr, &pipeline.pipeline);
+}
+
+void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& pipeline,
+                            const ShaderModule& module, vk::PipelineCache driver_cache) {
+	const auto result = CreateComputePipeline(graphics, pipeline, module, driver_cache, false);
+	if (result != vk::Result::eSuccess) {
+		EXIT("vkCreateComputePipelines failed: %s, cs 0x%016" PRIx64 "\n", vk::to_string(result).c_str(),
+		     module.info.shader_hash);
+	}
+}
+
+bool FindComputePipeline(GraphicContext& graphics, PipelineCache::Pipeline& pipeline,
+                         const ShaderModule& module, vk::PipelineCache cache) {
+	if (!graphics.pipeline_cache_lookup_enabled || cache == nullptr) {
+		return false;
+	}
+	if (CreateComputePipeline(graphics, pipeline, module, cache, true) == vk::Result::eSuccess &&
+	    pipeline.pipeline != nullptr) {
+		return true;
+	}
+	graphics.device.destroyPipeline(pipeline.pipeline, nullptr);
+	graphics.device.destroyPipelineLayout(pipeline.pipeline_layout, nullptr);
+	graphics.device.destroyDescriptorSetLayout(pipeline.descriptor_set_layout, nullptr);
+	pipeline = {};
+	return false;
 }
 
 } // namespace Libs::Graphics

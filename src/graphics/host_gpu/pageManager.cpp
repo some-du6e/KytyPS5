@@ -1,8 +1,10 @@
 #include "graphics/host_gpu/pageManager.h"
 
 #include "common/alignment.h"
+#include "common/logging/log.h"
 #include "common/virtualMemory.h"
 #include "graphics/host_gpu/regionDefinitions.h"
+#include "graphics/host_gpu/regionManager.h"
 #include "kernel/memory.h"
 
 #include <algorithm>
@@ -13,6 +15,7 @@
 #include <cstdlib>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <vector>
 
 #if defined(_MSC_VER)
@@ -38,35 +41,20 @@ constexpr uint64_t REGION_COUNT = ADDRESS_SIZE / REGION_SIZE;
 constexpr uint64_t REGION_PAGES = REGION_SIZE / PAGE_SIZE;
 
 [[noreturn]] void Fatal(const char* format, ...) {
-	std::fputs("PageManager fatal: ", stderr);
+	char    text[1024];
 	va_list args;
 	va_start(args, format);
-	std::vfprintf(stderr, format, args);
+	std::vsnprintf(text, sizeof(text), format, args);
 	va_end(args);
-	std::fputc('\n', stderr);
+	std::fprintf(stderr, "PageManager fatal: %s\n", text);
 	std::fflush(stderr);
+	Log::WriteToSessionLog(std::string("PageManager fatal: ") + text + "\n");
+	Log::Flush();
 	std::_Exit(322);
 }
 
-class SpinGuard final {
-public:
-	explicit SpinGuard(std::atomic_flag& lock): m_lock(lock) {
-		while (m_lock.test_and_set(std::memory_order_acquire)) {
-#if defined(__x86_64__) || defined(_M_X64)
-			_mm_pause();
-#elif defined(_M_ARM64)
-			__yield();
-#elif defined(__aarch64__)
-			asm volatile("yield");
-#endif
-		}
-	}
-	~SpinGuard() { m_lock.clear(std::memory_order_release); }
-	KYTY_CLASS_NO_COPY(SpinGuard);
-
-private:
-	std::atomic_flag& m_lock;
-};
+// The page tracking's lock: waiters sleep instead of spinning on a preempted holder.
+using SpinGuard = std::lock_guard<TrackingSpinLock>;
 
 void ValidateRange(uint64_t vaddr, uint64_t size) {
 	if (!GuestRange {vaddr, size}.Valid()) {
@@ -128,7 +116,7 @@ struct PageManager::Impl {
 	static_assert(sizeof(PageState) == 2);
 
 	struct Region {
-		std::atomic_flag                    lock = ATOMIC_FLAG_INIT;
+		TrackingSpinLock                    lock;
 		std::array<PageState, REGION_PAGES> pages;
 	};
 
@@ -273,6 +261,35 @@ static_assert(std::atomic<void*>::is_always_lock_free);
 PageManager::PageManager(): m_impl(std::make_unique<Impl>()) {}
 
 PageManager::~PageManager() = default;
+
+bool PageManager::IsWatched(uint64_t vaddr) const {
+	auto* region = m_impl->FindRegion(vaddr);
+	if (region == nullptr) {
+		return false;
+	}
+	const auto page = static_cast<size_t>((vaddr % REGION_SIZE) / PAGE_SIZE);
+	SpinGuard  lock(region->lock);
+	return region->pages[page].write_watchers != 0 || region->pages[page].access_watchers != 0;
+}
+
+bool PageManager::AllowExecute(uint64_t vaddr) {
+	using Mode   = Common::VirtualMemory::Mode;
+	auto* region = m_impl->FindRegion(vaddr);
+	if (region == nullptr) {
+		return false;
+	}
+	const auto page = static_cast<size_t>((vaddr % REGION_SIZE) / PAGE_SIZE);
+	SpinGuard  lock(region->lock);
+	const auto perms = region->pages[page].Perms();
+	if (perms == Mode::NoAccess) {
+		return false;
+	}
+	// A watcher change after this drops the permission again; the next instruction fetch faults
+	// back here.
+	return Libs::LibKernel::Memory::ProtectGuestHostMemory(
+	    Common::AlignDown(vaddr, PAGE_SIZE), PAGE_SIZE,
+	    static_cast<Mode>(static_cast<uint32_t>(perms) | static_cast<uint32_t>(Mode::Execute)));
+}
 
 template <bool track, bool is_read>
 void PageManager::UpdatePageWatchers(uint64_t vaddr, uint64_t size) {

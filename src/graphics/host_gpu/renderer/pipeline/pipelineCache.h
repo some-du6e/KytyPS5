@@ -8,30 +8,179 @@
 #include "common/uniqueFunction.h"
 #include "graphics/host_gpu/renderer/colorRenderTarget.h"
 #include "graphics/host_gpu/renderer/depthRenderTarget.h"
+#include "graphics/host_gpu/renderer/pipeline/pipelineHelpers.h"
 #include "graphics/host_gpu/renderer/renderTarget.h"
 #include "graphics/host_gpu/vulkanCommon.h"
 #include "graphics/shader/recompiler/ir/passes/ResourceMaterialization.h"
 #include "graphics/shader/rectListShader.h"
 #include "graphics/shader/shader.h"
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <deque>
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <span>
+#include <string>
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
+#include <array>
 #include <vector>
 
 namespace Libs::Graphics {
 
+// Guest memory that a resolution ahead of execution read. The execution thread repeats the reads
+// before it uses the resolution: guest memory may have changed in between (operations that
+// execute before the draw write it), and ahead of execution GPU-owned bytes cannot be read.
+class GuestReadLog {
+public:
+	void Clear() {
+		m_entries.clear();
+		m_bytes.clear();
+		m_flat_loads.clear();
+		m_words.clear();
+		m_refresh.clear();
+		m_stage       = 0;
+		m_plan        = nullptr;
+		m_failed      = false;
+		m_gpu_written = false;
+	}
+	// Reads the backing store without faulting. Strict reads are checked the way specialization
+	// memory is read (GPU-owned bytes fail), the others as plain loads.
+	bool               Read(uint64_t address, void* data, uint64_t size, bool strict);
+	// A plain load the SRT walker made for the stage being resolved; flat_slot names the
+	// flattened SRT dword that is its only use (NoFlatSlot otherwise), a descriptor word with
+	// refreshable bits (DescriptorSlot()) or a bound tested for zero (ZeroTestSlot).
+	void               RecordLoad(uint64_t address, uint32_t value, uint32_t flat_slot);
+	// All the loads of one walk (see ShaderRecompiler::IR::SrtLoadsRecorder), as RecordLoad()
+	// each would record them.
+	void               RecordLoads(std::span<const uint64_t> loads);
+	void SetStage(uint32_t stage, const ShaderRecompiler::IR::ResourcePlan* plan = nullptr) {
+		m_stage = stage;
+		m_plan  = plan;
+	}
+	void               Fail() { m_failed = true; }
+	[[nodiscard]] bool Failed() const { return m_failed; }
+	// Whether some read may have taken stale bytes of memory the GPU wrote (the backing store
+	// gets them only once read back).
+	[[nodiscard]] bool MayHaveReadGpuWrites() const { return m_gpu_written; }
+	// Execution thread: whether every read still gives the recorded bytes. The loads that only
+	// fill flattened SRT dwords are not compared: RefreshFlatLoads() reads them again. Neither are
+	// the refreshable bits of descriptor words: RefreshDescriptorWords() writes their new values.
+	// A bound tested for zero only has to stay zero or nonzero.
+	[[nodiscard]] bool StillValid() const;
+	// Execution thread, after StillValid(): writes the refreshable bits that changed (the guest
+	// rewrites V# bases and T# statistics fields after it submits the draws) into the stage's
+	// buffer or image descriptors, and the whole word into the flattened SRT dword it also fills.
+	void RefreshDescriptorWords(std::span<ShaderRecompiler::IR::ResourceSnapshot>          resources,
+	                            std::span<const ShaderRecompiler::IR::ResourcePlan* const> plans) const;
+	// Execution thread: writes the current value of each such load into its stage's flattened
+	// SRT (the guest rewrites constants, such as a camera matrix, after it submits the draws).
+	// `gpu_copies`: the dwords whose bytes the GPU wrote are left to a copy on the GPU (see
+	// ResourceSnapshot::gpu_flat_loads) instead of being read back.
+	void RefreshFlatLoads(std::span<ShaderRecompiler::IR::ResourceSnapshot> resources,
+	                      bool gpu_copies = false) const;
+
+private:
+	static constexpr uint64_t StrictCheckBytes = 64;
+	struct Entry {
+		uint64_t address = 0;
+		uint32_t size    = 0;
+		uint32_t offset  = 0;
+		bool     strict  = false;
+		// One dword whose value is only a bound tested for zero (see ZeroTestSlot).
+		bool     zero_test = false;
+		// The descriptor words with refreshable bits among its dwords: m_words[words_begin, words_end).
+		uint32_t words_begin = 0;
+		uint32_t words_end   = 0;
+	};
+	// A load of one descriptor word with refreshable bits.
+	struct Word {
+		uint32_t offset = 0; // Of its bytes in m_bytes.
+		uint32_t stage  = 0;
+		uint32_t source = 0;
+		uint32_t word   = 0;
+		uint32_t mask   = 0;
+	};
+	// Reads the entry's bytes now, as StillValid() does.
+	void ReadNow(const Entry& entry, uint8_t* bytes) const;
+	// Whether the entry's bytes differ from the recorded ones only in refreshable bits.
+	[[nodiscard]] bool OnlyRefreshableBitsChanged(const Entry& entry) const;
+	// Consecutive dwords of one page that fill consecutive flattened SRT dwords of a stage.
+	struct FlatLoad {
+		uint64_t address = 0;
+		uint32_t stage   = 0;
+		uint32_t slot    = 0;
+		uint32_t count   = 1;
+	};
+	void                  Append(uint64_t address, const void* data, uint32_t size, bool strict,
+	                             bool zero_test = false);
+	// Whether a bound tested for zero is still zero, or still nonzero.
+	[[nodiscard]] bool ZeroTestHolds(const Entry& entry) const;
+	std::vector<Entry>    m_entries;
+	std::vector<uint8_t>  m_bytes;
+	std::vector<FlatLoad> m_flat_loads;
+	std::vector<Word>     m_words;
+	// Entries whose refreshable bits changed (found by StillValid()).
+	mutable std::vector<uint32_t> m_refresh;
+	// The pages StillValid() found GPU-owned or not, by page % size, for RefreshFlatLoads().
+	struct CheckedPage {
+		uint64_t       page    = UINT64_MAX;
+		bool           owned   = false;
+		const uint8_t* backing = nullptr;
+	};
+	mutable std::array<CheckedPage, 8> m_checked {};
+	uint32_t              m_stage       = 0;
+	const ShaderRecompiler::IR::ResourcePlan* m_plan = nullptr;
+	bool                  m_failed      = false;
+	bool                  m_gpu_written = false;
+};
+
+// Storage of the shader programs a draw resolved ahead of its execution: the resource snapshots
+// and specializations its stages point to, and the guest memory they read.
+struct ProgramResolution {
+	static constexpr uint32_t MaxStages = 4;
+
+	std::array<ShaderRecompiler::IR::ResourceSnapshot, MaxStages>       resources;
+	std::array<ShaderRecompiler::IR::ResourceSpecialization, MaxStages> specializations;
+	// The resource plans the stages were resolved with.
+	std::array<const ShaderRecompiler::IR::ResourcePlan*, MaxStages>    plans {};
+	GuestReadLog                                                        reads;
+	uint32_t                                                            stages = 0;
+
+	void Reset() {
+		reads.Clear();
+		stages = 0;
+	}
+	// Execution thread: whether the resolution holds, with its flattened SRT dwords read again.
+	// `gpu_flat_loads`: see GuestReadLog::RefreshFlatLoads().
+	[[nodiscard]] bool Revalidate(bool gpu_flat_loads = false) {
+		if (!reads.StillValid()) {
+			return false;
+		}
+		reads.RefreshDescriptorWords(std::span(resources).first(stages), std::span(plans).first(stages));
+		reads.RefreshFlatLoads(std::span(resources).first(stages), gpu_flat_loads);
+		return true;
+	}
+};
+
 struct GraphicContext;
 struct ShaderParams;
+struct ManifestModule;
 class CommandBuffer;
+
+namespace HW {
+class Context;
+class UserConfig;
+class Shader;
+} // namespace HW
 
 namespace ShaderRecompiler {
 struct CompileOptions;
@@ -125,7 +274,27 @@ struct ShaderModule {
 	std::vector<RectListParameter>               rect_parameters;
 	// Indirect mesh draw: a task shader reads the records and launches the groups.
 	bool                                         mesh_task = false;
+	// The size of the module's SPIR-V: small pipelines compile at once (GetGraphicsPipeline).
+	uint32_t                                     spirv_words = 0;
+	// A pixel program instrumented for GET_LOD_STATS: the same program without the recording, for
+	// draws in which no image has a mip-statistics counter (DrawRenderState::ps_plain). Its storage
+	// buffer atomics alone make the driver run the depth and stencil tests after a shader that can
+	// discard.
+	std::shared_ptr<const ShaderModule>          plain;
+	// A compute program built without the native ray tracing patch while it is on: the program of
+	// a dispatch without a TLAS (see PipelineCache::GetComputeProgram()).
+	bool                                         guest_traversal = false;
 };
+
+// ShaderModule::plain of `module` from the variant's SPIR-V; null when the module fails.
+[[nodiscard]] std::shared_ptr<const ShaderModule> MakePlainModule(const ShaderModule&   module,
+                                                                  std::span<const uint32_t> spirv,
+                                                                  vk::Device            device);
+
+// Whether every color target the draw writes is at most 1024 pixels wide and
+// high (default 1024; 0 = off): glyph atlases and cached UI layers, which a game draws once.
+// Such draws are never skipped while their pipeline compiles.
+[[nodiscard]] bool SmallColorTargetDraw(const HW::Context& context);
 
 // A draw's depth target and its first color_count color targets.
 struct DrawTargets {
@@ -141,6 +310,8 @@ struct DrawRenderState {
 	vk::PrimitiveTopology                topology = vk::PrimitiveTopology::ePointList;
 	bool                                 primitive_restart_enable = false;
 	bool                                 ps_active                = false;
+	// The pixel program's plain variant replaces it (ShaderModule::plain).
+	bool                                 ps_plain                 = false;
 	std::array<ShaderVertexInputInfo, 3> vertex_info;
 	ShaderPixelInputInfo                 ps_input_info;
 	// Input: the user-data slots a GPU-read indirect draw patches.
@@ -177,6 +348,26 @@ private:
 	std::jthread m_thread;
 };
 
+// What a kind of work took lately (seconds), for the estimates of the pipeline precompilation:
+// the mean of the first samples, then a moving average. A few samples are no estimate (the first
+// creations also warm up the driver).
+class PrecompileMean {
+public:
+	void Add(double seconds) {
+		m_samples++;
+		m_mean = m_samples <= Window ? m_mean + (seconds - m_mean) / m_samples
+		                             : m_mean + (seconds - m_mean) / Window;
+	}
+	// 0 until there are enough samples.
+	[[nodiscard]] double Get() const { return m_samples >= MinSamples ? m_mean : 0.0; }
+
+private:
+	static constexpr uint32_t MinSamples = 8;
+	static constexpr uint32_t Window     = 32;
+	double                    m_mean     = 0.0;
+	uint32_t                  m_samples  = 0;
+};
+
 // The owning renderer serializes access, including saves while the GPU is running.
 class PipelineCache {
 public:
@@ -201,12 +392,33 @@ public:
 
 	// Reads the shaders and registers bound in `command` into the state's shader stages.
 	void GetGraphicsPrograms(const CommandBuffer& command, DrawRenderState& state);
+	// The resolve thread: resolves the programs of a draw ahead of its execution, with programs
+	// and modules that exist, into `ahead`, reading guest memory through its log. False when the
+	// execution thread resolves the draw itself; programs it misses are queued to the workers.
+	bool GetGraphicsProgramsAhead(const HW::Context& context, const HW::UserConfig& user_config,
+	                              const HW::Shader& shaders, DrawRenderState& state,
+	                              ProgramResolution& ahead);
 	// Null skips the dispatch.
 	const ShaderModule* GetComputeProgram(const HW::ComputeShaderInfo& regs,
 	                                      ShaderComputeInputInfo&      input_info);
+	// The resolve thread: as GetGraphicsProgramsAhead, for a dispatch; null when the execution
+	// thread resolves it itself.
+	// Resolution thread: a write of guest memory with known bytes (WRITE_DATA) that an operation
+	// it passed makes when it executes. Walks ahead of later operations read its bytes until
+	// RetireAheadGuestWrites() learns that the execution thread ran it (`executed`: the last
+	// operation it ran).
+	static void NoteAheadGuestWrite(uint64_t sequence, uint64_t address,
+	                                std::span<const uint32_t> data, bool one_address);
+	static void RetireAheadGuestWrites(uint64_t executed);
+	const ShaderModule* GetComputeProgramAhead(const HW::ComputeShaderInfo& regs,
+	                                           ShaderComputeInputInfo&      input_info,
+	                                           ProgramResolution&           ahead);
 
-	Pipeline& GetGraphicsPipeline(const CommandBuffer& command, const DrawRenderState& state,
-	                              const DrawTargets& targets);
+	// With `allow_async`, a pipeline that does not exist yet is created on a background thread
+	// and the lookup returns null until it is there (the draw can be skipped meanwhile);
+	// otherwise the lookup creates the pipeline, or waits for a background thread creating it.
+	Pipeline* GetGraphicsPipeline(const CommandBuffer& command, const DrawRenderState& state,
+	                              const DrawTargets& targets, bool allow_async = false);
 	Pipeline& GetComputePipeline(const ShaderComputeInputInfo& input_info);
 
 private:
@@ -217,14 +429,21 @@ private:
 		ShaderRecompiler::IR::ResourcePlan           resource_plan;
 		ShaderRecompiler::IR::ResourceSnapshot       resources;
 		ShaderRecompiler::IR::ResourceSpecialization specialization;
-		std::vector<ShaderModule>                    modules;
+		// A deque: resolutions ahead of execution keep pointers to modules while new ones are
+		// added.
+		std::deque<ShaderModule>                     modules;
 		bool                                         skip_dispatch = false;
+		// The module found last by the execution thread and by the others (all under the
+		// program lock): consecutive lookups of a thread mostly repeat it, and a program can
+		// have many modules.
+		std::array<size_t, 2>                        last_module {SIZE_MAX, SIZE_MAX};
 
 		[[nodiscard]] std::span<const uint32_t> FunctionCode() const;
 		bool RefreshCallSource(const ShaderRecompiler::IR::SrtRuntime& runtime);
+		// Null with `failed` set when the resources cannot be resolved now (see GetProgram()).
 		template <bool HasCalls>
 		ShaderModule* FindModule(const ShaderRecompiler::IR::SrtRuntime& runtime,
-		                         uint32_t                                push_data_cursor);
+		                         uint32_t push_data_cursor, bool& failed);
 	};
 
 	struct ProgramKey {
@@ -253,33 +472,200 @@ private:
 	// Modules compiled per stage.
 	std::array<uint32_t, static_cast<size_t>(ShaderType::TessellationEvaluation) + 1> m_compiled {};
 	ProgramKey                             m_lookup_key;
+	// GetProgram() looks up and compiles compute programs without the native ray tracing patch
+	// (for a dispatch without a TLAS, see GetComputeProgram()).
+	bool                                   m_guest_traversal = false;
 	vk::PipelineCache             m_driver_cache = nullptr;
 	std::filesystem::path         m_driver_cache_path;
+	// Guards the driver cache state below, which the timer thread also reads.
+	std::mutex                    m_driver_cache_mutex;
 	std::chrono::steady_clock::time_point m_next_driver_cache_save;
+	// When the store thread was last given the driver cache to write.
+	std::chrono::steady_clock::time_point m_driver_cache_posted;
 	bool                          m_driver_cache_dirty = false;
 	std::unordered_map<GraphicsPipelineKey, Pipeline, GraphicsPipelineKeyHash> m_graphics_pipelines;
 	std::unordered_map<uint64_t, Pipeline>                                     m_compute_pipelines;
 	std::unordered_map<uint64_t, ShaderTessellationInputInfo>                  m_tess_layouts;
+	// The pipeline the last lookup found; pipelines are never removed while the cache lives.
+	GraphicsPipelineKey m_last_graphics_key {};
+	Pipeline*           m_last_graphics_pipeline = nullptr;
+	// Draws resolve their programs on the resolve thread and, when a resolution is not usable,
+	// on the execution thread, which also resolves dispatches. Compile workers add programs.
+	std::atomic_flag m_program_lock;
+	ProgramKey       m_ahead_key;
+
+	// Graphics programs compiled on worker threads: the resolve thread queues the programs and
+	// modules its draws miss, so the shaders of a new area compile in parallel instead of one
+	// after another on the execution thread. Workers only add programs; the execution thread
+	// still resolves every draw itself and compiles what they did not add.
+	struct CompileJob;
+	static constexpr uint32_t CompileWorkers = 6;
+	// Under the program lock: programs a worker is compiling, with their number of jobs.
+	std::unordered_map<ProgramKey, uint32_t, ProgramKeyHash> m_in_flight;
+	std::mutex                                               m_job_mutex;
+	std::condition_variable                                  m_job_available;
+	std::deque<std::unique_ptr<CompileJob>>                  m_jobs;
+	bool                                                     m_stopping = false;
+	std::vector<std::jthread>                                m_workers;
+
 	// Records everything first created if a shader store is open, and writes the driver cache.
 	ShaderStoreWriter m_store;
+	// Checks every quarter second whether the driver cache is due; stopped by Save().
+	std::jthread      m_driver_cache_timer;
 
+	bool ResolveGraphicsPrograms(const HW::Context& context, const HW::UserConfig& user_config,
+	                             const HW::Shader& shaders, DrawRenderState& state,
+	                             ProgramResolution* ahead);
 	template <typename InputInfo>
 	const ShaderModule* GetProgram(const ShaderParams& params, InputInfo& input_info,
 	                               uint32_t& push_data_cursor);
+	template <typename InputInfo>
+	const ShaderModule* GetAhead(const ShaderParams& params, InputInfo& input_info,
+	                             uint32_t& push_data_cursor, ProgramResolution& ahead);
 	ShaderModule& CompileModule(Program& program, const ProgramKey& key,
 	                            ShaderRecompiler::CompileOptions  options,
 	                            ShaderRecompiler::TranslateResult translated,
-	                            uint32_t                          push_data_cursor);
+	                            uint32_t push_data_cursor, std::span<const uint32_t> code);
+	// Compiles a module without touching the cache; `spirv` and `plain_spirv` receive its code and
+	// that of its plain variant (empty without one).
+	ShaderModule BuildModule(const ProgramKey& key, const ShaderRecompiler::CompileOptions& options,
+	                         ShaderRecompiler::TranslateResult                   translated,
+	                         const ShaderRecompiler::IR::ResourceSpecialization& specialization,
+	                         std::span<const uint32_t> function_code, uint32_t push_data_cursor,
+	                         std::vector<uint32_t>& spirv, std::vector<uint32_t>& plain_spirv) const;
+	// Under the program lock: counts a module added to `program` and records it in the store and
+	// the manifest. `options`, `code` and `push_data_cursor` are those it was compiled with.
+	void AddedModule(const ProgramKey& key, const Program& program, const ShaderModule& module,
+	                 const std::vector<uint32_t>& spirv, const std::vector<uint32_t>& plain_spirv,
+	                 const ShaderRecompiler::CompileOptions& options,
+	                 std::span<const uint32_t> code, uint32_t push_data_cursor);
+	// Destroys the Vulkan modules of `module` and of its plain variant.
+	void DestroyModule(const ShaderModule& module) const;
+	void LockPrograms();
+	void UnlockPrograms();
+	// Under the program lock (resolve thread): queues the program of m_ahead_key, or one of its
+	// modules, to the compile workers.
+	template <typename InputInfo>
+	void QueueCompile(const ShaderParams& params, const InputInfo& input_info,
+	                  uint32_t                                            push_data_cursor,
+	                  const ShaderRecompiler::IR::ResourceSpecialization* specialization);
+	// Execution thread, under the program lock: waits without the lock until no worker compiles
+	// the program of `key`. False when none did.
+	bool WaitForCompile(const ProgramKey& key);
+	template <typename InputInfo>
+	void RunCompileJob(CompileJob& job, InputInfo& input_info);
+	void CompileWorker();
+	void StopWorkers();
+
+	// Pipelines new to the session, created on background threads instead of stalling the
+	// execution thread: graphics pipelines of draws that may be skipped until they are there,
+	// and compute pipelines of modules the compile workers compiled ahead of their dispatch.
+	// Finished pipelines wait in m_async_ready until a lookup takes them; the pending keys are
+	// under m_async_mutex.
+	struct AsyncPipelineJob {
+		bool                               compute = false;
+		GraphicsPipelineKey                key {};
+		std::array<const ShaderModule*, 4> stages {};
+		const ShaderModule*                module = nullptr;
+	};
+	std::unordered_set<GraphicsPipelineKey, GraphicsPipelineKeyHash> m_async_pending_graphics;
+	std::unordered_set<uint64_t>                                     m_async_pending_compute;
+	// Keys a background thread failed to create: their draws create them and report the error.
+	std::unordered_set<GraphicsPipelineKey, GraphicsPipelineKeyHash> m_async_failed_graphics;
+	std::unordered_map<GraphicsPipelineKey, Pipeline, GraphicsPipelineKeyHash> m_async_ready;
+	std::unordered_map<uint64_t, Pipeline>                                     m_async_ready_compute;
+	std::mutex                                                       m_async_mutex;
+	std::condition_variable                                          m_async_available;
+	std::deque<AsyncPipelineJob>                                     m_async_jobs;
+	bool                                                             m_async_stopping = false;
+	std::vector<std::jthread>                                        m_async_threads;
+	// Lookups take the pipelines background threads created from the m_async_ready maps: with
+	// asynchronous pipelines, or while the manifest creates pipelines.
+	bool                                                             m_async_handoff = false;
+	// While the manifest creates pipelines: every key and compute module id some thread has
+	// created or is creating, so that none is created twice (under m_async_mutex).
+	std::unordered_set<GraphicsPipelineKey, GraphicsPipelineKeyHash> m_claimed_graphics;
+	std::unordered_set<uint64_t>                                     m_claimed_compute;
+
+	// pipelinePrecompile.cpp: with helpers and a manifest, when the pipelines the driver has to
+	// compile ahead of the game would take long, the game is stopped while they compile (after
+	// asking the player, by --pipeline-precompile). And when the game's GPU work waits long for a
+	// pipeline, a notice says so.
+	std::jthread m_precompile;
+	void         StartPrecompile();
+	void         Precompile(const std::stop_token& stop);
+
+	// The threads that run the game's GPU work and wait for a pipeline: one the driver creates on
+	// them, or one a helper or background thread creates. Not on the path of pipelines found.
+	struct PipelineStall {
+		uint32_t                              threads = 0;
+		// When the first of them began to wait, and when the last one stopped.
+		std::chrono::steady_clock::time_point since;
+		std::chrono::steady_clock::time_point ended;
+	};
+	class StallScope {
+	public:
+		explicit StallScope(PipelineCache& cache);
+		~StallScope();
+		KYTY_CLASS_NO_COPY(StallScope);
+
+	private:
+		PipelineCache& m_cache;
+	};
+	mutable std::mutex m_stall_mutex;
+	PipelineStall      m_stall;
+	[[nodiscard]] PipelineStall GetPipelineStall() const;
+
+	// Compute pipelines compiled by helper processes (see PipelineHelpers), with the manifest:
+	// those of its modules and those of the modules the compile workers add. A job's ticket is
+	// the module id; the helper's pipeline cache data is kept, and written with the driver cache.
+	std::unique_ptr<PipelineHelpers> m_helpers;
+	// Under m_async_mutex: the jobs of the helpers (also in m_async_pending_compute).
+	std::unordered_map<uint64_t, const ShaderModule*> m_helper_jobs;
+	// Caches of the helpers' pipelines not written yet, and those written (store thread).
+	std::mutex                                        m_helper_caches_mutex;
+	std::vector<vk::PipelineCache>                    m_helper_caches;
+	vk::PipelineCache                                 m_helper_cache = nullptr;
+	std::atomic<uint64_t> m_helper_found {0}, m_helper_created {0}, m_helper_compiled_here {0},
+	    m_helper_taken_back {0};
+	void StartHelpers();
+	void StopHelpers();
+	// Creates the compute pipeline of `module` from the driver cache, or has a helper compile it;
+	// false, with nothing done, when there are no helpers. The pipeline is claimed and pending.
+	bool CreateComputePipelineElsewhere(const ShaderModule& module, const std::vector<uint32_t>& spirv,
+	                                    bool urgent);
+	void OnHelperResult(PipelineHelpers::Result&& result);
+	// Publishes a pipeline a background thread created (m_async_ready_compute).
+	void PublishComputePipeline(const ShaderModule& module, const Pipeline& pipeline,
+	                            std::chrono::steady_clock::time_point started);
+
+	void QueueAsyncPipeline(const AsyncPipelineJob& job);
+	// Under m_async_mutex: removes a queued job no thread has started; false when none matches.
+	template <typename Matches>
+	bool TakeQueuedAsyncPipeline(Matches&& matches);
+	void AsyncPipelineWorker();
+	void StopAsyncPipelines();
+	// A compile worker added a compute module: its pipeline is created in the background.
+	void CreateComputePipelineAhead(const ShaderModule& module, const std::vector<uint32_t>& spirv);
+	// Under m_async_mutex: notes that a thread creates the pipeline (see m_claimed_graphics).
+	void ClaimPipeline(const GraphicsPipelineKey& key);
+	void ClaimComputePipeline(uint64_t module_id);
 	void InitializeDriverCache();
-	// Marks the driver cache changed and, once per interval, has the store thread write it.
-	void CheckpointDriverCache();
-	void WriteDriverCache() const;
+	// Marks the driver cache changed and, once per interval, has the store thread write it; sooner
+	// after a slow creation.
+	void CheckpointDriverCache(bool slow_creation = false);
+	// Checkpoints the driver cache after a pipeline whose creation began at `started`.
+	void NoteCreatedPipeline(std::chrono::steady_clock::time_point started);
+	// Has the store thread write the driver cache if it changed and is due. The caller holds
+	// m_driver_cache_mutex.
+	void PostDueDriverCache();
+	void WriteDriverCache();
 
 	// pipelineSerialization.cpp
 	void WarmUp(const std::filesystem::path& path);
 	bool LoadRecord(std::span<const uint8_t>& records);
 	void StoreModule(const ProgramKey& key, const Program& program, const ShaderModule& module,
-	                 const std::vector<uint32_t>& spirv);
+	                 const std::vector<uint32_t>& spirv, const std::vector<uint32_t>& plain_spirv);
 	void StorePipeline(const GraphicsPipelineKey& key);
 	void StoreLayout(uint64_t key, const ShaderTessellationInputInfo& layout);
 	// Every module by id, with id 0 naming an absent stage.
@@ -287,8 +673,69 @@ private:
 	// False when a stage id of the key is not in `modules`.
 	bool CreateGraphicsPipeline(Pipeline& pipeline, const GraphicsPipelineKey& key,
 	                            const ModuleMap& modules);
+
+	// pipelineManifest.cpp: the title's pipeline manifest, loaded at construction. Its modules
+	// and pipelines are created on background threads once the guest maps their shaders, and with
+	// --record-pipeline-manifest what the session creates is added to it.
+	struct ManifestState;
+	struct ManifestStateDeleter {
+		void operator()(ManifestState* state) const;
+	};
+	std::unique_ptr<ManifestState, ManifestStateDeleter> m_manifest;
+	// Whether background threads create the manifest's modules and pipelines.
+	bool                           m_manifest_warm = false;
+
+	void OpenManifest();
+	// Stops the manifest's threads and writes a recording.
+	void CloseManifest();
+	// Under the program lock.
+	void RecordModule(const ProgramKey& key, const ShaderRecompiler::CompileOptions& options,
+	                  std::span<const uint32_t> code, uint32_t push_data_cursor,
+	                  const ShaderModule& module);
+	void RecordPipeline(const GraphicsPipelineKey& key);
+	void RecordLayout(uint64_t key, const ShaderTessellationInputInfo& layout);
+	static void OnShaderMapped(void* userdata, uint64_t hash, std::span<const uint32_t> code);
+	void ManifestWorker(const std::stop_token& stop);
+	void BuildManifestModule(uint32_t index, std::span<const uint32_t> code,
+	                         std::span<const uint32_t> back_code, bool guest_traversal = false);
+	void CreateManifestPipeline(uint32_t index);
+	// `spirv` is the module's, or empty when another thread compiled it.
+	void CreateManifestComputePipeline(const ShaderModule& module, const std::vector<uint32_t>& spirv);
+	// The stage input of a manifest module with the running host's limits.
+	void SetHostInput(ManifestModule& module) const;
+	// Under the program lock: the module of `key` that the specialization and push data cursor
+	// select, or null.
+	const ShaderModule* FindCompiledModule(
+	    const ProgramKey& key, const ShaderRecompiler::IR::ResourceSpecialization& specialization,
+	    uint32_t push_data_cursor) const;
+	void ManifestProgress(bool force);
+	void SaveManifestRecording();
+	// The manifest's work that is ready to run, for the precompilation's estimates.
+	struct ManifestBacklog {
+		// Modules whose shaders the guest mapped, not built yet, and the compute ones of them.
+		uint32_t modules         = 0;
+		uint32_t compute_modules = 0;
+		// Graphics pipelines whose modules are built, not created yet.
+		uint32_t pipelines       = 0;
+		// Records the threads build or create now.
+		uint32_t running         = 0;
+		uint64_t pipelines_done  = 0;
+		uint32_t threads         = 0;
+		// PrecompileMean of a module build and of a graphics pipeline creation.
+		double   module_seconds   = 0.0;
+		double   pipeline_seconds = 0.0;
+	};
+	[[nodiscard]] ManifestBacklog GetManifestBacklog() const;
 };
 
+// Compute programs compiled with the native ray tracing patching on (see RayTracingPatch.h: the
+// compiler patches the ones whose traversal loops it recognizes) differ from the stored software
+// ones: they get their own program keys. `native`: false for the program of a dispatch without
+// a TLAS (see PipelineCache::GetComputeProgram()).
+void AppendNativeRayTracingKey(ShaderType stage, std::vector<uint32_t>& key, bool native = true);
+
+// The running title's id as cache file names use it; empty when unknown.
+std::string PipelineCacheTitleId();
 // The shader store of the running title; empty unless --shader-cache is on in a Release build
 // without debug dumps, which change the SPIR-V.
 std::filesystem::path ShaderStorePath();
@@ -302,6 +749,20 @@ void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& p
                             vk::PipelineCache                          driver_cache);
 void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& pipeline,
                             const ShaderModule& module, vk::PipelineCache driver_cache);
+// Creates the compute pipeline of `module` only when `cache` holds it (without compiling, where
+// GraphicContext::pipeline_cache_lookup_enabled); false, with nothing created, otherwise.
+bool FindComputePipeline(GraphicContext& graphics, PipelineCache::Pipeline& pipeline,
+                         const ShaderModule& module, vk::PipelineCache cache);
+// Appends "pipeline being created by the driver: <stage> 0x<hash> ...\n" when this thread is inside
+// the driver's creation of a guest pipeline, for the report of a host fault in the driver.
+void DescribeDriverPipelineCreation(std::string& report);
+
+// A compute module and its SPIR-V for a pipeline helper (PipelineHelpers); the decoded module has
+// no Vulkan module yet.
+[[nodiscard]] std::vector<uint8_t> EncodeComputeModule(const ShaderModule&          module,
+                                                       const std::vector<uint32_t>& spirv);
+bool DecodeComputeModule(std::span<const uint8_t> bytes, ShaderModule& module,
+                         std::vector<uint32_t>& spirv);
 
 } // namespace Libs::Graphics
 

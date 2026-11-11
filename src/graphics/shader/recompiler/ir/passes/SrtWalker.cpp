@@ -7,6 +7,8 @@
 #include <xbyak/xbyak.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <bit>
 #include <cstring>
 #include <deque>
@@ -150,7 +152,8 @@ bool ImmediateBits(Value value, uint64_t& bits) {
 
 // Scratch layout in bytes: per descriptor source its eight DWORDs and a known DWORD, one
 // activity byte per source, then per image, then one qword per walked value (all ones when
-// unknown). The walker's value slots, captured addresses, reachability and states follow.
+// unknown). The walker's value slots, captured loads (address qword, value dword, pad),
+// reachability and states follow.
 constexpr uint32_t DescriptorStride = 9u * sizeof(uint32_t);
 
 uint32_t ActiveOffset(const ResourcePlan& plan) {
@@ -167,11 +170,117 @@ const uint8_t* Scratch(const ResourcePlan& plan) {
 }
 
 thread_local const Xbyak::CodeGenerator* t_running_walker = nullptr;
+thread_local bool                         t_walker_ahead   = false;
+thread_local bool                         t_walker_faulted = false;
+thread_local bool (*t_gpu_produced)(uint64_t address)   = nullptr;
+thread_local bool (*t_pending_write)(uint64_t address, uint32_t& value) = nullptr;
+// Guest memory starts here: a table pointer below it is null.
+constexpr uint64_t GuestMemoryStart = SrtGuestMemoryStart;
 
-// Every guest load is mov eax, [r10] (41 8b 02), so a fault completes it as a zero read.
+SrtWalkerGuestMemory    g_guest_memory;
+std::atomic_bool        g_guest_memory_set {false};
+// Counts the walks on this thread: the page answers below hold within one.
+thread_local uint64_t   t_walk = 0;
+// The emulator's answers for the pages this walk loaded from lately, by page.
+struct WalkerPageAnswer {
+	uint64_t       walk    = 0;
+	uint64_t       page    = ~uint64_t {0};
+	SrtWalkerPage  kind    = SrtWalkerPage::Direct;
+	const uint8_t* backing = nullptr;
+};
+thread_local std::array<WalkerPageAnswer, 4> t_page_answers;
+
+// Bit 32 set: the low dword is the value at the address; clear: load it directly.
+uint64_t KYTY_SYSV_ABI ProbeGuestLoad(uint64_t address) {
+	constexpr uint64_t PageSize = 4096;
+	if (address < GuestMemoryStart) {
+		return 0;
+	}
+	if (t_walker_ahead && t_pending_write != nullptr) {
+		uint32_t pending = 0;
+		if (t_pending_write(address, pending)) {
+			return uint64_t {1} << 32u | pending;
+		}
+	}
+	if (!g_guest_memory_set.load(std::memory_order_acquire)) {
+		return 0;
+	}
+	const auto page   = address & ~(PageSize - 1);
+	auto&      answer = t_page_answers[(page / PageSize) % t_page_answers.size()];
+	if (answer.walk != t_walk || answer.page != page) {
+		answer = {.walk = t_walk, .page = page};
+		answer.kind = g_guest_memory.page(address, t_walker_ahead, answer.backing);
+	}
+	uint32_t value = 0;
+	switch (answer.kind) {
+		case SrtWalkerPage::Direct: return 0;
+		case SrtWalkerPage::Backing:
+			// Walker loads are aligned dwords: they never cross the page.
+			std::memcpy(&value, answer.backing + (address - page), sizeof(value));
+			return uint64_t {1} << 32u | value;
+		case SrtWalkerPage::PerLoad: break;
+	}
+	return g_guest_memory.read(address, value, t_walker_ahead, answer.backing)
+	           ? uint64_t {1} << 32u | value
+	           : 0;
+}
+
+// Every direct guest load is mov eax, [r10] (41 8b 02), so a fault completes it as a zero read.
+// The emulator is asked first: on the pages the GPU owns a direct load faults, and a fault costs
+// microseconds (descriptor tables that share pages with GPU-written data took dozens per walk).
+// The walker keeps its state in rdi, rsi, rdx and r8; rcx, r9 and r11 are free here.
 void LoadGuest(Xbyak::CodeGenerator& code, const Xbyak::RegExp& address) {
+	Xbyak::Label direct, done;
 	code.lea(code.r10, code.ptr[address]);
+	for (const auto& reg: {code.rdi, code.rsi, code.rdx, code.r8, code.r10, code.rbp}) {
+		code.push(reg);
+	}
+	code.mov(code.rbp, code.rsp);
+	code.and_(code.rsp, -16);
+	code.mov(code.rdi, code.r10);
+	code.mov(code.rax, reinterpret_cast<uint64_t>(&ProbeGuestLoad));
+	code.call(code.rax);
+	code.mov(code.rsp, code.rbp);
+	for (const auto& reg: {code.rbp, code.r10, code.r8, code.rdx, code.rsi, code.rdi}) {
+		code.pop(reg);
+	}
+	code.bt(code.rax, 32);
+	code.jnc(direct);
+	code.mov(code.eax, code.eax);
+	code.jmp(done);
+	code.L(direct);
 	code.mov(code.eax, code.dword[code.r10]);
+	code.L(done);
+}
+
+// Nonzero: a walk ahead of execution does not read this load, whose value only decides control
+// flow (see SrtRuntime).
+uint64_t KYTY_SYSV_ABI ProbeZeroTestedLoad(uint64_t address) {
+	return t_walker_ahead && t_gpu_produced != nullptr && address >= GuestMemoryStart && t_gpu_produced(address)
+	           ? 1u
+	           : 0u;
+}
+
+// Jumps to `skip` when ProbeZeroTestedLoad() declines the load at `address`; every register is kept.
+void SkipZeroTestedLoad(Xbyak::CodeGenerator& code, const Xbyak::RegExp& address, const Xbyak::Label& skip) {
+	code.lea(code.r10, code.ptr[address]);
+	for (const auto& reg: {code.rax, code.rcx, code.rdx, code.rsi, code.rdi, code.r8, code.r9, code.r10,
+	                       code.r11, code.rbp}) {
+		code.push(reg);
+	}
+	code.mov(code.rbp, code.rsp);
+	code.and_(code.rsp, -16);
+	code.mov(code.rdi, code.r10);
+	code.mov(code.rax, reinterpret_cast<uint64_t>(&ProbeZeroTestedLoad));
+	code.call(code.rax);
+	code.mov(code.rsp, code.rbp);
+	code.test(code.rax, code.rax);
+	// Pops keep the flags.
+	for (const auto& reg: {code.rbp, code.r11, code.r10, code.r9, code.r8, code.rdi, code.rsi, code.rdx,
+	                       code.rcx, code.rax}) {
+		code.pop(reg);
+	}
+	code.jnz(skip, Xbyak::CodeGenerator::T_NEAR);
 }
 
 class RuntimeValidator {
@@ -418,6 +527,9 @@ private:
 	}
 
 	void AddOutput(Value value, uint32_t gate);
+	void FindFlatOnlyNodes(std::span<const Operand> conditions, std::span<const Operand> reads,
+	                       std::span<const std::vector<Operand>> descriptors,
+	                       std::span<const Operand> outputs);
 	void Consume(std::vector<std::vector<uint32_t>>& gates);
 	Ref Evaluate(Value value, uint32_t context);
 	Operand Analyze(uint32_t index);
@@ -431,7 +543,7 @@ private:
 	void Set(void (Xbyak::CodeGenerator::*condition)(const Xbyak::Operand&));
 	void Store(const Node& node);
 	void EmitNode(uint32_t index);
-	void EmitRead(const Node& node);
+	void EmitRead(const Node& node, uint32_t index);
 	void EmitStrict(const Node& node);
 
 	ResourcePlan&                                     m_plan;
@@ -444,6 +556,12 @@ private:
 	Xbyak::Label                                      m_ret;
 	uint32_t m_shader_base = 0, m_reach = 0, m_states = 0, m_states_end = 0;
 	uint32_t m_user_data = 0, m_captures = 0;
+	// By node: the flattened SRT dword that is the only use of its value (or ZeroTestSlot), else
+	// NoFlatSlot.
+	std::vector<uint32_t> m_flat_slots;
+	// Loads whose value only decides control flow, such as the bound of a zero test (see
+	// SrtRuntime::gpu_produced).
+	std::vector<bool>     m_zero_tested;
 };
 
 void WalkerCompiler::AddOutput(Value value, uint32_t gate) {
@@ -501,6 +619,148 @@ void WalkerCompiler::Consume(std::vector<std::vector<uint32_t>>& gates) {
 		AddOutput(fill.pattern_size, UINT32_MAX);
 		AddOutput(fill.element_count, UINT32_MAX);
 		for (const auto value: fill.values) AddOutput(value, UINT32_MAX);
+	}
+}
+
+// A load node whose value fills one flattened SRT dword and nothing else: no other node, no
+// control condition, descriptor word or output uses it, nor any EXEC mask a context tests.
+// Likewise a load whose value is one descriptor word with refreshable bits (see
+// ResourcePlan::descriptor_refresh), and at most one flattened SRT dword besides, reports that
+// word (and the plan records the flattened dword in descriptor_word_flat).
+void WalkerCompiler::FindFlatOnlyNodes(std::span<const Operand> conditions,
+                                       std::span<const Operand> reads,
+                                       std::span<const std::vector<Operand>> descriptors,
+                                       std::span<const Operand> outputs) {
+	m_flat_slots.assign(m_nodes.size(), NoFlatSlot);
+	std::vector<bool>     used(m_nodes.size(), false);
+	std::vector<bool>     other_use(m_nodes.size(), false);
+	std::vector<uint32_t> word_uses(m_nodes.size(), 0);
+	std::vector<uint32_t> word_slot(m_nodes.size(), NoFlatSlot);
+	std::vector<uint32_t> flat_reads(m_nodes.size(), 0);
+	std::vector<uint32_t> flat_of(m_nodes.size(), NoFlatSlot);
+	m_plan.descriptor_word_flat.assign(descriptors.size() * 8u, NoFlatSlot);
+	const auto use = [&](const Operand& operand) {
+		if (operand.kind == Kind::Node && operand.value < used.size()) {
+			used[operand.value]      = true;
+			other_use[operand.value] = true;
+		}
+	};
+	for (const auto& node: m_nodes) {
+		for (const auto& arg: node.args) use(arg);
+	}
+	for (const auto& operand: conditions) use(operand);
+	for (uint32_t source = 0; source < descriptors.size(); ++source) {
+		const auto kind = source < m_plan.descriptor_refresh.size() ? m_plan.descriptor_refresh[source]
+		                                                            : DescriptorRefresh::None;
+		for (uint32_t word = 0; word < descriptors[source].size(); ++word) {
+			const auto& operand = descriptors[source][word];
+			if (operand.kind != Kind::Node || operand.value >= used.size()) continue;
+			used[operand.value] = true;
+			word_uses[operand.value]++;
+			if (DescriptorRefreshMask(kind, word) != 0) {
+				word_slot[operand.value] = DescriptorSlot(source, word);
+			} else {
+				other_use[operand.value] = true;
+			}
+		}
+	}
+	for (const auto& operand: outputs) use(operand);
+	std::unordered_set<const Inst*> masks;
+	for (const auto& mask: m_masks) {
+		if (const auto* inst = mask.Resolve().TryInstruction()) masks.insert(inst);
+	}
+	for (uint32_t slot = 0; slot < reads.size(); ++slot) {
+		const auto& operand = reads[slot];
+		if (operand.kind != Kind::Node || operand.value >= m_nodes.size()) continue;
+		const auto index = static_cast<size_t>(operand.value);
+		flat_reads[index]++;
+		flat_of[index] = m_plan.srt_reads[slot].flat_offset;
+		if (m_flat_slots[index] != NoFlatSlot) used[index] = true; // Two dwords.
+		m_flat_slots[index] = m_plan.srt_reads[slot].flat_offset;
+	}
+	// A zero test: `other < bound` (or `bound <= other`) with the other operand unknown; the node
+	// is unknown unless the bound is 0.
+	std::vector<uint32_t> uses(m_nodes.size(), 0), zero_uses(m_nodes.size(), 0);
+	const auto count_use = [&](const Operand& operand) {
+		if (operand.kind == Kind::Node && operand.value < uses.size()) uses[operand.value]++;
+	};
+	for (size_t index = 0; index < m_nodes.size(); ++index) {
+		const auto& node = m_nodes[index];
+		const auto  op   = node.inst->GetOpcode();
+		// A node whose result is another's (a context's alias of the root context's value) never runs.
+		if (node.result != Operand {Kind::Node, index}) continue;
+		const bool  zero_test = (op == ValueOpcode::ULessThan32 || op == ValueOpcode::ULessThanEqual32) &&
+		                       node.args.size() == 2 && node.args[1].kind == Kind::Unknown;
+		for (size_t k = 0; k < node.args.size(); ++k) {
+			count_use(node.args[k]);
+			if (zero_test && k == 0 && node.args[0].kind == Kind::Node && node.args[0].value < zero_uses.size()) {
+				zero_uses[node.args[0].value]++;
+			}
+		}
+	}
+	for (const auto& operand: conditions) count_use(operand);
+	for (const auto& words: descriptors) {
+		for (const auto& operand: words) count_use(operand);
+	}
+	for (const auto& operand: outputs) count_use(operand);
+	for (const auto& operand: reads) count_use(operand);
+	// Nodes whose value only decides control flow: no descriptor word, output, flattened SRT read
+	// or EXEC mask uses them, and every node using them tests them as a zero-test bound or decides
+	// only control flow itself (branch conditions do). Unknown, they leave both sides reachable.
+	std::vector<bool> control(m_nodes.size(), true);
+	const auto not_control = [&](const Operand& operand) {
+		if (operand.kind == Kind::Node && operand.value < control.size()) control[operand.value] = false;
+	};
+	for (const auto& words: descriptors) {
+		for (const auto& operand: words) not_control(operand);
+	}
+	for (const auto& operand: outputs) not_control(operand);
+	for (const auto& operand: reads) not_control(operand);
+	for (size_t index = 0; index < m_nodes.size(); ++index) {
+		if (m_nodes[index].referenced || masks.contains(m_nodes[index].inst)) control[index] = false;
+	}
+	for (bool changed = true; changed;) {
+		changed = false;
+		for (size_t index = 0; index < m_nodes.size(); ++index) {
+			const auto& node = m_nodes[index];
+			if (node.result != Operand {Kind::Node, index} || control[index]) continue;
+			const auto op        = node.inst->GetOpcode();
+			const bool zero_test = (op == ValueOpcode::ULessThan32 || op == ValueOpcode::ULessThanEqual32) &&
+			                       node.args.size() == 2 && node.args[1].kind == Kind::Unknown;
+			for (size_t k = 0; k < node.args.size(); ++k) {
+				const auto& arg = node.args[k];
+				if ((zero_test && k == 0) || arg.kind != Kind::Node || arg.value >= control.size() ||
+				    !control[arg.value]) {
+					continue;
+				}
+				control[arg.value] = false;
+				changed            = true;
+			}
+		}
+	}
+	m_zero_tested.assign(m_nodes.size(), false);
+	for (size_t index = 0; index < m_nodes.size(); ++index) {
+		const auto& node = m_nodes[index];
+		const auto  op   = node.inst->GetOpcode();
+		const bool  load = !node.referenced && !masks.contains(node.inst) &&
+		                  (op == ValueOpcode::LoadAddressU32 || op == ValueOpcode::ReadConstBuffer ||
+		                   op == ValueOpcode::LoadBufferU32);
+		m_zero_tested[index] = load && uses[index] != 0 && (uses[index] == zero_uses[index] || control[index]);
+		if (used[index] || !load) {
+			m_flat_slots[index] = NoFlatSlot;
+		}
+		if (load && uses[index] != 0 && uses[index] == zero_uses[index] && m_flat_slots[index] == NoFlatSlot) {
+			m_flat_slots[index] = ZeroTestSlot;
+		}
+		if (load && m_flat_slots[index] == NoFlatSlot && !other_use[index] &&
+		    word_uses[index] == 1 && word_slot[index] != NoFlatSlot && flat_reads[index] <= 1) {
+			m_flat_slots[index] = word_slot[index];
+			if (flat_reads[index] == 1) {
+				const auto word = DescriptorSlotSource(word_slot[index]) * 8u +
+				                  DescriptorSlotWord(word_slot[index]);
+				m_plan.descriptor_word_flat[word] = flat_of[index];
+			}
+		}
 	}
 }
 
@@ -821,7 +1081,7 @@ void WalkerCompiler::EmitNode(uint32_t index) {
 		}
 		case ValueOpcode::LoadAddressU32:
 		case ValueOpcode::ReadConstBuffer:
-		case ValueOpcode::LoadBufferU32: EmitRead(node); return;
+		case ValueOpcode::LoadBufferU32: EmitRead(node, index); return;
 		case ValueOpcode::SelectU1:
 		case ValueOpcode::SelectU32:
 		case ValueOpcode::SelectF32: {
@@ -900,7 +1160,7 @@ void WalkerCompiler::EmitNode(uint32_t index) {
 }
 
 // Raw scalar and uniform DWORD buffer loads; out-of-bounds reads are zero.
-void WalkerCompiler::EmitRead(const Node& node) {
+void WalkerCompiler::EmitRead(const Node& node, uint32_t index) {
 	auto&      c    = m_code;
 	const auto& inst = *node.inst;
 	const auto op = inst.GetOpcode();
@@ -933,6 +1193,7 @@ void WalkerCompiler::EmitRead(const Node& node) {
 			c.mov(c.rcx, c.rax);
 			c.shr(c.rcx, 48);
 			c.jnz(m_ret, Near);
+			if (index < m_zero_tested.size() && m_zero_tested[index]) SkipZeroTestedLoad(c, c.rax, m_ret);
 			LoadGuest(c, c.rax);
 		} else {
 			Load(c.r11, args[1]);
@@ -963,11 +1224,16 @@ void WalkerCompiler::EmitRead(const Node& node) {
 			c.lea(c.r11, c.ptr[c.r9 + static_cast<size_t>(immediate) + 4u]);
 			c.cmp(c.r11, c.rcx);
 			c.ja(zero, Near);
+			if (index < m_zero_tested.size() && m_zero_tested[index]) {
+				SkipZeroTestedLoad(c, c.rax + c.r9 + static_cast<size_t>(immediate), m_ret);
+			}
 			LoadGuest(c, c.rax + c.r9 + static_cast<size_t>(immediate));
 		}
 		++m_captures;
 		c.mov(c.qword[c.r8], c.r10);
-		c.add(c.r8, 8);
+		c.mov(c.dword[c.r8 + 8], c.eax);
+		c.mov(c.dword[c.r8 + 12], index < m_flat_slots.size() ? m_flat_slots[index] : NoFlatSlot);
+		c.add(c.r8, 16);
 		Store(node);
 	}
 	c.L(zero);
@@ -1216,6 +1482,7 @@ void WalkerCompiler::Compile(std::span<const Value> values) {
 		}
 	}
 	for (const auto value: m_outputs) outputs.push_back(Evaluate(value, 0).operand);
+	FindFlatOnlyNodes(conditions, reads, descriptors, outputs);
 	Layout();
 
 	Xbyak::Label pass, fail, reset;
@@ -1357,7 +1624,7 @@ void WalkerCompiler::Compile(std::span<const Value> values) {
 	for (uint32_t index = 0; index < m_nodes.size(); ++index) {
 		if (Thunk(index)) EmitNode(index);
 	}
-	m_plan.srt_scratch.assign(m_plan.srt_captures / 8u + m_captures, 0u);
+	m_plan.srt_scratch.assign(m_plan.srt_captures / 8u + m_captures * 2u, 0u);
 	m_plan.srt_user_data = m_user_data;
 	c.readyRE();
 	EXIT_IF(Xbyak::GetError() != 0);
@@ -1365,7 +1632,56 @@ void WalkerCompiler::Compile(std::span<const Value> values) {
 
 } // namespace
 
+// A source whose descriptor only becomes direct buffer (or image) bindings: no indirect
+// descriptor reads a table, candidate, selector, row count or mask through it and no sampler
+// uses it. Selector reads compare the ranges of written buffers with the selector table, so a
+// program with selectors keeps its V# bases.
+static void FindRefreshableSources(ResourcePlan& plan) {
+	const auto& sources = plan.descriptor_sources;
+	auto&       refresh = plan.descriptor_refresh;
+	refresh.assign(sources.size(), DescriptorRefresh::None);
+	std::vector<bool> excluded(sources.size(), false);
+	const auto exclude = [&](uint32_t source) {
+		if (source < excluded.size()) excluded[source] = true;
+	};
+	bool selectors = false;
+	for (const auto& source: sources) {
+		if (!source.indirect_descriptor) continue;
+		const auto& indirect = *source.indirect_descriptor;
+		exclude(indirect.table_source);
+		for (const auto candidate: indirect.sources) exclude(candidate);
+		if (indirect.selector) {
+			selectors = true;
+			exclude(indirect.selector->source);
+			if (indirect.selector->rows) exclude(indirect.selector->rows->source);
+			if (indirect.selector->ranks) exclude(indirect.selector->ranks->source);
+		}
+	}
+	for (const auto& sampler: plan.info.samplers) exclude(sampler.source);
+	const auto assign = [&](uint32_t source, DescriptorRefresh kind) {
+		if (source >= sources.size()) return;
+		if (sources[source].indirect_descriptor ||
+		    (refresh[source] != DescriptorRefresh::None && refresh[source] != kind)) {
+			exclude(source);
+			return;
+		}
+		refresh[source] = kind;
+	};
+	for (const auto& buffer: plan.info.buffers) {
+		if (selectors) {
+			exclude(buffer.source);
+		} else {
+			assign(buffer.source, DescriptorRefresh::Buffer);
+		}
+	}
+	for (const auto& image: plan.info.images) assign(image.source, DescriptorRefresh::Image);
+	for (uint32_t source = 0; source < sources.size(); ++source) {
+		if (excluded[source]) refresh[source] = DescriptorRefresh::None;
+	}
+}
+
 void CompileSrtWalker(ResourcePlan& plan, std::span<const Value> values) {
+	if (values.empty()) FindRefreshableSources(plan);
 	plan.srt_code = std::make_unique<Xbyak::CodeGenerator>(4096, Xbyak::AutoGrow);
 	WalkerCompiler(plan, *plan.srt_code).Compile(values);
 }
@@ -1376,13 +1692,31 @@ bool WalkSrt(const ResourcePlan& plan, const SrtRuntime& runtime, std::vector<ui
 	flat.assign(plan.srt_reads.size(), 0u);
 	using Walker = const uint64_t* KYTY_SYSV_ABI (*)(const uint32_t*, uint32_t*, uint64_t*, uint64_t);
 	t_running_walker = plan.srt_code.get();
+	t_walker_ahead   = runtime.record_load != nullptr;
+	t_walker_faulted = false;
+	t_gpu_produced   = runtime.gpu_produced;
+	t_pending_write  = runtime.pending_write;
+	++t_walk;
 	const auto* end = plan.srt_code->getCode<Walker>()(runtime.user_data.data(), flat.data(),
 	                                                     plan.srt_scratch.data(), runtime.shader_base);
 	t_running_walker = nullptr;
-	if (end == nullptr) return false;
+	t_walker_ahead   = false;
+	t_gpu_produced   = nullptr;
+	t_pending_write  = nullptr;
+	if (end == nullptr || t_walker_faulted) return false;
+	const auto* first = plan.srt_scratch.data() + plan.srt_captures / 8u;
 	if (reads != nullptr) {
-		for (auto* read = plan.srt_scratch.data() + plan.srt_captures / 8u; read != end; ++read)
-			reads->emplace_back(*read, sizeof(uint32_t));
+		for (auto* read = first; read != end; read += 2) reads->emplace_back(*read, sizeof(uint32_t));
+	}
+	if (runtime.record_loads != nullptr) {
+		runtime.record_loads(runtime.userdata, std::span<const uint64_t>(first, end));
+	} else if (runtime.record_load != nullptr) {
+		for (auto* read = first; read != end; read += 2) {
+			// Nothing is mapped below guest memory: those bytes read zero on every thread.
+			if (read[0] >= GuestMemoryStart)
+				runtime.record_load(runtime.userdata, read[0], static_cast<uint32_t>(read[1]),
+				                    static_cast<uint32_t>(read[1] >> 32u));
+		}
 	}
 	return true;
 }
@@ -1428,6 +1762,22 @@ bool ValidateRuntimeValue(const ResourcePlan& program, Value value, RuntimeValue
 
 bool ValidateWaveUniformValue(const ResourcePlan& program, Value value) {
 	return RuntimeValidator(program, RuntimeValueType::Any, true).Run(value);
+}
+
+uint32_t SrtWalkerAheadLoadLength(uint64_t rip, uint64_t address) {
+	if (!t_walker_ahead || address < GuestMemoryStart) return 0;
+	const auto length = SrtWalkerLoadLength(rip);
+	if (length != 0) t_walker_faulted = true;
+	return length;
+}
+
+void SetSrtWalkerGuestMemory(const SrtWalkerGuestMemory& memory) {
+	if (g_guest_memory_set.load(std::memory_order_acquire)) {
+		return;
+	}
+	g_guest_memory = memory;
+	g_guest_memory_set.store(memory.page != nullptr && memory.read != nullptr,
+	                         std::memory_order_release);
 }
 
 uint32_t SrtWalkerLoadLength(uint64_t rip) {
