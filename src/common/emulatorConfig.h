@@ -2,6 +2,7 @@
 #define KYTY_COMMON_EMULATOR_CONFIG_H_
 
 #include "common/common.h"
+#include "common/titleProfile.h"
 
 #include <cstddef>
 #include <array>
@@ -137,6 +138,18 @@ struct ConfigOptions {
 	Keymap keymap;
 	// Ordinary boots need a non-null argv[0]; --guest-exec supplies the caller's arguments.
 	std::vector<std::string> guest_arguments {""};
+
+	// gta6-prep: config
+	// --title-profile: empty picks the profile by the title (Common::MatchTitle), "none" picks none.
+	std::string              title_profile;
+	// --quirk <name>=on|off: quirks added to and removed from the profile's.
+	Common::QuirkMask        quirks_on  = 0;
+	Common::QuirkMask        quirks_off = 0;
+	// --preset: the presets expanded on the command line, in order (logged once the log is up).
+	std::vector<std::string> presets;
+	// Config::OptionKey() of every option the command line set, presets included: the title's
+	// default preset leaves them alone.
+	std::vector<std::string> explicit_options;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -254,6 +267,12 @@ bool RedZoneProtectionEnabled();
 
 const Keymap& GetKeymap();
 const std::vector<std::string>& GetGuestArguments();
+
+// gta6-prep: config
+// The quirks in effect for the running title (see Common::ResolveQuirks()), set once its
+// param.json is loaded. None until then.
+void SetTitleQuirks(Common::QuirkMask quirks);
+bool QuirkEnabled(Common::Quirk quirk);
 
 } // namespace Config
 

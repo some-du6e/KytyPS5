@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
@@ -14,6 +15,8 @@
 namespace Config {
 
 static std::unique_ptr<ConfigOptions> g_config;
+// gta6-prep: config
+static std::atomic<Common::QuirkMask> g_title_quirks {0};
 
 void Initialize() {
 	EXIT_IF(g_config != nullptr);
@@ -24,6 +27,7 @@ void Initialize() {
 void Shutdown() {
 	Common::DebugCounters::SetEnabled(false);
 	g_config.reset();
+	g_title_quirks = 0;
 }
 
 void Load(const ConfigOptions& cfg) {
@@ -364,6 +368,15 @@ const Keymap& GetKeymap() {
 
 const std::vector<std::string>& GetGuestArguments() {
 	return g_config->guest_arguments;
+}
+
+// gta6-prep: config
+void SetTitleQuirks(Common::QuirkMask quirks) {
+	g_title_quirks = quirks;
+}
+
+bool QuirkEnabled(Common::Quirk quirk) {
+	return (g_title_quirks.load(std::memory_order_relaxed) & Common::QuirkBit(quirk)) != 0;
 }
 
 } // namespace Config

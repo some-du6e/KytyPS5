@@ -911,6 +911,34 @@ if(BUILD_TESTING)
 	add_test(NAME emulator_present_mode_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --present-mode Invalid)
 	set_tests_properties(emulator_present_mode_invalid PROPERTIES WILL_FAIL TRUE)
+	# gta6-prep: config
+	add_test(NAME emulator_preset_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --preset safe --preset low-vram
+	                 --preset rtx3050)
+	add_test(NAME emulator_preset_unknown
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --preset bogus)
+	add_test(NAME emulator_preset_missing
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --preset)
+	add_test(NAME emulator_title_profile_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --title-profile gta5 --title-profile gta6
+	                 --title-profile none --title-profile auto)
+	add_test(NAME emulator_title_profile_unknown
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --title-profile gta)
+	add_test(NAME emulator_quirk_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --quirk rockstar-legacy-entitlements=on
+	                 --quirk all=off)
+	add_test(NAME emulator_quirk_invalid_state
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --quirk rockstar-legacy-entitlements=yes)
+	add_test(NAME emulator_quirk_unknown
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --quirk rockstar=on)
+	add_test(NAME emulator_no_flags_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --no-native-raytracing --no-trinity
+	                 --no-rt-stats --no-readback-tiled-images --no-readback-storage-images
+	                 --no-sync-raw-image-buffers --no-relaxed-shader-float --no-shader-cache
+	                 --no-perf-overlay --occlusion-queries)
+	set_tests_properties(emulator_preset_unknown emulator_preset_missing
+	                     emulator_title_profile_unknown emulator_quirk_invalid_state
+	                     emulator_quirk_unknown PROPERTIES WILL_FAIL TRUE)
 	add_test(NAME ime_dialog COMMAND $<TARGET_FILE:ime_dialog_tests>)
 	add_test(NAME shader_cfg COMMAND $<TARGET_FILE:shader_cfg_tests>)
 	add_test(NAME scalar_provenance COMMAND $<TARGET_FILE:scalar_provenance_tests>)

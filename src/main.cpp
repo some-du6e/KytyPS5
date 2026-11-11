@@ -2,8 +2,10 @@
 #include "common/common.h"
 #include "common/file.h"
 #include "common/logging/log.h"
+#include "common/presets.h"
 #include "common/stringUtils.h"
 #include "common/threads.h"
+#include "common/titleProfile.h"
 #include "emulator.h"
 #include "graphics/host_gpu/renderer/pipeline/pipelineHelpers.h"
 #include "kytyGitVersion.h"
@@ -13,6 +15,7 @@
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <optional>
 #include <string_view>
 #include <vector>
 #include <magic_enum.hpp>
@@ -180,6 +183,27 @@ static void PrintUsage() {
 #endif
 	::printf("  --keymap <Control=Input>             DualSense mapping; may be repeated.\n");
 	::printf("  --rd                                 Enable RenderDoc capture.\n");
+	// gta6-prep: config
+	::printf("\nTitle profiles, presets and switches:\n");
+	::printf("  --title-profile <key|none>           Use this title profile instead of the one the\n"
+	         "                                       title matches (%s), or none.\n",
+	         Common::TitleProfileKeys().c_str());
+	::printf("  --quirk <name>=on|off                Turn a title quirk on or off; may be repeated.\n"
+	         "                                       Names: %s, all.\n",
+	         Common::QuirkNames().c_str());
+	::printf("  --preset <name>                      Insert the preset's options here; later options\n"
+	         "                                       override them. Presets:\n");
+	for (const auto& preset: Config::Presets()) {
+		::printf("                                         %.*s: %.*s\n",
+		         static_cast<int>(preset.name.size()), preset.name.data(),
+		         static_cast<int>(preset.description.size()), preset.description.data());
+	}
+	::printf("  --no-<flag>                          The off form of --native-raytracing, --trinity,\n"
+	         "                                       --rt-stats, --readback-tiled-images,\n"
+	         "                                       --readback-storage-images, --sync-raw-image-buffers,\n"
+	         "                                       --relaxed-shader-float, --shader-cache and\n"
+	         "                                       --perf-overlay (--occlusion-queries is the on form\n"
+	         "                                       of --no-occlusion-queries).\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -316,9 +340,114 @@ static constexpr Flag FLAGS[] = {
     {"--redzone", &ConfigOptions::red_zone_protection_enabled},
     {"--no-redzone", &ConfigOptions::red_zone_protection_enabled, false},
 #endif
+    // gta6-prep: config
+    {"--no-native-raytracing", &ConfigOptions::native_ray_tracing_enabled, false},
+    {"--no-trinity", &ConfigOptions::pro_enabled, false},
+    {"--no-rt-stats", &ConfigOptions::rt_stats_enabled, false},
+    {"--no-readback-tiled-images", &ConfigOptions::readback_tiled_images, false},
+    {"--no-readback-storage-images", &ConfigOptions::readback_storage_images, false},
+    {"--no-sync-raw-image-buffers", &ConfigOptions::sync_raw_image_buffers, false},
+    {"--no-relaxed-shader-float", &ConfigOptions::relaxed_shader_float, false},
+    {"--no-shader-cache", &ConfigOptions::shader_cache_enabled, false},
+    {"--no-perf-overlay", &ConfigOptions::perf_overlay_enabled, false},
+    {"--occlusion-queries", &ConfigOptions::occlusion_queries_enabled},
 };
 
+// gta6-prep: config
+static void NoteExplicitOption(ConfigOptions& config, std::string_view option) {
+	const std::string key(Config::OptionKey(option));
+	if (std::ranges::find(config.explicit_options, key) == config.explicit_options.end()) {
+		config.explicit_options.push_back(key);
+	}
+}
+
+// Replaces each `--preset <name>` with the preset's tokens where it stands, so that the options
+// after it override the preset's. The tokens of a preset are not expanded again, and everything
+// from --guest-exec on belongs to the guest.
+static bool ExpandPresets(int argc, char* argv[], std::vector<std::string>& args,
+                          std::vector<std::string>& presets) {
+	args.assign(argv, argv + argc);
+	for (size_t i = 1; i < args.size(); i++) {
+		if (args[i] == "--guest-exec") {
+			break;
+		}
+		if (args[i] != "--preset") {
+			continue;
+		}
+		if (i + 1 >= args.size()) {
+			::printf("missing value for --preset\n");
+			return false;
+		}
+		const auto* preset = Config::FindPreset(args[i + 1]);
+		if (preset == nullptr) {
+			::printf("unknown preset: %s (presets: %s)\n", args[i + 1].c_str(),
+			         Config::PresetNames().c_str());
+			return false;
+		}
+		presets.emplace_back(preset->name);
+		args.erase(args.begin() + static_cast<std::ptrdiff_t>(i),
+		           args.begin() + static_cast<std::ptrdiff_t>(i + 2));
+		args.insert(args.begin() + static_cast<std::ptrdiff_t>(i), preset->tokens.begin(),
+		            preset->tokens.end());
+		// i >= 1, so this does not wrap; the loop continues after the inserted tokens.
+		i = i + preset->tokens.size() - 1;
+	}
+	return true;
+}
+
+// The options of gta6-prep's switches that take a value. nullopt: not one of them.
+static std::optional<bool> ParseGta6PrepOption(const std::string& arg, const std::string& value,
+                                               ConfigOptions& config) {
+	if (arg == "--title-profile") {
+		if (value == "auto") {
+			config.title_profile.clear();
+		} else if (value == "none" || Common::FindTitleProfile(value) != nullptr) {
+			config.title_profile = value;
+		} else {
+			::printf("unknown title profile: %s (profiles: %s, none, auto)\n", value.c_str(),
+			         Common::TitleProfileKeys().c_str());
+			return false;
+		}
+		return true;
+	}
+	if (arg == "--quirk") {
+		const auto split = value.find('=');
+		const auto name  = std::string_view(value).substr(0, split);
+		const auto state = split == std::string::npos ? std::string_view {}
+		                                              : std::string_view(value).substr(split + 1);
+		const auto quirk = Common::FindQuirk(name);
+		if ((name != "all" && !quirk.has_value()) || (state != "on" && state != "off")) {
+			::printf("invalid quirk (expected <name>=on|off; names: %s, all): %s\n",
+			         Common::QuirkNames().c_str(), value.c_str());
+			return false;
+		}
+		const auto mask = name == "all" ? Common::AllQuirks : Common::QuirkBit(*quirk);
+		if (state == "on") {
+			config.quirks_on |= mask;
+			config.quirks_off &= ~mask;
+		} else {
+			config.quirks_off |= mask;
+			config.quirks_on &= ~mask;
+		}
+		return true;
+	}
+	return std::nullopt;
+}
+
 static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_help) {
+	// gta6-prep: config
+	std::vector<std::string> expanded;
+	if (!ExpandPresets(argc, argv, expanded, options.config.presets)) {
+		return false;
+	}
+	std::vector<char*> expanded_argv;
+	expanded_argv.reserve(expanded.size());
+	for (auto& argument: expanded) {
+		expanded_argv.push_back(argument.data());
+	}
+	argc = static_cast<int>(expanded_argv.size());
+	argv = expanded_argv.data();
+
 	show_help = false;
 
 	for (int i = 1; i < argc; i++) {
@@ -332,6 +461,7 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 
 		if (const auto* flag = std::ranges::find(FLAGS, arg, &Flag::name); flag != std::end(FLAGS)) {
 			options.config.*flag->field = flag->value;
+			NoteExplicitOption(options.config, arg); // gta6-prep: config
 			continue;
 		}
 
@@ -344,6 +474,7 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 			::printf("missing value for %s\n", arg.c_str());
 			return false;
 		}
+		NoteExplicitOption(options.config, arg); // gta6-prep: config
 
 		if (arg == "--gpu-pipeline") {
 			options.config.gpu_pipeline_stages = Config::ParseGpuPipelineStages(value.c_str());
@@ -539,6 +670,11 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 				return false;
 			}
 			options.config.keymap.push_back(value);
+		} else if (const auto parsed = ParseGta6PrepOption(arg, value, options.config);
+		           parsed.has_value()) { // gta6-prep: config
+			if (!*parsed) {
+				return false;
+			}
 		} else {
 			::printf("unknown option: %s\n", arg.c_str());
 			return false;
@@ -550,6 +686,53 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 	}
 
 	return show_help || (!options.app0_dir.empty() && !options.elf.empty());
+}
+
+// gta6-prep: config
+// Applies the preset a title profile defaults to (Emulator::RunOptions::apply_title_preset): only
+// the options the user did not set (ConfigOptions::explicit_options) change, and never the log
+// options, which the log already uses. False when the preset does not apply.
+static bool ApplyTitlePreset(ConfigOptions& config, std::string_view name) {
+	const auto* preset = Config::FindPreset(name);
+	if (preset == nullptr) {
+		return false;
+	}
+	// With --help, ParseArgs() accepts a command line without --game.
+	std::vector<std::string> args {"kyty_emulator", "--help"};
+	for (size_t i = 0; i < preset->tokens.size(); i++) {
+		const auto token    = preset->tokens[i];
+		const bool flag     = std::ranges::find(FLAGS, token, &Flag::name) != std::end(FLAGS);
+		const bool user_set = std::ranges::find(config.explicit_options,
+		                                        Config::OptionKey(token)) !=
+		                      config.explicit_options.end();
+		if (!user_set) {
+			args.emplace_back(token);
+		}
+		if (!flag && i + 1 < preset->tokens.size()) {
+			i++;
+			if (!user_set) {
+				args.emplace_back(preset->tokens[i]);
+			}
+		}
+	}
+	std::vector<char*> argv;
+	argv.reserve(args.size());
+	for (auto& argument: args) {
+		argv.push_back(argument.data());
+	}
+	RunOptions options;
+	options.config = config;
+	bool show_help = false;
+	if (!ParseArgs(static_cast<int>(argv.size()), argv.data(), options, show_help)) {
+		return false;
+	}
+	options.config.explicit_options   = config.explicit_options;
+	options.config.presets            = config.presets;
+	options.config.printf_direction   = config.printf_direction;
+	options.config.printf_output_file = config.printf_output_file;
+	options.config.session_log_file   = config.session_log_file;
+	config                            = std::move(options.config);
+	return true;
 }
 
 // An exception no one catches (a worker thread of the program cache, for one) ends the process
@@ -610,6 +793,7 @@ static int Main(int argc, char* argv[]) {
 		PrintUsage();
 		return 1;
 	}
+	options.apply_title_preset = ApplyTitlePreset; // gta6-prep: config
 
 	if (show_help) {
 		PrintUsage();
