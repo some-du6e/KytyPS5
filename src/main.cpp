@@ -286,6 +286,56 @@ static bool ParseUserId(const std::string& value, int32_t& out) {
 
 using Config::ConfigOptions;
 
+// gta6-prep: vram
+// The video memory options that take a value. nullopt: not one of them.
+static std::optional<bool> ParseVramOption(const std::string& arg, const std::string& value,
+                                           ConfigOptions& config) {
+	if (arg == "--vram-gc") {
+		const auto policy = Config::ParseVramGcPolicy(value);
+		if (!policy.has_value()) {
+			::printf("invalid VRAM collection policy (legacy or proportional): %s\n", value.c_str());
+			return false;
+		}
+		config.vram_gc = *policy;
+		return true;
+	}
+	if (arg == "--vram-profile") {
+		const auto profile = Config::ParseVramProfile(value);
+		if (!profile.has_value()) {
+			::printf("invalid VRAM profile (auto or low): %s\n", value.c_str());
+			return false;
+		}
+		config.vram_profile = *profile;
+		return true;
+	}
+	if (arg == "--rt-arena-mb") {
+		uint32_t megabytes = 0;
+		if (!ParseUint32(value, megabytes)) {
+			::printf("invalid BLAS arena size in MiB: %s\n", value.c_str());
+			return false;
+		}
+		config.rt_arena_mb = megabytes;
+		return true;
+	}
+	if (arg == "--video-out-resolution") {
+		const auto resolution = Config::ParseVideoOutResolution(value);
+		if (!resolution.has_value()) {
+			::printf("invalid video out resolution (auto, 1080p or 4k): %s\n", value.c_str());
+			return false;
+		}
+		config.video_out_resolution = *resolution;
+		return true;
+	}
+	if (arg == "--vram-limit-mb") {
+		if (!ParseUint32(value, config.vram_limit_mb)) {
+			::printf("invalid VRAM limit in MiB: %s\n", value.c_str());
+			return false;
+		}
+		return true;
+	}
+	return std::nullopt;
+}
+
 struct Flag {
 	std::string_view name;
 	bool ConfigOptions::* field;
@@ -344,56 +394,6 @@ static constexpr Flag FLAGS[] = {
     {"--no-oom-recovery", &ConfigOptions::no_oom_recovery},
     {"--skip-unsupported-image-atomics", &ConfigOptions::skip_unsupported_image_atomics},
 };
-
-// gta6-prep: vram
-// The video memory options that take a value. nullopt: not one of them.
-static std::optional<bool> ParseVramOption(const std::string& arg, const std::string& value,
-                                           ConfigOptions& config) {
-	if (arg == "--vram-gc") {
-		const auto policy = Config::ParseVramGcPolicy(value);
-		if (!policy.has_value()) {
-			::printf("invalid VRAM collection policy (legacy or proportional): %s\n", value.c_str());
-			return false;
-		}
-		config.vram_gc = *policy;
-		return true;
-	}
-	if (arg == "--vram-profile") {
-		const auto profile = Config::ParseVramProfile(value);
-		if (!profile.has_value()) {
-			::printf("invalid VRAM profile (auto or low): %s\n", value.c_str());
-			return false;
-		}
-		config.vram_profile = *profile;
-		return true;
-	}
-	if (arg == "--rt-arena-mb") {
-		uint32_t megabytes = 0;
-		if (!ParseUint32(value, megabytes)) {
-			::printf("invalid BLAS arena size in MiB: %s\n", value.c_str());
-			return false;
-		}
-		config.rt_arena_mb = megabytes;
-		return true;
-	}
-	if (arg == "--video-out-resolution") {
-		const auto resolution = Config::ParseVideoOutResolution(value);
-		if (!resolution.has_value()) {
-			::printf("invalid video out resolution (auto, 1080p or 4k): %s\n", value.c_str());
-			return false;
-		}
-		config.video_out_resolution = *resolution;
-		return true;
-	}
-	if (arg == "--vram-limit-mb") {
-		if (!ParseUint32(value, config.vram_limit_mb)) {
-			::printf("invalid VRAM limit in MiB: %s\n", value.c_str());
-			return false;
-		}
-		return true;
-	}
-	return std::nullopt;
-}
 
 static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_help) {
 	show_help = false;
