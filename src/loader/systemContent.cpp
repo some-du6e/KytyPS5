@@ -97,6 +97,8 @@ struct SystemContent {
 	std::filesystem::path playgo_path;
 	PlayGo                playgo;
 	std::filesystem::path icon_path;
+	// See SystemContentTitle(); set once the param.json is loaded.
+	Common::TitleInfo     title;
 };
 
 Psf::~Psf() {
@@ -605,6 +607,17 @@ void SystemContentLoadParamSfo(const std::filesystem::path& file_name) {
 
 	sc->psf_path = file_name;
 	sc->psf.DbgPrint();
+	{
+		std::string title_id;
+		std::string content_id;
+		std::string title;
+		std::string version;
+		sc->psf.GetParamString("TITLE_ID", &title_id);
+		sc->psf.GetParamString("CONTENT_ID", &content_id);
+		sc->psf.GetParamString("TITLE", &title);
+		sc->psf.GetParamString("APP_VER", &version);
+		sc->title = Common::MakeTitleInfo(title_id, content_id, title, version);
+	}
 	int32_t attribute3 = 0;
 	const bool title_supports_trinity = sc->psf.GetParamInt("ATTRIBUTE3", &attribute3) &&
 	                                    (static_cast<uint32_t>(attribute3) & (1u << 22u)) != 0;
@@ -634,6 +647,10 @@ void SystemContentLoadParamSfo(const std::filesystem::path& file_name) {
 	if (sc->playgo.IsValid()) {
 		sc->playgo.DbgPrint();
 	}
+}
+
+const Common::TitleInfo& SystemContentTitle() {
+	return Common::Singleton<SystemContent>::Instance()->title;
 }
 
 bool SystemContentIsTrinityMode() {

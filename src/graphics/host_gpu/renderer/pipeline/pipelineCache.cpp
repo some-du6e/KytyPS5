@@ -477,9 +477,10 @@ void AppendNativeRayTracingKey(ShaderType stage, std::vector<uint32_t>& key, boo
 }
 
 std::string PipelineCacheTitleId() {
-	std::string title_id;
-	if ((!Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id) || title_id.empty()) &&
-	    (!Loader::SystemContentParamSfoGetString("CONTENT_ID", &title_id) || title_id.empty())) {
+	// TITLE_ID, else the whole CONTENT_ID (not its title segment): the names of existing caches.
+	const auto& title    = Loader::SystemContentTitle();
+	std::string title_id = title.id.empty() || title.id_from_content_id ? title.content_id : title.id;
+	if (title_id.empty()) {
 		return {};
 	}
 	if (!std::ranges::all_of(title_id, [](unsigned char c) {

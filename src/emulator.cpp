@@ -78,10 +78,10 @@ static void MountOrCreateDir(const std::filesystem::path& dir, const std::string
 }
 
 static void MountSandboxDirs() {
-	std::string title_id;
-	if (!Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id) || title_id.empty()) {
-		title_id = "UNKNOWN";
-	}
+	// Only a TITLE_ID names the sandbox, as before the title resolver: the folders of a dump
+	// without one stay where they were.
+	const auto& title    = Loader::SystemContentTitle();
+	std::string title_id = title.id_from_content_id || title.id.empty() ? "UNKNOWN" : title.id;
 
 	MountOrCreateDir("_DownloadData/" + title_id, "/download0");
 	MountOrCreateDir("_TempData/" + title_id, "/temp0");
@@ -153,15 +153,7 @@ void Run(const RunOptions& options) {
 	Init(options.config, param_json, subsystems);
 
 	PrintSystemInfo();
-	std::string title_id;
-	Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id);
-	if (title_id.empty()) {
-		std::string content_id;
-		if (Loader::SystemContentParamSfoGetString("CONTENT_ID", &content_id) &&
-		    content_id.size() == 36 && content_id[6] == '-' && content_id[16] == '_') {
-			title_id = content_id.substr(7, 9);
-		}
-	}
+	const std::string title_id = Loader::SystemContentTitle().id;
 	if (!title_id.empty()) {
 		Log::WriteToConsoleAndLog(fmt::format("Title ID: {}\n", title_id));
 	}

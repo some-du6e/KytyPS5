@@ -67,37 +67,16 @@ struct NpUnifiedEntitlementLabel {
 	char padding[3];
 };
 
-static bool TryGetTitleIdFromContentId(std::string* title_id) {
-	std::string content_id;
-	if (!Loader::SystemContentParamSfoGetString("CONTENT_ID", &content_id) || content_id.empty()) {
-		return false;
-	}
-
-	const auto dash = content_id.find('-');
-	if (dash == std::string::npos) {
-		return false;
-	}
-
-	const auto underscore = content_id.find('_', dash + 1);
-	if (underscore == std::string::npos || underscore <= dash + 1) {
-		return false;
-	}
-
-	*title_id = content_id.substr(dash + 1, underscore - dash - 1);
-	return !title_id->empty();
-}
-
 static bool ResolveTitleId(std::string* title_id) {
-	if (Loader::SystemContentParamSfoGetString("TITLE_ID", title_id) && !title_id->empty()) {
-		return true;
+	const auto& title = Loader::SystemContentTitle();
+	*title_id         = title.id;
+	if (title.id.empty()) {
+		return false;
 	}
-
-	if (TryGetTitleIdFromContentId(title_id)) {
+	if (title.id_from_content_id) {
 		LOGF("\t PS5 mode: TITLE_ID missing, using CONTENT_ID title segment\n");
-		return true;
 	}
-
-	return false;
+	return true;
 }
 
 int KYTY_SYSV_ABI AppContentInitialize(const AppContentInitParam* init_param,
