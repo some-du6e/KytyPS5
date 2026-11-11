@@ -202,7 +202,10 @@ int KYTY_SYSV_ABI Audio3dPortSetAttribute(uint32_t port_id, uint32_t attribute_i
 			LOGF("\t downmix_spread_height_aware = %d\n",
 			     g_ports[port_id].downmix_spread_height_aware);
 			break;
-		default: EXIT("unknown attribute: 0x%" PRIx32 "\n", attribute_id);
+		default:
+			KYTY_SOFT_FAIL("sceAudio3dPortSetAttribute", "unsupported attribute 0x%" PRIx32,
+			               attribute_id);
+			return AUDIO3D_ERROR_INVALID_PARAMETER;
 	}
 
 	return OK;

@@ -3,11 +3,14 @@
 #include "common/assert.h"
 #include "common/common.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/stringUtils.h"
 #include "common/threads.h"
 #include "common/timer.h"
 #include "libs/errno.h"
 #include "libs/libs.h"
+
+#include <optional>
 
 namespace Libs::LibKernel::EventFlag {
 
@@ -57,20 +60,25 @@ struct EventFlagWaitMode {
 	KernelEventFlagPrivate::ClearMode clear = KernelEventFlagPrivate::ClearMode::None;
 };
 
-EventFlagWaitMode DecodeEventFlagWaitMode(uint32_t wait_mode) {
+// std::nullopt for a mode the kernel rejects with EINVAL.
+std::optional<EventFlagWaitMode> DecodeEventFlagWaitMode(const char* api, uint32_t wait_mode) {
 	EventFlagWaitMode mode;
 
 	switch (wait_mode & 0xfu) {
 		case 0x01: mode.wait = KernelEventFlagPrivate::WaitMode::And; break;
 		case 0x02: mode.wait = KernelEventFlagPrivate::WaitMode::Or; break;
-		default: EXIT("unknown mode: %u\n", wait_mode);
+		default:
+			KYTY_SOFT_FAIL(api, "unsupported wait mode 0x%x, EINVAL", wait_mode);
+			return std::nullopt;
 	}
 
 	switch (wait_mode & 0xf0u) {
 		case 0x00: mode.clear = KernelEventFlagPrivate::ClearMode::None; break;
 		case 0x10: mode.clear = KernelEventFlagPrivate::ClearMode::All; break;
 		case 0x20: mode.clear = KernelEventFlagPrivate::ClearMode::Bits; break;
-		default: EXIT("unknown mode: %u\n", wait_mode);
+		default:
+			KYTY_SOFT_FAIL(api, "unsupported clear mode 0x%x, EINVAL", wait_mode);
+			return std::nullopt;
 	}
 
 	return mode;
@@ -295,8 +303,11 @@ int KYTY_SYSV_ABI KernelWaitEventFlag(KernelEventFlag ef, uint64_t bit_pattern, 
 		return KERNEL_ERROR_EINVAL;
 	}
 
-	const auto mode   = DecodeEventFlagWaitMode(wait_mode);
-	auto       result = ef->Wait(bit_pattern, mode.wait, mode.clear, result_pat, timeout);
+	const auto mode = DecodeEventFlagWaitMode("sceKernelWaitEventFlag", wait_mode);
+	if (!mode.has_value()) {
+		return KERNEL_ERROR_EINVAL;
+	}
+	auto result = ef->Wait(bit_pattern, mode->wait, mode->clear, result_pat, timeout);
 
 	int ret = OK;
 
@@ -323,8 +334,11 @@ int KYTY_SYSV_ABI KernelPollEventFlag(KernelEventFlag ef, uint64_t bit_pattern, 
 		return KERNEL_ERROR_EINVAL;
 	}
 
-	const auto mode   = DecodeEventFlagWaitMode(wait_mode);
-	auto       result = ef->Poll(bit_pattern, mode.wait, mode.clear, result_pat);
+	const auto mode = DecodeEventFlagWaitMode("sceKernelPollEventFlag", wait_mode);
+	if (!mode.has_value()) {
+		return KERNEL_ERROR_EINVAL;
+	}
+	auto result = ef->Poll(bit_pattern, mode->wait, mode->clear, result_pat);
 
 	int ret = OK;
 

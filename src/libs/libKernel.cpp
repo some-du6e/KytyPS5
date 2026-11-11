@@ -6,6 +6,7 @@
 #include "common/fpEnv.h"
 #include "common/hostException.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/singleton.h"
 #include "common/stringUtils.h"
 #include "common/threads.h"
@@ -1098,8 +1099,10 @@ KernelModule KYTY_SYSV_ABI KernelLoadStartModule(const char* module_file_name, s
 
 	LOGF("\tmodule_file_name = %s\n", module_file_name);
 
-	EXIT_NOT_IMPLEMENTED(flags != 0);
-	EXIT_NOT_IMPLEMENTED(opt != nullptr);
+	if (flags != 0 || opt != nullptr) {
+		KYTY_SOFT_FAIL("sceKernelLoadStartModule", "flags 0x%x, opt %s ignored", flags,
+		               opt != nullptr ? "set" : "null");
+	}
 
 	auto* rt = Common::Singleton<Loader::RuntimeLinker>::Instance();
 
@@ -1134,7 +1137,12 @@ KernelModule KYTY_SYSV_ABI KernelLoadStartModule(const char* module_file_name, s
 
 	LOGF("\tmodule_start() result = %d\n", result);
 
-	EXIT_NOT_IMPLEMENTED(result < 0);
+	if (result < 0) {
+		// The module stays loaded; the caller sees module_start's error in *res.
+		KYTY_SOFT_FAIL("sceKernelLoadStartModule", "module_start of %s returned 0x%08x",
+		               Common::PathToString(module_path.filename()).c_str(),
+		               static_cast<uint32_t>(result));
+	}
 
 	if (res != nullptr) {
 		*res = result;
@@ -1152,8 +1160,10 @@ int KYTY_SYSV_ABI KernelStopUnloadModule(KernelModule handle, size_t args, const
 
 	auto* rt = Common::Singleton<Loader::RuntimeLinker>::Instance();
 
-	EXIT_NOT_IMPLEMENTED(flags != 0);
-	EXIT_NOT_IMPLEMENTED(opt != nullptr);
+	if (flags != 0 || opt != nullptr) {
+		KYTY_SOFT_FAIL("sceKernelStopUnloadModule", "flags 0x%x, opt %s ignored", flags,
+		               opt != nullptr ? "set" : "null");
+	}
 
 	auto* program = rt->FindProgramById(handle);
 
@@ -1181,7 +1191,18 @@ int KYTY_SYSV_ABI KernelStopUnloadModule(KernelModule handle, size_t args, const
 
 	LOGF("\tmodule_stop() result = %d\n", result);
 
-	EXIT_NOT_IMPLEMENTED(result < 0);
+	if (result < 0) {
+		// Its threads or callbacks may still run its code: keep the module mapped and report
+		// module_stop's error in *res.
+		KYTY_SOFT_FAIL("sceKernelStopUnloadModule",
+		               "module_stop of %s returned 0x%08x, module kept loaded",
+		               Common::PathToString(program->file_name.filename()).c_str(),
+		               static_cast<uint32_t>(result));
+		if (res != nullptr) {
+			*res = result;
+		}
+		return OK;
+	}
 
 	if (res != nullptr) {
 		*res = result;
