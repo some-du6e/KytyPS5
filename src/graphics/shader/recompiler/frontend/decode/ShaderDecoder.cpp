@@ -456,7 +456,24 @@ void DecodeProgram(std::span<const uint32_t> code, Program& program,
 	auto long_branch = long_branches.begin();
 	for (uint32_t word_index = 0; word_index < code.size();) {
 		program.instructions.emplace_back();
-		DecodeInstruction(code, word_index, program.instructions.back());
+		if (unsupported && code.size() - word_index < MaxInstructionRawWords) {
+			// Near the end of the code the words may claim more words than remain: decode them
+			// from a zero-padded copy and stop at an instruction that does not fit.
+			std::array<uint32_t, MaxInstructionRawWords> padded {};
+			std::copy(code.begin() + word_index, code.end(), padded.begin());
+			auto& tail_inst = program.instructions.back();
+			DecodeInstruction(padded, 0, tail_inst);
+			if (tail_inst.word_count > code.size() - word_index) {
+				program.instructions.pop_back();
+				return;
+			}
+			tail_inst.pc = word_index * sizeof(uint32_t);
+			if (IsDirectBranch(tail_inst.opcode)) {
+				tail_inst.branch_target += tail_inst.pc;
+			}
+		} else {
+			DecodeInstruction(code, word_index, program.instructions.back());
+		}
 
 		auto& inst = program.instructions.back();
 		while (long_branch != long_branches.end() && long_branch->pc < inst.pc) ++long_branch;

@@ -269,6 +269,19 @@ void TestUnsupportedEncodingsDecodeWithoutExit() {
 	Check(text.find("unsupported family=VOP3 opcode=0x3ff") != std::string::npos,
 	      "the unsupported instruction text lost its family or opcode: " + text);
 
+	// A last word that claims more words than remain is dropped, not read past the code.
+	const uint32_t truncated[] = {0xec000000u, EncodeVop3Word0(0x141u, 0)};
+	Decoder::DecodeProgram(truncated, program);
+	Check(program.instructions.size() == 1u &&
+	          program.instructions[0].opcode == Opcode::UNSUPPORTED,
+	      "a truncated instruction after an unsupported one was decoded");
+	// A branch decoded from the padded tail keeps its program-relative target.
+	const uint32_t tail_branch[] = {0xec000000u, EncodeSopp(0x02, 0xfffeu)};
+	Decoder::DecodeProgram(tail_branch, program);
+	Check(program.instructions.size() == 2u && program.instructions[1].pc == 4u &&
+	          program.instructions[1].branch_target == 0u,
+	      "a branch decoded after an unsupported instruction lost its target");
+
 	const uint32_t supported[] = {EncodeSop1(0x03, 1, 2), EndPgm};
 	Decoder::DecodeProgram(supported, program);
 	Check(Decoder::FindUnsupportedInstruction(program) == nullptr,
