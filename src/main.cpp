@@ -79,6 +79,15 @@ static void PrintVramUsage() {
 	         "                                       budget) and collect both caches aggressively at\n"
 	         "                                       the next frame, instead of closing at once.\n"
 	         "                                       --no-oom-recovery turns it off (and wins).\n");
+	::printf("  --vram-profile <auto|low>            low: the settings for an 8 GB card (proportional\n"
+	         "                                       collection, --oom-recovery, a smaller recycled-\n"
+	         "                                       image pool dropped under pressure, 4 parked images,\n"
+	         "                                       a BLAS arena of heap/8 within 512 MiB-1 GiB, at\n"
+	         "                                       most 2 pipeline helpers). Options given explicitly\n"
+	         "                                       win. Default: auto (built-in values).\n");
+	::printf("  --rt-arena-mb <MiB>                  BLAS memory of --native-raytracing; 0 is no limit.\n"
+	         "                                       Default: a share of the largest video memory heap.\n"
+	         "                                       The KYTY_RT_ARENA_MB variable overrides it.\n");
 }
 
 static void PrintUsage() {
@@ -338,6 +347,24 @@ static std::optional<bool> ParseVramOption(const std::string& arg, const std::st
 			return false;
 		}
 		config.vram_gc = *policy;
+		return true;
+	}
+	if (arg == "--vram-profile") {
+		const auto profile = Config::ParseVramProfile(value);
+		if (!profile.has_value()) {
+			::printf("invalid VRAM profile (auto or low): %s\n", value.c_str());
+			return false;
+		}
+		config.vram_profile = *profile;
+		return true;
+	}
+	if (arg == "--rt-arena-mb") {
+		uint32_t megabytes = 0;
+		if (!ParseUint32(value, megabytes)) {
+			::printf("invalid BLAS arena size in MiB: %s\n", value.c_str());
+			return false;
+		}
+		config.rt_arena_mb = megabytes;
 		return true;
 	}
 	if (arg == "--vram-limit-mb") {

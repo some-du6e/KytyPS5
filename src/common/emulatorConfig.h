@@ -145,6 +145,11 @@ struct ConfigOptions {
 	// --oom-recovery / --no-oom-recovery (the off form wins); neither: the profile's (off).
 	bool                        oom_recovery    = false;
 	bool                        no_oom_recovery = false;
+	// --vram-profile auto|low; see VramSettings for what Low sets.
+	VramProfile                 vram_profile = VramProfile::Auto;
+	// --rt-arena-mb: the BLAS memory of native ray tracing in MiB (0: no limit); unset: the
+	// profile's share of the largest device-local heap. KYTY_RT_ARENA_MB still wins.
+	std::optional<uint32_t>     rt_arena_mb;
 };
 
 void Load(const ConfigOptions& cfg);

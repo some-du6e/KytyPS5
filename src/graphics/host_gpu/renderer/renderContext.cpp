@@ -24,6 +24,10 @@ RenderContext::RenderContext(GraphicContext& graphics, const std::filesystem::pa
       m_texture_cache(graphics, m_command_scheduler, m_page_manager, m_buffer_cache),
       m_image_heap(*this, m_page_manager) {
 	EXIT_NOT_IMPLEMENTED(!Common::Thread::IsMainThread());
+	// gta6-prep: vram: --vram-profile low keeps a smaller recycled-image pool.
+	const auto& settings = Config::GetVramSettings();
+	m_graphics.SetRecycledImageBudget(MemoryPolicy::RecycledImageBytes(
+	    m_graphics.GetTotalMemoryBudget(), settings.small_recycle_pool));
 }
 
 RenderContext::~RenderContext() {

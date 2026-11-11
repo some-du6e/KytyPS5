@@ -1,6 +1,7 @@
 #include "graphics/host_gpu/renderer/nativeRayTracing.h"
 
 #include "common/assert.h"
+#include "common/emulatorConfig.h"
 #include "common/logging/log.h"
 #include "gpu_tiler_shaders/hle_blas_refit_spv.h"
 #include "gpu_tiler_shaders/hle_tlas_spv.h"
@@ -22,6 +23,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -810,20 +812,25 @@ NativeRayTracing::NativeRayTracing(GraphicContext& graphics, CommandScheduler& s
 	CreatePipelines();
 	CreateBuffers();
 	CreateTlas(InstanceCapacity);
-	// The memory of the BLASes is limited: KYTY_RT_ARENA_MB (0: no limit), else a quarter of the
-	// largest device local heap.
+	// The memory of the BLASes is limited: KYTY_RT_ARENA_MB, else --rt-arena-mb (0: no limit),
+	// else a quarter of the largest device local heap within BudgetMin-BudgetMax (an eighth
+	// within 512 MiB-1 GiB with --vram-profile low; gta6-prep: vram).
+	const auto&             settings = Config::GetVramSettings();
+	std::optional<uint64_t> requested;
 	if (const char* limit = std::getenv("KYTY_RT_ARENA_MB"); limit != nullptr && limit[0] != 0) {
-		m_budget = std::strtoull(limit, nullptr, 10) << 20u;
-	} else {
-		const auto& memory = m_graphics.physical_device_memory_properties;
-		uint64_t    heap   = 0;
-		for (uint32_t i = 0; i < memory.memoryHeapCount; i++) {
-			if (memory.memoryHeaps[i].flags & vk::MemoryHeapFlagBits::eDeviceLocal) {
-				heap = std::max<uint64_t>(heap, memory.memoryHeaps[i].size);
-			}
-		}
-		m_budget = std::clamp(heap / 4, BudgetMin, BudgetMax);
+		requested = std::strtoull(limit, nullptr, 10);
+	} else if (settings.rt_arena_mb.has_value()) {
+		requested = *settings.rt_arena_mb;
 	}
+	const auto& memory = m_graphics.physical_device_memory_properties;
+	uint64_t    heap   = 0;
+	for (uint32_t i = 0; i < memory.memoryHeapCount; i++) {
+		if (memory.memoryHeaps[i].flags & vk::MemoryHeapFlagBits::eDeviceLocal) {
+			heap = std::max<uint64_t>(heap, memory.memoryHeaps[i].size);
+		}
+	}
+	static_assert(BudgetMin == MemoryPolicy::RtArenaMin && BudgetMax == MemoryPolicy::RtArenaMax);
+	m_budget = MemoryPolicy::RtArenaBudget(heap, requested, settings.small_rt_arena);
 	LOGF("NativeRayTracing: enabled, BLAS memory budget %llu MiB\n",
 	     static_cast<unsigned long long>(m_budget >> 20u));
 }

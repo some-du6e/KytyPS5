@@ -22,6 +22,8 @@ static VramRequest VramRequestOf(const ConfigOptions& cfg) {
 	request.gc_policy       = cfg.vram_gc;
 	request.oom_recovery    = cfg.oom_recovery;
 	request.no_oom_recovery = cfg.no_oom_recovery;
+	request.profile         = cfg.vram_profile;
+	request.rt_arena_mb     = cfg.rt_arena_mb;
 	return request;
 }
 

@@ -1028,12 +1028,18 @@ if(BUILD_TESTING)
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --vram-limit-only)
 	add_test(NAME emulator_vram_cli
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc proportional --vram-gc legacy
-	                 --vram-limit-mb 8192 --vram-limit-mb 0 --oom-recovery --no-oom-recovery)
+	                 --vram-limit-mb 8192 --vram-limit-mb 0 --oom-recovery --no-oom-recovery
+	                 --vram-profile low --vram-profile auto --rt-arena-mb 768 --rt-arena-mb 0)
 	add_test(NAME emulator_vram_gc_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc aggressive)
 	add_test(NAME emulator_vram_limit_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-limit-mb 8G)
+	add_test(NAME emulator_vram_profile_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-profile 8gb)
+	add_test(NAME emulator_rt_arena_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --rt-arena-mb -1)
 	set_tests_properties(emulator_vram_gc_invalid emulator_vram_limit_invalid
+	                     emulator_vram_profile_invalid emulator_rt_arena_invalid
 	                     PROPERTIES WILL_FAIL TRUE)
 
 	add_custom_target(kyty_tests DEPENDS

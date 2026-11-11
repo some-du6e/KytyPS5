@@ -50,8 +50,9 @@ struct RecycledImage {
 	VmaAllocator        allocator  = nullptr;
 };
 
-constexpr size_t   RecycledImagesMax     = 32;
-constexpr uint64_t RecycledImageBytesMax = 256ull * 1024 * 1024;
+constexpr size_t RecycledImagesMax = 32;
+// gta6-prep: vram: GraphicContext::SetRecycledImageBudget() (--vram-profile low).
+std::atomic<uint64_t> g_recycled_bytes_max {MemoryPolicy::DefaultRecycledImageBytes};
 
 std::mutex                 g_recycled_mutex;
 std::vector<RecycledImage> g_recycled;
@@ -460,7 +461,8 @@ void GraphicContext::DeleteImage(VulkanImage& image) {
 		g_recycled.push_back(
 		    {create, image.image, image.allocation, allocation_info.size, allocator});
 		g_recycled_bytes += allocation_info.size;
-		while (g_recycled.size() > RecycledImagesMax || g_recycled_bytes > RecycledImageBytesMax) {
+		const auto bytes_max = g_recycled_bytes_max.load(std::memory_order_relaxed);
+		while (g_recycled.size() > RecycledImagesMax || g_recycled_bytes > bytes_max) {
 			const auto& oldest = g_recycled.front();
 			Graveyard().Push(oldest.allocator, oldest.image, oldest.allocation);
 			g_recycled_bytes -= oldest.size;
@@ -482,6 +484,25 @@ bool GraphicContext::SpilledOutOfDeviceMemory(VmaAllocation allocation) const {
 	VkMemoryPropertyFlags properties = 0;
 	vmaGetAllocationMemoryProperties(allocator, allocation, &properties);
 	return (properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0;
+}
+
+void GraphicContext::SetRecycledImageBudget(uint64_t bytes) {
+	g_recycled_bytes_max.store(bytes, std::memory_order_relaxed);
+}
+
+uint64_t GraphicContext::RecycledImageBudget() const {
+	return g_recycled_bytes_max.load(std::memory_order_relaxed);
+}
+
+uint64_t GraphicContext::TrimRecycledImages() {
+	std::lock_guard lock(g_recycled_mutex);
+	const auto      bytes = g_recycled_bytes;
+	for (const auto& entry: g_recycled) {
+		Graveyard().Push(entry.allocator, entry.image, entry.allocation);
+	}
+	g_recycled.clear();
+	g_recycled_bytes = 0;
+	return bytes;
 }
 
 bool GraphicContext::RecoverFromAllocationFailure(uint64_t bytes, std::string_view what,

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 
 namespace {
 
@@ -178,6 +179,95 @@ void TestOomRecoveryFlags() {
 	      "--no-oom-recovery turned recovery on");
 }
 
+// --vram-profile: auto changes nothing, low sets each 8 GB value, explicit options win over it.
+void TestProfileExpansion() {
+	using Config::ResolveVramSettings;
+	using Config::VramGcPolicy;
+	using Config::VramProfile;
+	using Config::VramSettings;
+	constexpr VramSettings builtin {};
+	static_assert(ResolveVramSettings({}) == builtin, "the auto profile changes a built-in value");
+	Check(ResolveVramSettings({.profile = VramProfile::Auto}) == builtin,
+	      "the auto profile changes a built-in value");
+	Check(builtin.gc_policy == VramGcPolicy::Legacy && !builtin.oom_recovery &&
+	          !builtin.small_recycle_pool && !builtin.trim_recycle_pool &&
+	          builtin.max_parked_images == 8 && !builtin.small_rt_arena &&
+	          !builtin.rt_arena_mb.has_value() && builtin.max_pipeline_helpers == 0,
+	      "the built-in VRAM settings are not today's values");
+
+	const auto low = ResolveVramSettings({.profile = VramProfile::Low});
+	Check(low.profile == VramProfile::Low, "the low profile is not reported");
+	Check(low.gc_policy == VramGcPolicy::Proportional, "low does not collect proportionally");
+	Check(low.oom_recovery, "low does not recover from allocation failures");
+	Check(low.small_recycle_pool && low.trim_recycle_pool, "low keeps the full recycle pool");
+	Check(low.max_parked_images == 4, "low keeps 8 parked images");
+	Check(low.small_rt_arena && !low.rt_arena_mb.has_value(), "low keeps the large BLAS arena");
+	Check(low.max_pipeline_helpers == 2, "low does not bound the pipeline helpers");
+
+	const auto overridden = ResolveVramSettings({.profile         = VramProfile::Low,
+	                                             .gc_policy       = VramGcPolicy::Legacy,
+	                                             .no_oom_recovery = true,
+	                                             .rt_arena_mb     = 768});
+	Check(overridden.gc_policy == VramGcPolicy::Legacy, "--vram-gc does not win over low");
+	Check(!overridden.oom_recovery, "--no-oom-recovery does not win over low");
+	Check(overridden.rt_arena_mb == 768u, "--rt-arena-mb is lost under low");
+	Check(overridden.max_parked_images == 4 && overridden.max_pipeline_helpers == 2,
+	      "an explicit option reset the rest of the profile");
+	// Explicit options without a profile.
+	Check(ResolveVramSettings({.gc_policy = VramGcPolicy::Proportional}).gc_policy ==
+	          VramGcPolicy::Proportional,
+	      "--vram-gc proportional is ignored");
+	Check(ResolveVramSettings({.rt_arena_mb = 0}).rt_arena_mb == 0u,
+	      "--rt-arena-mb 0 (no limit) is lost");
+
+	Check(Config::ParseVramProfile("low") == VramProfile::Low &&
+	          Config::ParseVramProfile("auto") == VramProfile::Auto &&
+	          !Config::ParseVramProfile("Low").has_value(),
+	      "--vram-profile parsing");
+	Check(Config::ParseVramGcPolicy("proportional") == VramGcPolicy::Proportional &&
+	          Config::ParseVramGcPolicy("legacy") == VramGcPolicy::Legacy &&
+	          !Config::ParseVramGcPolicy("").has_value(),
+	      "--vram-gc parsing");
+	Check(Config::VramProfileName(VramProfile::Low) == "low" &&
+	          Config::VramGcPolicyName(VramGcPolicy::Proportional) == "proportional",
+	      "VRAM option names");
+}
+
+// The budgets the low profile derives: the recycle pool, the BLAS arena and the helper bound.
+void TestProfileBudgets() {
+	Check(Policy::RecycledImageBytes(13 * GiB / 2, false) == 256 * MiB,
+	      "the auto recycle pool is not 256 MiB");
+	Check(Policy::RecycledImageBytes(13 * GiB / 2, true) == 208 * MiB,
+	      "the low recycle pool on 6.5 GiB is not budget/32");
+	Check(Policy::RecycledImageBytes(45 * GiB / 2, true) == 256 * MiB,
+	      "the low recycle pool passes 256 MiB");
+	Check(Policy::RecycledImageBytes(0, true) == 0, "the low recycle pool without a budget");
+
+	// Auto: heap / 4 within 512 MiB - 4 GiB, as NativeRayTracing computed it.
+	Check(Policy::RtArenaBudget(8 * GiB, std::nullopt, false) == 2 * GiB,
+	      "the auto BLAS arena of an 8 GB card is not 2 GiB");
+	Check(Policy::RtArenaBudget(24 * GiB, std::nullopt, false) == 4 * GiB,
+	      "the auto BLAS arena of a 24 GB card is not 4 GiB");
+	Check(Policy::RtArenaBudget(1 * GiB, std::nullopt, false) == 512 * MiB,
+	      "the auto BLAS arena is below 512 MiB");
+	// Low: heap / 8 within 512 MiB - 1 GiB.
+	Check(Policy::RtArenaBudget(8 * GiB, std::nullopt, true) == 1 * GiB,
+	      "the low BLAS arena of an 8 GB card is not 1 GiB");
+	Check(Policy::RtArenaBudget(6 * GiB, std::nullopt, true) == 768 * MiB,
+	      "the low BLAS arena of a 6 GB card is not heap/8");
+	Check(Policy::RtArenaBudget(2 * GiB, std::nullopt, true) == 512 * MiB,
+	      "the low BLAS arena is below 512 MiB");
+	Check(Policy::RtArenaBudget(24 * GiB, std::nullopt, true) == 1 * GiB,
+	      "the low BLAS arena passes 1 GiB");
+	// A request (KYTY_RT_ARENA_MB or --rt-arena-mb) wins; 0 is no limit.
+	Check(Policy::RtArenaBudget(8 * GiB, 768, true) == 768 * MiB, "an arena request is ignored");
+	Check(Policy::RtArenaBudget(8 * GiB, 0, false) == 0, "a zero arena request is not unlimited");
+
+	Check(Policy::BoundPipelineHelpers(10, 0) == 10, "no bound changed the helper count");
+	Check(Policy::BoundPipelineHelpers(10, 2) == 2, "the helper bound is not applied");
+	Check(Policy::BoundPipelineHelpers(1, 2) == 1, "the helper bound raised the count");
+}
+
 } // namespace
 
 int main() {
@@ -186,6 +276,8 @@ int main() {
 	TestHeapSizeLimits();
 	TestSpillLogCadence();
 	TestOomRecoveryFlags();
+	TestProfileExpansion();
+	TestProfileBudgets();
 	std::printf("VramPolicyTests: ok\n");
 	return 0;
 }

@@ -40,6 +40,8 @@ constexpr uint64_t NumFramesBeforeRemoval = 16;
 // Images a depth/color conversion replaced are kept for a conversion back (see ParkImage()).
 constexpr size_t   MaxParkedImages  = 8;
 constexpr uint64_t ParkedImageTicks = 2048;
+// gta6-prep: vram: the bound comes from Config::GetVramSettings() (4 with --vram-profile low).
+static_assert(MaxParkedImages == Config::VramSettings {}.max_parked_images);
 // Largest GPU-written tiled image (in texels) that is written back to guest memory on submit.
 constexpr uint64_t SmallTiledReadbackTexels = 64 * 64;
 // Smallest GPU-written linear image (in bytes) that is only written back to guest memory once
@@ -1782,7 +1784,7 @@ void TextureCache::ParkImage(ImageId id) {
 	image.binding.needs_rebind = true;
 	image.StateChanged();
 	m_parked_images.emplace_back(id, m_scheduler.CurrentTick());
-	if (m_parked_images.size() > MaxParkedImages) {
+	if (m_parked_images.size() > Config::GetVramSettings().max_parked_images) {
 		DiscardParkedImage(m_parked_images.front().first);
 		m_parked_images.erase(m_parked_images.begin());
 	}
@@ -2919,6 +2921,11 @@ void TextureCache::RunGarbageCollector(MemoryPolicy::GcPressure request) {
 	// request: the thresholds alone, as before.
 	const bool out_of_memory = request == MemoryPolicy::GcPressure::OutOfMemory;
 	const bool requested     = request != MemoryPolicy::GcPressure::None;
+	// --vram-profile low: images kept for reuse go first once memory is tight.
+	if (Config::GetVramSettings().trim_recycle_pool &&
+	    (requested || m_total_used_memory >= m_pressure_gc_memory)) {
+		(void)m_graphics.TrimRecycledImages();
+	}
 	if (!requested && m_total_used_memory < m_trigger_gc_memory) {
 		return;
 	}

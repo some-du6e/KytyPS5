@@ -141,6 +141,12 @@ struct GraphicContext {
 	// Counts a spilled image or buffer of `bytes` and logs the "VRAM spill:" line on the first and
 	// every power-of-two count of its kind. `what` describes the first one.
 	void               NoteSpill(bool image, uint64_t bytes, std::string_view what);
+	// The bytes the recycled-image pool (CreateImage()) keeps at most; 256 MiB until set. Any
+	// thread.
+	void                   SetRecycledImageBudget(uint64_t bytes);
+	[[nodiscard]] uint64_t RecycledImageBudget() const;
+	// Hands the pooled images to the destruction thread; returns their bytes. Any thread.
+	uint64_t               TrimRecycledImages();
 	// Asks the next collection of the texture and buffer caches for more than their thresholds
 	// (RenderContext::RunGarbageCollector() takes it); the stronger request wins. Any thread.
 	void RequestGcPressure(MemoryPolicy::GcPressure pressure) noexcept {
