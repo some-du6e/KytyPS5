@@ -166,6 +166,18 @@ void TestSpillLogCadence() {
 	      "spill log cadence is not the first and every power of two");
 }
 
+// --oom-recovery and --no-oom-recovery: off by default, the off form wins.
+void TestOomRecoveryFlags() {
+	using Config::ResolveVramSettings;
+	using Config::VramRequest;
+	Check(!ResolveVramSettings({}).oom_recovery, "OOM recovery is on by default");
+	Check(ResolveVramSettings({.oom_recovery = true}).oom_recovery, "--oom-recovery is ignored");
+	Check(!ResolveVramSettings({.oom_recovery = true, .no_oom_recovery = true}).oom_recovery,
+	      "--no-oom-recovery does not win over --oom-recovery");
+	Check(!ResolveVramSettings({.no_oom_recovery = true}).oom_recovery,
+	      "--no-oom-recovery turned recovery on");
+}
+
 } // namespace
 
 int main() {
@@ -173,6 +185,7 @@ int main() {
 	TestProportionalThresholds();
 	TestHeapSizeLimits();
 	TestSpillLogCadence();
+	TestOomRecoveryFlags();
 	std::printf("VramPolicyTests: ok\n");
 	return 0;
 }

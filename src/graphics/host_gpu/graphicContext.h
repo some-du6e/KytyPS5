@@ -4,8 +4,10 @@
 #include "common/abi.h"
 #include "common/common.h"
 #include "common/threads.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 #include "graphics/host_gpu/vulkanCommon.h" // IWYU pragma: export
 
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <span>
@@ -139,11 +141,35 @@ struct GraphicContext {
 	// Counts a spilled image or buffer of `bytes` and logs the "VRAM spill:" line on the first and
 	// every power-of-two count of its kind. `what` describes the first one.
 	void               NoteSpill(bool image, uint64_t bytes, std::string_view what);
+	// Asks the next collection of the texture and buffer caches for more than their thresholds
+	// (RenderContext::RunGarbageCollector() takes it); the stronger request wins. Any thread.
+	void RequestGcPressure(MemoryPolicy::GcPressure pressure) noexcept {
+		auto current = m_gc_pressure.load(std::memory_order_relaxed);
+		while (current < static_cast<uint8_t>(pressure) &&
+		       !m_gc_pressure.compare_exchange_weak(current, static_cast<uint8_t>(pressure),
+		                                            std::memory_order_relaxed)) {
+		}
+	}
+	[[nodiscard]] MemoryPolicy::GcPressure TakeGcPressure() noexcept {
+		return static_cast<MemoryPolicy::GcPressure>(
+		    m_gc_pressure.exchange(0, std::memory_order_relaxed));
+	}
+	// --oom-recovery: called after an allocation of about `bytes` failed, before its `attempt`-th
+	// retry (1 or 2). Frees the recycled images and refreshes the budget (1) or drops
+	// VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT from `flags` (2), asks the next collection of both
+	// caches to run aggressively, and logs the "VRAM pressure:" line. The caches are not collected
+	// here: the caller may hold the texture cache's lock or be inside a cache's own bookkeeping,
+	// and their memory is released only once the GPU is done with it. False: no retry (option
+	// off, or the attempts are used up).
+	[[nodiscard]] bool RecoverFromAllocationFailure(uint64_t bytes, std::string_view what,
+	                                                uint32_t                  attempt,
+	                                                VmaAllocationCreateFlags& flags);
 
 	uint32_t screen_width  = 0;
 	uint32_t screen_height = 0;
 
 private:
+	std::atomic<uint8_t>                               m_gc_pressure {0}; // gta6-prep: vram
 	mutable std::mutex                                 m_format_properties_mutex;
 	mutable std::map<vk::Format, vk::FormatProperties> m_format_properties;
 	mutable std::mutex                                 m_image_format_properties_mutex;

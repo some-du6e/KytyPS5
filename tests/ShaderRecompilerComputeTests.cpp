@@ -2466,7 +2466,7 @@ public:
 
   // gta6-prep: vram: --vram-limit-mb limits the device-local heaps VMA sees (pHeapSizeLimit):
   // the reported budget follows the limit, an allocation past it fails in the limited heap, and
-  // one within it still succeeds.
+  // one within it still succeeds. Then --oom-recovery's retries of a failed image.
   void CheckVramHeapLimit() {
     constexpr const char *name = "VramHeapLimit";
     constexpr uint32_t limit_mb = 64;
@@ -2550,6 +2550,42 @@ public:
     Require(name, "allocation past the limit", large != vk::Result::eSuccess,
             "a dedicated allocation past --vram-limit-mb succeeded in the limited heap");
     vmaDestroyBuffer(limited.allocator, small_buffer, small_allocation);
+
+    // --oom-recovery: an image past the limit retries twice (each logs "VRAM pressure:") and
+    // asks the next collection of the caches to run aggressively; the caller still sees the
+    // failure. Without the option nothing is asked. Only where the limited heap is the only one
+    // (lavapipe): elsewhere VMA may place the image in another heap.
+    if (original.memoryHeapCount == 1) {
+      vk::ImageCreateInfo create{};
+      create.imageType = vk::ImageType::e2D;
+      create.format = vk::Format::eR8G8B8A8Unorm;
+      create.extent = vk::Extent3D{8192, 4096, 1};
+      create.mipLevels = 1;
+      create.arrayLayers = 1;
+      create.samples = vk::SampleCountFlagBits::e1;
+      create.tiling = vk::ImageTiling::eOptimal;
+      create.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+      create.initialLayout = vk::ImageLayout::eUndefined;
+      for (const bool recovery : {true, false}) {
+        options.oom_recovery = recovery;
+        Config::Load(options);
+        (void)limited.TakeGcPressure();
+        VulkanImage image;
+        const bool created = limited.CreateImage(create, image);
+        if (created) {
+          vmaDestroyImage(limited.allocator, image.image, image.allocation);
+        }
+        Require(name, "image past the limit", !created,
+                "a 128 MiB image was created past a 64 MiB --vram-limit-mb");
+        Require(name, "collection request",
+                limited.TakeGcPressure() == (recovery ? MemoryPolicy::GcPressure::OutOfMemory
+                                                      : MemoryPolicy::GcPressure::None),
+                recovery ? "--oom-recovery did not ask for an aggressive collection"
+                         : "a failed allocation asked for a collection without --oom-recovery");
+      }
+      options.oom_recovery = false;
+      Config::Load(options);
+    }
     // Not DestroyAllocator(): the recycled-image pool is process-wide and holds the base
     // allocator's images.
     vmaDestroyAllocator(limited.allocator);

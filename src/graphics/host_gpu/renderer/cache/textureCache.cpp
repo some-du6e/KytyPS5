@@ -2907,22 +2907,31 @@ void TextureCache::UnmapMemory(uint64_t address, uint64_t size) {
 	}
 }
 
-void TextureCache::RunGarbageCollector() {
+void TextureCache::RunGarbageCollector(MemoryPolicy::GcPressure request) {
 	std::scoped_lock lock {m_lock};
 	const uint64_t   tick = m_gc_tick++;
 	DiscardParkedImages(0, 0);
 	if (m_graphics.CanReportMemoryUsage()) {
 		m_total_used_memory = m_graphics.GetDeviceMemoryUsage();
 	}
-	if (m_total_used_memory < m_trigger_gc_memory) {
+	// gta6-prep: vram: a spill (proportional policy) runs the collection pressured; a failed
+	// allocation (--oom-recovery) runs it aggressive, down to images unused for a few frames. No
+	// request: the thresholds alone, as before.
+	const bool out_of_memory = request == MemoryPolicy::GcPressure::OutOfMemory;
+	const bool requested     = request != MemoryPolicy::GcPressure::None;
+	if (!requested && m_total_used_memory < m_trigger_gc_memory) {
 		return;
 	}
 	const auto collect = [&](bool allow_aggressive) {
-		bool     pressured  = m_total_used_memory >= m_pressure_gc_memory;
-		bool     aggressive = allow_aggressive && m_total_used_memory >= m_critical_gc_memory;
-		uint64_t age        = 16;
-		size_t   deletions  = 10;
-		if (aggressive) {
+		bool pressured  = requested || m_total_used_memory >= m_pressure_gc_memory;
+		bool aggressive =
+		    allow_aggressive && (out_of_memory || m_total_used_memory >= m_critical_gc_memory);
+		uint64_t age       = 16;
+		size_t   deletions = 10;
+		if (aggressive && out_of_memory) {
+			age       = 4;
+			deletions = 64;
+		} else if (aggressive) {
 			age       = 160;
 			deletions = 40;
 		} else if (pressured) {
@@ -2962,18 +2971,18 @@ void TextureCache::RunGarbageCollector() {
 			--deletions;
 			FreeImage(id);
 			Common::DebugCounters::Add(Common::DebugCounters::Counter::TextureEvictions);
-			if (m_total_used_memory < m_critical_gc_memory && aggressive) {
+			if (!out_of_memory && m_total_used_memory < m_critical_gc_memory && aggressive) {
 				deletions >>= 2;
 				aggressive = false;
 			}
-			if (m_total_used_memory < m_pressure_gc_memory && pressured) {
+			if (!requested && m_total_used_memory < m_pressure_gc_memory && pressured) {
 				deletions >>= 1;
 				pressured = false;
 			}
 		}
 	};
 	collect(false);
-	if (m_total_used_memory >= m_critical_gc_memory) {
+	if (out_of_memory || m_total_used_memory >= m_critical_gc_memory) {
 		collect(true);
 	}
 }

@@ -74,6 +74,11 @@ static void PrintVramUsage() {
 	         "                                       shares of the memory budget.\n");
 	::printf("  --vram-limit-mb <MiB>                Limit the GPU's video memory heaps to <MiB>, as a\n"
 	         "                                       smaller card would have; 0 is off (default).\n");
+	::printf("  --oom-recovery                       When an image or buffer allocation fails, free the\n"
+	         "                                       recycled images, retry (the second time past the\n"
+	         "                                       budget) and collect both caches aggressively at\n"
+	         "                                       the next frame, instead of closing at once.\n"
+	         "                                       --no-oom-recovery turns it off (and wins).\n");
 }
 
 static void PrintUsage() {
@@ -317,6 +322,9 @@ static constexpr Flag FLAGS[] = {
     {"--redzone", &ConfigOptions::red_zone_protection_enabled},
     {"--no-redzone", &ConfigOptions::red_zone_protection_enabled, false},
 #endif
+    // gta6-prep: vram
+    {"--oom-recovery", &ConfigOptions::oom_recovery},
+    {"--no-oom-recovery", &ConfigOptions::no_oom_recovery},
 };
 
 // gta6-prep: vram

@@ -1905,24 +1905,31 @@ void BufferCache::CollectStaleBuffers(uint64_t tick) {
 	}
 }
 
-void BufferCache::RunGarbageCollector() {
+void BufferCache::RunGarbageCollector(MemoryPolicy::GcPressure request) {
 	const auto tick = m_gc_tick++;
 	CollectStaleBuffers(tick);
 	if (m_graphics.CanReportMemoryUsage()) {
 		m_total_used_memory = m_graphics.GetDeviceMemoryUsage();
 	}
-	if (m_total_used_memory < m_trigger_gc_memory) {
+	// gta6-prep: vram: after a failed allocation (--oom-recovery) the collection runs aggressive,
+	// down to buffers unused for 16 frames, but leaves the buffers device-address accesses keep
+	// (their uses are seen only every UseScanPeriod collections). No request: as before.
+	const bool out_of_memory = request == MemoryPolicy::GcPressure::OutOfMemory;
+	if (!out_of_memory && m_total_used_memory < m_trigger_gc_memory) {
 		return;
 	}
 
-	const bool     aggressive = m_total_used_memory >= m_critical_gc_memory;
-	const uint64_t age        = std::min<uint64_t>(aggressive ? 80 : 160, tick);
-	const size_t   limit      = aggressive ? 64 : 32;
+	const bool     aggressive = out_of_memory || m_total_used_memory >= m_critical_gc_memory;
+	const uint64_t age = std::min<uint64_t>(out_of_memory ? 16 : (aggressive ? 80 : 160), tick);
+	const size_t   limit      = out_of_memory ? 128 : (aggressive ? 64 : 32);
 
 	std::vector<BufferId> dirty_buffers;
 	size_t                retire_count = 0;
 	m_lru_cache.ForEachItemBelow(tick - age, [&](BufferId id) {
 		auto& buffer = m_slot_buffers[id];
+		if (out_of_memory && buffer.device_address_pinned) {
+			return false;
+		}
 		m_memory_tracker.ValidateGpuDirtyOwnership(m_gpu_modified_ranges, buffer.CpuAddress(),
 		                                           buffer.Size(), "garbage collection");
 		const bool dirty = m_memory_tracker.IsRegionGpuModified(buffer.CpuAddress(), buffer.Size());

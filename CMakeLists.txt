@@ -1028,7 +1028,7 @@ if(BUILD_TESTING)
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --vram-limit-only)
 	add_test(NAME emulator_vram_cli
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc proportional --vram-gc legacy
-	                 --vram-limit-mb 8192 --vram-limit-mb 0)
+	                 --vram-limit-mb 8192 --vram-limit-mb 0 --oom-recovery --no-oom-recovery)
 	add_test(NAME emulator_vram_gc_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc aggressive)
 	add_test(NAME emulator_vram_limit_invalid

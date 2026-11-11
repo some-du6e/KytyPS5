@@ -8,6 +8,7 @@
 #include "common/smallVector.h"
 #include "graphics/host_gpu/pageManager.h"
 #include "graphics/host_gpu/regionManager.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 #include "graphics/host_gpu/renderer/cache/multiLevelPageTable.h"
 #include "graphics/host_gpu/renderer/image/blitHelper.h"
 #include "graphics/host_gpu/renderer/image/image.h"
@@ -165,7 +166,8 @@ public:
 	// collector keeps it and overlapping lookups do not delete it as unused. Pins nest.
 	void PinImage(ImageId id);
 	void UnpinImage(ImageId id);
-	void RunGarbageCollector();
+	// `request`: see GraphicContext::RequestGcPressure() (gta6-prep: vram).
+	void RunGarbageCollector(MemoryPolicy::GcPressure request = MemoryPolicy::GcPressure::None);
 
 private:
 	struct MetaDataInfo {

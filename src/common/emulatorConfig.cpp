@@ -19,7 +19,9 @@ static VramSettings g_vram_settings;
 
 static VramRequest VramRequestOf(const ConfigOptions& cfg) {
 	VramRequest request;
-	request.gc_policy = cfg.vram_gc;
+	request.gc_policy       = cfg.vram_gc;
+	request.oom_recovery    = cfg.oom_recovery;
+	request.no_oom_recovery = cfg.no_oom_recovery;
 	return request;
 }
 

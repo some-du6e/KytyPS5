@@ -8,6 +8,7 @@
 #include "graphics/host_gpu/memoryTracker.h"
 #include "graphics/host_gpu/rangeSet.h"
 #include "graphics/host_gpu/renderer/cache/faultManager.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 #include "graphics/host_gpu/renderer/cache/multiLevelPageTable.h"
 #include "graphics/host_gpu/renderer/cache/streamBuffer.h"
 
@@ -220,7 +221,8 @@ public:
 		}
 		return epoch;
 	}
-	void               RunGarbageCollector();
+	// `request`: see GraphicContext::RequestGcPressure() (gta6-prep: vram).
+	void RunGarbageCollector(MemoryPolicy::GcPressure request = MemoryPolicy::GcPressure::None);
 	// Execution thread, after each operation: the GPU writes the operation recorded get the
 	// tick of the command buffer that holds them (see DownloadOnReadbackQueue()). True when the
 	// operation wrote memory that readbacks keep waiting for: submitting its command buffer now

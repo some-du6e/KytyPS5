@@ -543,8 +543,10 @@ void RenderContext::RunGarbageCollector() {
 		});
 	}
 	m_texture_cache.ProcessDownloadImages();
-	m_texture_cache.RunGarbageCollector();
-	m_buffer_cache.RunGarbageCollector();
+	// gta6-prep: vram: what allocations asked for since the last collection.
+	const auto pressure = m_graphics.TakeGcPressure();
+	m_texture_cache.RunGarbageCollector(pressure);
+	m_buffer_cache.RunGarbageCollector(pressure);
 }
 
 void RenderContext::AddInterruptEq(LibKernel::EventQueue::KernelEqueue eq, int event_id) {

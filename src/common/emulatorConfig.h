@@ -142,6 +142,9 @@ struct ConfigOptions {
 	std::optional<VramGcPolicy> vram_gc;
 	// --vram-limit-mb: device-local heaps above 1 GiB are limited to this many MiB; 0 is off.
 	uint32_t                    vram_limit_mb = 0;
+	// --oom-recovery / --no-oom-recovery (the off form wins); neither: the profile's (off).
+	bool                        oom_recovery    = false;
+	bool                        no_oom_recovery = false;
 };
 
 void Load(const ConfigOptions& cfg);

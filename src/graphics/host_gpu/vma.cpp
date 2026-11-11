@@ -46,6 +46,8 @@ struct RecycledImage {
 	VkImage             image      = VK_NULL_HANDLE;
 	VmaAllocation       allocation = nullptr;
 	uint64_t            size       = 0;
+	// gta6-prep: vram: the allocator that owns it (a test can create a second one).
+	VmaAllocator        allocator  = nullptr;
 };
 
 constexpr size_t   RecycledImagesMax     = 32;
@@ -157,14 +159,37 @@ struct SpillStats {
 SpillStats g_image_spills;
 SpillStats g_buffer_spills;
 
+// The memory an image needs, for the "VRAM pressure:" line of a failed allocation; 0 unknown.
+uint64_t ImageAllocationBytes(vk::Device device, const vk::ImageCreateInfo& image_info) {
+	if (device == nullptr || VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceImageMemoryRequirements == nullptr) {
+		return 0;
+	}
+	const vk::DeviceImageMemoryRequirements requirements {.pCreateInfo = &image_info};
+	return device.getImageMemoryRequirements(requirements).memoryRequirements.size;
+}
+
+// Bytes of device memory blocks VMA holds, over every heap.
+uint64_t AllocatedBlockBytes(VmaAllocator allocator, uint32_t heap_count) {
+	VmaBudget budgets[VK_MAX_MEMORY_HEAPS] {};
+	vmaGetHeapBudgets(allocator, budgets);
+	uint64_t bytes = 0;
+	for (uint32_t heap = 0; heap < heap_count && heap < VK_MAX_MEMORY_HEAPS; heap++) {
+		bytes += budgets[heap].statistics.blockBytes;
+	}
+	return bytes;
+}
+
 void DestroyRecycledImages(VmaAllocator allocator) {
 	Graveyard().Flush();
 	std::lock_guard lock(g_recycled_mutex);
-	for (const auto& entry: g_recycled) {
+	std::erase_if(g_recycled, [allocator](const RecycledImage& entry) {
+		if (entry.allocator != allocator) {
+			return false;
+		}
 		vmaDestroyImage(allocator, entry.image, entry.allocation);
-	}
-	g_recycled.clear();
-	g_recycled_bytes = 0;
+		g_recycled_bytes -= entry.size;
+		return true;
+	});
 }
 
 } // namespace
@@ -342,7 +367,7 @@ bool GraphicContext::CreateImage(const vk::ImageCreateInfo& image_info, VulkanIm
 		std::lock_guard lock(g_recycled_mutex);
 		const auto      found =
 		    std::find_if(g_recycled.begin(), g_recycled.end(), [&](const auto& entry) {
-			    return SameCreateInfo(entry.create, image_info);
+			    return entry.allocator == allocator && SameCreateInfo(entry.create, image_info);
 		    });
 		if (found != g_recycled.end()) {
 			native_image     = found->image;
@@ -361,6 +386,22 @@ bool GraphicContext::CreateImage(const vk::ImageCreateInfo& image_info, VulkanIm
 			result = static_cast<vk::Result>(vmaCreateImage(
 			    allocator, static_cast<const vk::ImageCreateInfo::NativeType*>(image_info),
 			    &alloc_info, &native_image, &image.allocation, nullptr));
+		}
+		// gta6-prep: vram: --oom-recovery retries before the caller's EXIT.
+		if (result != vk::Result::eSuccess) {
+			const auto what = fmt::format("image {}x{}x{} {} layers={} mips={}",
+			                              image_info.extent.width, image_info.extent.height,
+			                              image_info.extent.depth, vk::to_string(image_info.format),
+			                              image_info.arrayLayers, image_info.mipLevels);
+			const auto bytes = ImageAllocationBytes(device, image_info);
+			for (uint32_t attempt = 1;
+			     result != vk::Result::eSuccess &&
+			     RecoverFromAllocationFailure(bytes, what, attempt, alloc_info.flags);
+			     attempt++) {
+				result = static_cast<vk::Result>(vmaCreateImage(
+				    allocator, static_cast<const vk::ImageCreateInfo::NativeType*>(image_info),
+				    &alloc_info, &native_image, &image.allocation, nullptr));
+			}
 		}
 		if (result != vk::Result::eSuccess) {
 			image.image = native_image;
@@ -416,11 +457,12 @@ void GraphicContext::DeleteImage(VulkanImage& image) {
 		VmaAllocationInfo allocation_info {};
 		vmaGetAllocationInfo(allocator, image.allocation, &allocation_info);
 		std::lock_guard lock(g_recycled_mutex);
-		g_recycled.push_back({create, image.image, image.allocation, allocation_info.size});
+		g_recycled.push_back(
+		    {create, image.image, image.allocation, allocation_info.size, allocator});
 		g_recycled_bytes += allocation_info.size;
 		while (g_recycled.size() > RecycledImagesMax || g_recycled_bytes > RecycledImageBytesMax) {
 			const auto& oldest = g_recycled.front();
-			Graveyard().Push(allocator, oldest.image, oldest.allocation);
+			Graveyard().Push(oldest.allocator, oldest.image, oldest.allocation);
 			g_recycled_bytes -= oldest.size;
 			g_recycled.erase(g_recycled.begin());
 		}
@@ -442,7 +484,41 @@ bool GraphicContext::SpilledOutOfDeviceMemory(VmaAllocation allocation) const {
 	return (properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0;
 }
 
+bool GraphicContext::RecoverFromAllocationFailure(uint64_t bytes, std::string_view what,
+                                                  uint32_t                  attempt,
+                                                  VmaAllocationCreateFlags& flags) {
+	constexpr uint32_t Retries = 2;
+	if (!Config::GetVramSettings().oom_recovery || attempt == 0 || attempt > Retries ||
+	    allocator == nullptr) {
+		return false;
+	}
+	const auto heap_count = physical_device_memory_properties.memoryHeapCount;
+	const auto before     = AllocatedBlockBytes(allocator, heap_count);
+	RequestGcPressure(MemoryPolicy::GcPressure::OutOfMemory);
+	if (attempt == 1) {
+		// Idle memory first: the recycled images and the queued image destructions. A new
+		// frame index makes VMA fetch the driver's budget again instead of its cached one.
+		static std::atomic<uint32_t> frame_index {0};
+		DestroyRecycledImages(allocator);
+		vmaSetCurrentFrameIndex(allocator, frame_index.fetch_add(1, std::memory_order_relaxed) + 1);
+	} else {
+		// Past the budget: the driver may still place it (WDDM pages other memory out), which is
+		// slow but beats closing the emulator.
+		flags &= ~static_cast<VmaAllocationCreateFlags>(VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT);
+	}
+	const auto after = AllocatedBlockBytes(allocator, heap_count);
+	Log::WriteToConsoleAndLog(fmt::format(
+	    "VRAM pressure: emergency eviction freed {} MiB after allocation failure of {} MiB ({}), "
+	    "retry {}\n",
+	    (before > after ? before - after : 0) >> 20u, bytes >> 20u, what, attempt));
+	return true;
+}
+
 void GraphicContext::NoteSpill(bool image, uint64_t bytes, std::string_view what) {
+	// Under the proportional policy a spill runs the next texture collection pressured.
+	if (Config::GetVramSettings().gc_policy == Config::VramGcPolicy::Proportional) {
+		RequestGcPressure(MemoryPolicy::GcPressure::Spill);
+	}
 	auto&      stats = image ? g_image_spills : g_buffer_spills;
 	const auto total = stats.bytes.fetch_add(bytes, std::memory_order_relaxed) + bytes;
 	const auto count = stats.count.fetch_add(1, std::memory_order_relaxed) + 1;
