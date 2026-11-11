@@ -389,4 +389,8 @@ VideoOutResolution GetVideoOutResolution() {
 	return g_config != nullptr ? g_config->video_out_resolution : VideoOutResolution::Auto;
 }
 
+bool SkipUnsupportedImageAtomics() {
+	return g_config != nullptr && g_config->skip_unsupported_image_atomics;
+}
+
 } // namespace Config

@@ -152,6 +152,8 @@ struct ConfigOptions {
 	std::optional<uint32_t>     rt_arena_mb;
 	// --video-out-resolution auto|1080p|4k: what VideoOutGetOutputStatus reports.
 	VideoOutResolution          video_out_resolution = VideoOutResolution::Auto;
+	// --skip-unsupported-image-atomics: see SkipUnsupportedImageAtomics().
+	bool                        skip_unsupported_image_atomics = false;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -274,6 +276,10 @@ const VramSettings& GetVramSettings();
 uint32_t GetVramLimitMb();
 // --video-out-resolution, Auto without a loaded configuration.
 VideoOutResolution GetVideoOutResolution();
+// [HACK] On a host without shaderImageInt64Atomics, draws and dispatches whose programs use 64-bit
+// image atomics are skipped with a notice instead of closing the emulator. Off without a loaded
+// configuration.
+bool SkipUnsupportedImageAtomics();
 
 } // namespace Config
 

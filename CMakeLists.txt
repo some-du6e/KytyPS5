@@ -1031,7 +1031,7 @@ if(BUILD_TESTING)
 	                 --vram-limit-mb 8192 --vram-limit-mb 0 --oom-recovery --no-oom-recovery
 	                 --vram-profile low --vram-profile auto --rt-arena-mb 768 --rt-arena-mb 0
 	                 --video-out-resolution 1080p --video-out-resolution 4k
-	                 --video-out-resolution auto)
+	                 --video-out-resolution auto --skip-unsupported-image-atomics)
 	add_test(NAME emulator_vram_gc_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc aggressive)
 	add_test(NAME emulator_vram_limit_invalid

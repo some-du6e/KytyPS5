@@ -93,6 +93,9 @@ static void PrintVramUsage() {
 	         "                                       resolution and the window is smaller. A game\n"
 	         "                                       that sizes its targets by it uses less memory\n"
 	         "                                       at 1080p.\n");
+	::printf("  --skip-unsupported-image-atomics     [HACK] Without 64-bit image atomics on the GPU,\n"
+	         "                                       skip the draws and dispatches that use them\n"
+	         "                                       (their effect is missing) instead of closing.\n");
 }
 
 static void PrintUsage() {
@@ -339,6 +342,7 @@ static constexpr Flag FLAGS[] = {
     // gta6-prep: vram
     {"--oom-recovery", &ConfigOptions::oom_recovery},
     {"--no-oom-recovery", &ConfigOptions::no_oom_recovery},
+    {"--skip-unsupported-image-atomics", &ConfigOptions::skip_unsupported_image_atomics},
 };
 
 // gta6-prep: vram

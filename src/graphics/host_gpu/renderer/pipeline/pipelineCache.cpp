@@ -464,6 +464,22 @@ void SkipCallExpansionFailure(uint64_t hash, const ShaderRecompiler::ShaderSourc
 	                           "PipelineCache::GetProgram", hash, 0, source.refresh_failure);
 }
 
+// gta6-prep: vram: [HACK] with --skip-unsupported-image-atomics, a draw or dispatch whose program
+// uses 64-bit image atomics on a host without shaderImageInt64Atomics is skipped, and what it
+// computes is missing, instead of closing the emulator in RenderExecutor::ResolveTexture().
+bool LacksImageAtomics64(const GraphicContext&                   graphics,
+                         const ShaderRecompiler::IR::ShaderInfo& info) {
+	return Config::SkipUnsupportedImageAtomics() && !graphics.shader_image_int64_atomics_enabled &&
+	       std::ranges::any_of(info.images, [](const auto& image) { return image.atomic64; });
+}
+
+void SkipImageAtomics64(uint64_t hash) {
+	Common::HackNotice::Report("draw or dispatch with 64-bit image atomics skipped",
+	                           "PipelineCache::GetProgram", hash, 0,
+	                           "the GPU has no shaderImageInt64Atomics "
+	                           "(--skip-unsupported-image-atomics)");
+}
+
 } // namespace
 
 void AppendNativeRayTracingKey(ShaderType stage, std::vector<uint32_t>& key, bool native) {
@@ -1145,6 +1161,11 @@ const ShaderModule* PipelineCache::GetProgram(const ShaderParams& params, InputI
 	if (entry != m_program_cache.end()) {
 		auto& cached = entry->second;
 		if (cached.skip_dispatch) return nullptr;
+		if (LacksImageAtomics64(m_graphics, cached.resource_plan.info)) { // gta6-prep: vram
+			SkipImageAtomics64(params.hash);
+			cached.skip_dispatch = true;
+			return nullptr;
+		}
 		ShaderModule* module = nullptr;
 		if (cached.call_source) {
 			source_changed = cached.RefreshCallSource(runtime);
@@ -1216,12 +1237,22 @@ const ShaderModule* PipelineCache::GetProgram(const ShaderParams& params, InputI
 		    .resource_plan = ShaderRecompiler::IR::ExtractResourcePlan(translated.program),
 		}).first;
 		auto& program = entry->second;
+		if (LacksImageAtomics64(m_graphics, program.resource_plan.info)) { // gta6-prep: vram
+			SkipImageAtomics64(params.hash);
+			program.skip_dispatch = true;
+			return nullptr;
+		}
 		if (!ShaderRecompiler::IR::MaterializeResources(program.resource_plan, runtime,
 		                                                program.resources, program.specialization)) {
 			return skip_failure();
 		}
 	} else if (source_changed) {
 		entry->second.resource_plan = ShaderRecompiler::IR::ExtractResourcePlan(translated.program);
+		if (LacksImageAtomics64(m_graphics, entry->second.resource_plan.info)) { // gta6-prep: vram
+			SkipImageAtomics64(params.hash);
+			entry->second.skip_dispatch = true;
+			return nullptr;
+		}
 		if (const auto* module = entry->second.FindModule<true>(runtime, push_data_cursor, failed)) {
 			return bind(*module);
 		}
@@ -1829,6 +1860,7 @@ const ShaderModule* PipelineCache::GetAhead(const ShaderParams& params, InputInf
 	// acquired in draw order: the execution thread resolves them.
 	if (entry == m_program_cache.end() || ahead.stages == ProgramResolution::MaxStages ||
 	    entry->second.skip_dispatch || entry->second.call_source ||
+	    LacksImageAtomics64(m_graphics, entry->second.resource_plan.info) || // gta6-prep: vram
 	    std::ranges::any_of(entry->second.modules, [](const ShaderModule& module) {
 		    return module.info.info.uses_image_heap;
 	    })) {
