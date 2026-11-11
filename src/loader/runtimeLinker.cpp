@@ -131,7 +131,9 @@ struct StubbedImportRecord {
 	std::string          program;
 	std::string          program_file;
 	std::string          library;
-	std::atomic_bool     first_call_logged {false};
+	// What the stub returns (see ImportDiagnostics::GetUnresolvedReturn).
+	ImportDiagnostics::UnresolvedReturn ret;
+	std::atomic_bool                    first_call_logged {false};
 };
 
 // A GOT slot of an unresolved Object import, patched to the no-access page.
@@ -208,6 +210,11 @@ static uint64_t RegisterStubbedImport(uint32_t index, const Program* program,
 	record->program      = Common::PathToString(program->file_name);
 	record->program_file = Common::PathToString(program->file_name.filename());
 	record->library      = std::string(ImportDiagnostics::LibraryFromGeneratedName(ri.name));
+	// With PSN emulation the Np functions Kyty implements act signed in, so an offline error from
+	// the missing ones would contradict them.
+	if (!Config::UnresolvedReturnZero() && !Config::PsnEmulationEnabled()) {
+		record->ret = ImportDiagnostics::GetUnresolvedReturn(record->library);
+	}
 	record->thunk_vaddr  = AllocateUnresolvedImportThunk(reinterpret_cast<uint64_t>(record.get()));
 	const auto thunk     = record->thunk_vaddr;
 	g_stubbed_imports_by_slot[ri.vaddr] = record.get();
@@ -258,8 +265,8 @@ static std::string UnresolvedImportSummary(uint64_t invalid_page) {
 
 static KYTY_SYSV_ABI uint64_t UnresolvedImportStub(uint64_t record_ptr) {
 	Common::DebugCounters::Add(Common::DebugCounters::Counter::UnresolvedImportCalls);
-	auto& record = *reinterpret_cast<StubbedImportRecord*>(record_ptr);
-	const ImportDiagnostics::UnresolvedReturn ret {};
+	auto&       record = *reinterpret_cast<StubbedImportRecord*>(record_ptr);
+	const auto& ret    = record.ret;
 
 	if (!record.first_call_logged.exchange(true, std::memory_order_relaxed)) {
 		// Every NID once, whatever the process-wide cap below has used up.
@@ -267,6 +274,10 @@ static KYTY_SYSV_ABI uint64_t UnresolvedImportStub(uint64_t record_ptr) {
 		    ImportDiagnostics::FormatFirstCall(record.name, record.program_file, ret));
 		if (const auto* symbol = Nid::FindNameForImport(record.name); symbol != nullptr) {
 			Log::WriteToConsoleAndLog(ImportDiagnostics::FormatKnownName(record.name, *symbol));
+		}
+		if (Config::StrictImportsEnabled()) {
+			EXIT("Unresolved import called: %s from %s\n", record.name.c_str(),
+			     record.program_file.c_str());
 		}
 	} else if (const auto log_index = g_unresolved_stub_call_log_count.fetch_add(1);
 	           log_index < 1024) {

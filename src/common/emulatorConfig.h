@@ -138,6 +138,10 @@ struct ConfigOptions {
 	// gta6-prep: hle
 	// --nid-names: symbol names, one per line, hashed to name the NIDs of unresolved imports.
 	std::filesystem::path nid_names_file;
+	// --strict-imports: the first call of an unresolved function import is fatal.
+	bool                  strict_imports         = false;
+	// --unresolved-return-zero: unresolved functions return 0 in every library (no offline policy).
+	bool                  unresolved_return_zero = false;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -255,6 +259,8 @@ const std::vector<std::string>& GetGuestArguments();
 // gta6-prep: hle
 // --nid-names <file>; empty: none.
 const std::filesystem::path& GetNidNamesFile();
+bool StrictImportsEnabled();
+bool UnresolvedReturnZero();
 
 } // namespace Config
 

@@ -368,4 +368,12 @@ const std::filesystem::path& GetNidNamesFile() {
 	return g_config != nullptr ? g_config->nid_names_file : none;
 }
 
+bool StrictImportsEnabled() {
+	return g_config != nullptr && g_config->strict_imports;
+}
+
+bool UnresolvedReturnZero() {
+	return g_config != nullptr && g_config->unresolved_return_zero;
+}
+
 } // namespace Config

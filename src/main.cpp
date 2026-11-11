@@ -175,6 +175,9 @@ static void PrintUsage() {
 	// gta6-prep: hle
 	::printf("  --nid-names <file>                   Symbol names, one per line, to name the NIDs\n"
 	         "                                       of unresolved imports in the log.\n");
+	::printf("  --strict-imports                     Stop at the first call of an unresolved import.\n");
+	::printf("  --unresolved-return-zero             Unresolved Np/Net/Http/Ssl functions return 0\n"
+	         "                                       instead of an offline error.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -309,6 +312,9 @@ static constexpr Flag FLAGS[] = {
     {"--redzone", &ConfigOptions::red_zone_protection_enabled},
     {"--no-redzone", &ConfigOptions::red_zone_protection_enabled, false},
 #endif
+    // gta6-prep: hle
+    {"--strict-imports", &ConfigOptions::strict_imports},
+    {"--unresolved-return-zero", &ConfigOptions::unresolved_return_zero},
 };
 
 static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_help) {
