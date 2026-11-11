@@ -312,24 +312,16 @@ void ConfigureGpuStageThread(GpuStageThread stage) {
 	// from core 0: the stages share its L3.
 	static const std::array<int, 5> cpus = [] {
 		std::array<int, 5> result {4, 6, 8, 10, 2};
-		const char*        value = std::getenv("KYTY_GPU_THREAD_CPUS");
+		// gta6-prep: config: --gpu-thread-cpus, unless the variable is set.
+		const char* value = std::getenv("KYTY_GPU_THREAD_CPUS");
+		if (value == nullptr && !GetGpuThreadCpus().empty()) {
+			value = GetGpuThreadCpus().c_str();
+		}
 		if (value == nullptr) {
 			return result;
 		}
-		if (std::string_view(value) == "off") {
-			return std::array<int, 5> {-1, -1, -1, -1, -1};
-		}
-		// Stages without a listed CPU keep their default.
-		for (auto& cpu: result) {
-			if (*value == '\0') {
-				break;
-			}
-			char* end = nullptr;
-			cpu       = static_cast<int>(std::strtol(value, &end, 10));
-			if (end == value) {
-				EXIT("invalid KYTY_GPU_THREAD_CPUS: %s\n", std::getenv("KYTY_GPU_THREAD_CPUS"));
-			}
-			value = *end == ',' ? end + 1 : end;
+		if (!ParseGpuThreadCpus(value, result)) {
+			EXIT("invalid KYTY_GPU_THREAD_CPUS: %s\n", value);
 		}
 		return result;
 	}();
@@ -413,6 +405,31 @@ bool TlasCacheEnabled() {
 
 int32_t GetPipelineHelpers() {
 	return g_config != nullptr ? g_config->pipeline_helpers : -1;
+}
+
+const std::string& GetGpuThreadCpus() {
+	static const std::string none;
+	return g_config != nullptr ? g_config->gpu_thread_cpus : none;
+}
+
+bool ParseGpuThreadCpus(const char* value, std::array<int, 5>& cpus) {
+	if (std::string_view(value) == "off") {
+		cpus.fill(-1);
+		return true;
+	}
+	// Stages without a listed CPU keep their default.
+	for (auto& cpu: cpus) {
+		if (*value == '\0') {
+			break;
+		}
+		char* end = nullptr;
+		cpu       = static_cast<int>(std::strtol(value, &end, 10));
+		if (end == value) {
+			return false;
+		}
+		value = *end == ',' ? end + 1 : end;
+	}
+	return true;
 }
 
 } // namespace Config

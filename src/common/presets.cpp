@@ -18,6 +18,8 @@ constexpr std::string_view SafeTokens[] = {
     "--no-tlas-cache",
     "--pipeline-helpers",
     "0",
+    "--gpu-thread-cpus",
+    "off",
 };
 
 // Options that use less video memory. Only options that exist are listed.
@@ -44,6 +46,10 @@ constexpr std::string_view Rtx3050Tokens[] = {
     "--no-readback-tiled-images",
     "--no-readback-storage-images",
     "--no-keep-small-layer-targets",
+    // The built-in CPUs suit a Ryzen 9 5900X; on the CPUs such a machine has they can land on
+    // E-cores or on cores the game threads need.
+    "--gpu-thread-cpus",
+    "off",
 };
 
 constexpr Preset PresetTable[] = {

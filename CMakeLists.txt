@@ -942,6 +942,12 @@ if(BUILD_TESTING)
 	add_test(NAME emulator_pipeline_helpers_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --pipeline-helpers some)
 	set_tests_properties(emulator_pipeline_helpers_invalid PROPERTIES WILL_FAIL TRUE)
+	add_test(NAME emulator_gpu_thread_cpus_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --gpu-thread-cpus 2,4,6
+	                 --gpu-thread-cpus off --gpu-thread-cpus default)
+	add_test(NAME emulator_gpu_thread_cpus_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --gpu-thread-cpus 2,x)
+	set_tests_properties(emulator_gpu_thread_cpus_invalid PROPERTIES WILL_FAIL TRUE)
 	set_tests_properties(emulator_preset_unknown emulator_preset_missing
 	                     emulator_title_profile_unknown emulator_quirk_invalid_state
 	                     emulator_quirk_unknown PROPERTIES WILL_FAIL TRUE)

@@ -11,6 +11,7 @@
 #include "kytyGitVersion.h"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cstdio>
 #include <exception>
@@ -223,6 +224,9 @@ static void PrintUsage() {
 	::printf("  --pipeline-helpers <n|auto>          Helper processes that compile compute pipelines\n");
 	::printf("                                       (NVIDIA, Windows): auto (default), 0 is off. The\n");
 	::printf("                                       KYTY_PIPELINE_HELPERS variable overrides it.\n");
+	::printf("  --gpu-thread-cpus <list|off|default> Logical processors of the GPU stage threads, e.g.\n");
+	::printf("                                       4,6,8,10,2 (default), or off to leave them unpinned.\n");
+	::printf("                                       The KYTY_GPU_THREAD_CPUS variable overrides it.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -474,6 +478,19 @@ static std::optional<bool> ParseGta6PrepOption(const std::string& arg, const std
 			config.pipeline_helpers = static_cast<int32_t>(count);
 		} else {
 			::printf("invalid pipeline helper count (0-64 or auto): %s\n", value.c_str());
+			return false;
+		}
+		return true;
+	}
+	if (arg == "--gpu-thread-cpus") {
+		std::array<int, 5> cpus {};
+		if (value == "default") {
+			config.gpu_thread_cpus.clear();
+		} else if (!value.empty() && Config::ParseGpuThreadCpus(value.c_str(), cpus)) {
+			config.gpu_thread_cpus = value;
+		} else {
+			::printf("invalid GPU thread CPUs (a list such as 4,6,8,10,2, off or default): %s\n",
+			         value.c_str());
 			return false;
 		}
 		return true;

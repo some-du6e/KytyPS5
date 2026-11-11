@@ -171,6 +171,9 @@ struct ConfigOptions {
 	// --pipeline-helpers <n|auto>: helper processes that compile compute pipelines (2b5052fb);
 	// -1 (auto) keeps the built-in choice, 0 turns them off.
 	int32_t pipeline_helpers = -1;
+	// --gpu-thread-cpus <list|off>: the logical processors of the GPU stage threads (82ca24cb);
+	// empty keeps the built-in list.
+	std::string gpu_thread_cpus = {};
 };
 
 void Load(const ConfigOptions& cfg);
@@ -340,6 +343,14 @@ bool TlasCacheEnabled();
 // (NVIDIA on Windows only; see PipelineHelperProcesses()). KYTY_PIPELINE_HELPERS still wins.
 // -1 without a loaded configuration.
 int32_t GetPipelineHelpers();
+
+// --gpu-thread-cpus: the value KYTY_GPU_THREAD_CPUS would have (see ConfigureGpuStageThread()),
+// empty for the built-in list. The variable wins over it. Empty without a loaded configuration.
+const std::string& GetGpuThreadCpus();
+// Parses a KYTY_GPU_THREAD_CPUS value into `cpus`: "off" leaves every stage unpinned (-1),
+// otherwise up to five numbers separated by commas replace the first entries. False when an entry
+// is not a number.
+bool ParseGpuThreadCpus(const char* value, std::array<int, 5>& cpus);
 
 } // namespace Config
 
