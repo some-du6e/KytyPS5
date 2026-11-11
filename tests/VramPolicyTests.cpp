@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <optional>
+#include <string>
 
 namespace {
 
@@ -268,6 +269,35 @@ void TestProfileBudgets() {
 	Check(Policy::BoundPipelineHelpers(1, 2) == 1, "the helper bound raised the count");
 }
 
+// The "VRAM:" line, exactly as the log contract (and tools/triage) reads it.
+void TestBreakdownLine() {
+	Policy::VramBreakdown breakdown;
+	breakdown.budget       = 13 * GiB / 2;
+	breakdown.limit_mb     = 8192;
+	breakdown.profile      = Config::VramProfile::Low;
+	breakdown.gc_policy    = Config::VramGcPolicy::Proportional;
+	breakdown.bda_table    = 805306376; // BufferCache::BDA_PAGETABLE_SIZE
+	breakdown.fault_buffer = 37748736 + 8192;
+	breakdown.rings        = 192 * MiB;
+	breakdown.recycle_cap  = 208 * MiB;
+	breakdown.rt_arena     = 1 * GiB;
+	breakdown.thresholds   = Policy::ProportionalGcThresholds(13 * GiB / 2);
+	Check(Policy::FormatVramBreakdown(breakdown) ==
+	          "VRAM: budget=6656 MiB limit=8192 profile=low gc=proportional fixed: bda_table=768 "
+	          "fault=36 rings=192 recycle_cap=208 rt_arena=1024 thresholds: tex_trigger=3660 "
+	          "tex_pressure=5191 tex_critical=6123 buf_trigger=4659 buf_critical=6123\n",
+	      "the VRAM line does not follow the log contract");
+	breakdown.limit_mb  = 0;
+	breakdown.rt_arena  = std::nullopt;
+	breakdown.profile   = Config::VramProfile::Auto;
+	breakdown.gc_policy = Config::VramGcPolicy::Legacy;
+	const auto line     = Policy::FormatVramBreakdown(breakdown);
+	Check(line.find(" limit=off ") != std::string::npos &&
+	          line.find(" rt_arena=off ") != std::string::npos &&
+	          line.find(" profile=auto gc=legacy ") != std::string::npos,
+	      "the VRAM line does not print off and the auto/legacy names");
+}
+
 } // namespace
 
 int main() {
@@ -278,6 +308,7 @@ int main() {
 	TestOomRecoveryFlags();
 	TestProfileExpansion();
 	TestProfileBudgets();
+	TestBreakdownLine();
 	std::printf("VramPolicyTests: ok\n");
 	return 0;
 }

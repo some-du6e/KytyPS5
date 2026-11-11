@@ -223,6 +223,10 @@ public:
 	}
 	// `request`: see GraphicContext::RequestGcPressure() (gta6-prep: vram).
 	void RunGarbageCollector(MemoryPolicy::GcPressure request = MemoryPolicy::GcPressure::None);
+	// The buffer thresholds of the collection (the texture ones stay 0), for the "VRAM:" line.
+	[[nodiscard]] MemoryPolicy::GcThresholds GcThresholdsInUse() const noexcept {
+		return {.buffer_trigger = m_trigger_gc_memory, .buffer_critical = m_critical_gc_memory};
+	}
 	// Execution thread, after each operation: the GPU writes the operation recorded get the
 	// tick of the command buffer that holds them (see DownloadOnReadbackQueue()). True when the
 	// operation wrote memory that readbacks keep waiting for: submitting its command buffer now

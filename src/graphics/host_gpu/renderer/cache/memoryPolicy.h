@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 
 namespace Libs::Graphics::MemoryPolicy {
 
@@ -206,6 +207,38 @@ constexpr MergedBufferPlan PlanMergedBuffer(uint64_t size, uint64_t size_without
 	}
 	return {.drop_stream_leap = true,
 	        .fit              = FitMergedBuffer(size_without_leap, max_allocation, max_buffer)};
+}
+
+// The "VRAM:" line of the log contract (RenderContext logs it once after renderer init). Sizes in
+// bytes; printed in MiB.
+struct VramBreakdown {
+	uint64_t                budget        = 0;
+	uint32_t                limit_mb      = 0; // 0: off
+	Config::VramProfile     profile       = Config::VramProfile::Auto;
+	Config::VramGcPolicy    gc_policy     = Config::VramGcPolicy::Legacy;
+	uint64_t                bda_table     = 0;
+	uint64_t                fault_buffer  = 0;
+	uint64_t                rings         = 0;
+	uint64_t                recycle_cap   = 0;
+	std::optional<uint64_t> rt_arena; // nullopt: off; 0: no limit
+	GcThresholds            thresholds;
+};
+
+inline std::string FormatVramBreakdown(const VramBreakdown& v) {
+	const auto mib = [](uint64_t bytes) { return std::to_string(bytes >> 20u); };
+	std::string line = "VRAM: budget=" + mib(v.budget) + " MiB limit=" +
+	                   (v.limit_mb != 0 ? std::to_string(v.limit_mb) : std::string("off"));
+	line += " profile=" + std::string(Config::VramProfileName(v.profile));
+	line += " gc=" + std::string(Config::VramGcPolicyName(v.gc_policy));
+	line += " fixed: bda_table=" + mib(v.bda_table) + " fault=" + mib(v.fault_buffer) +
+	        " rings=" + mib(v.rings) + " recycle_cap=" + mib(v.recycle_cap) +
+	        " rt_arena=" + (v.rt_arena.has_value() ? mib(*v.rt_arena) : std::string("off"));
+	line += " thresholds: tex_trigger=" + mib(v.thresholds.texture_trigger) +
+	        " tex_pressure=" + mib(v.thresholds.texture_pressure) +
+	        " tex_critical=" + mib(v.thresholds.texture_critical) +
+	        " buf_trigger=" + mib(v.thresholds.buffer_trigger) +
+	        " buf_critical=" + mib(v.thresholds.buffer_critical) + "\n";
+	return line;
 }
 
 } // namespace Libs::Graphics::MemoryPolicy

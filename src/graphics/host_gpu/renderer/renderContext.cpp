@@ -3,6 +3,7 @@
 #include "common/assert.h"
 #include "common/emulatorConfig.h"
 #include "common/hackNotice.h"
+#include "common/logging/log.h"
 #include "graphics/guest_gpu/graphicsRun.h"
 #include "graphics/presentation/videoOut.h"
 #include "graphics/shader/shaderBindings.h"
@@ -28,6 +29,35 @@ RenderContext::RenderContext(GraphicContext& graphics, const std::filesystem::pa
 	const auto& settings = Config::GetVramSettings();
 	m_graphics.SetRecycledImageBudget(MemoryPolicy::RecycledImageBytes(
 	    m_graphics.GetTotalMemoryBudget(), settings.small_recycle_pool));
+	LogVramBreakdown();
+}
+
+// gta6-prep: vram: the "VRAM:" line of the log contract, once the caches exist: what the
+// renderer holds before the game allocates anything and where collection starts.
+void RenderContext::LogVramBreakdown() {
+	const auto& settings = Config::GetVramSettings();
+	const auto  texture  = m_texture_cache.GcThresholdsInUse();
+	const auto  buffer   = m_buffer_cache.GcThresholdsInUse();
+	MemoryPolicy::VramBreakdown breakdown;
+	breakdown.budget       = m_graphics.GetTotalMemoryBudget();
+	breakdown.limit_mb     = Config::GetVramLimitMb();
+	breakdown.profile      = settings.profile;
+	breakdown.gc_policy    = settings.gc_policy;
+	breakdown.bda_table    = BufferCache::BDA_PAGETABLE_SIZE;
+	breakdown.fault_buffer = BufferCache::FAULT_BUFFER_SIZE;
+	// The rings in video memory (the upload and download rings are in host memory).
+	breakdown.rings = m_buffer_cache.GetUtilityBuffer(MemoryUsage::Stream).Size() +
+	                  m_buffer_cache.GetUtilityBuffer(MemoryUsage::DeviceLocal).Size();
+	breakdown.recycle_cap = m_graphics.RecycledImageBudget();
+	if (m_native_ray_tracing.Enabled()) {
+		breakdown.rt_arena = m_native_ray_tracing.BlasBudget();
+	}
+	breakdown.thresholds = {.texture_trigger  = texture.texture_trigger,
+	                        .texture_pressure = texture.texture_pressure,
+	                        .texture_critical = texture.texture_critical,
+	                        .buffer_trigger   = buffer.buffer_trigger,
+	                        .buffer_critical  = buffer.buffer_critical};
+	Log::WriteToConsoleAndLog(MemoryPolicy::FormatVramBreakdown(breakdown));
 }
 
 RenderContext::~RenderContext() {
