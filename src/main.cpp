@@ -88,6 +88,11 @@ static void PrintVramUsage() {
 	::printf("  --rt-arena-mb <MiB>                  BLAS memory of --native-raytracing; 0 is no limit.\n"
 	         "                                       Default: a share of the largest video memory heap.\n"
 	         "                                       The KYTY_RT_ARENA_MB variable overrides it.\n");
+	::printf("  --video-out-resolution <auto|1080p|4k> Output resolution the game is told. auto\n"
+	         "                                       (default): 4K unless the title detects the\n"
+	         "                                       resolution and the window is smaller. A game\n"
+	         "                                       that sizes its targets by it uses less memory\n"
+	         "                                       at 1080p.\n");
 }
 
 static void PrintUsage() {
@@ -365,6 +370,15 @@ static std::optional<bool> ParseVramOption(const std::string& arg, const std::st
 			return false;
 		}
 		config.rt_arena_mb = megabytes;
+		return true;
+	}
+	if (arg == "--video-out-resolution") {
+		const auto resolution = Config::ParseVideoOutResolution(value);
+		if (!resolution.has_value()) {
+			::printf("invalid video out resolution (auto, 1080p or 4k): %s\n", value.c_str());
+			return false;
+		}
+		config.video_out_resolution = *resolution;
 		return true;
 	}
 	if (arg == "--vram-limit-mb") {

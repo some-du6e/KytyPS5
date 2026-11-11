@@ -1,6 +1,7 @@
 // gta6-prep: vram
 // The video memory arithmetic of the renderer and the options behind it, without a GPU.
 #include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
+#include "graphics/presentation/videoOutResolution.h"
 
 #include <array>
 #include <cstdint>
@@ -298,6 +299,47 @@ void TestBreakdownLine() {
 	      "the VRAM line does not print off and the auto/legacy names");
 }
 
+// VideoOutGetOutputStatus's resolution: auto keeps the expression it had, 1080p and 4k fix it.
+void TestReportedOutputResolution() {
+	using Config::VideoOutResolution;
+	using Libs::VideoOut::OUTPUT_RESOLUTION_4K;
+	using Libs::VideoOut::OUTPUT_RESOLUTION_BELOW_4K;
+	using Libs::VideoOut::ReportedOutputResolution;
+	struct Size {
+		uint32_t width;
+		uint32_t height;
+	};
+	constexpr Size sizes[] = {{1280, 720}, {1920, 1080}, {2560, 1440}, {3840, 2160},
+	                          {3840, 1080}, {1920, 2160}, {7680, 4320}};
+	for (const int32_t attribute3: {0, 4, 1, 5, 0x7fffffff, -1}) {
+		for (const auto size: sizes) {
+			const uint32_t before = (attribute3 & 4) != 0 && size.width < 3840 &&
+			                                size.height < 2160
+			                            ? 1u
+			                            : 2u;
+			Check(ReportedOutputResolution(attribute3, size.width, size.height,
+			                               VideoOutResolution::Auto) == before,
+			      "auto output resolution differs from the expression it replaced");
+			Check(ReportedOutputResolution(attribute3, size.width, size.height,
+			                               VideoOutResolution::R1080p) ==
+			          OUTPUT_RESOLUTION_BELOW_4K,
+			      "--video-out-resolution 1080p does not report below 4K");
+			Check(ReportedOutputResolution(attribute3, size.width, size.height,
+			                               VideoOutResolution::R4k) == OUTPUT_RESOLUTION_4K,
+			      "--video-out-resolution 4k does not report 4K");
+		}
+	}
+	static_assert(ReportedOutputResolution(0, 1920, 1080, VideoOutResolution::Auto) ==
+	              OUTPUT_RESOLUTION_4K);
+	static_assert(ReportedOutputResolution(4, 1920, 1080, VideoOutResolution::Auto) ==
+	              OUTPUT_RESOLUTION_BELOW_4K);
+	Check(Config::ParseVideoOutResolution("1080p") == VideoOutResolution::R1080p &&
+	          Config::ParseVideoOutResolution("4k") == VideoOutResolution::R4k &&
+	          Config::ParseVideoOutResolution("auto") == VideoOutResolution::Auto &&
+	          !Config::ParseVideoOutResolution("1440p").has_value(),
+	      "--video-out-resolution parsing");
+}
+
 } // namespace
 
 int main() {
@@ -309,6 +351,7 @@ int main() {
 	TestProfileExpansion();
 	TestProfileBudgets();
 	TestBreakdownLine();
+	TestReportedOutputResolution();
 	std::printf("VramPolicyTests: ok\n");
 	return 0;
 }

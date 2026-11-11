@@ -1029,7 +1029,9 @@ if(BUILD_TESTING)
 	add_test(NAME emulator_vram_cli
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc proportional --vram-gc legacy
 	                 --vram-limit-mb 8192 --vram-limit-mb 0 --oom-recovery --no-oom-recovery
-	                 --vram-profile low --vram-profile auto --rt-arena-mb 768 --rt-arena-mb 0)
+	                 --vram-profile low --vram-profile auto --rt-arena-mb 768 --rt-arena-mb 0
+	                 --video-out-resolution 1080p --video-out-resolution 4k
+	                 --video-out-resolution auto)
 	add_test(NAME emulator_vram_gc_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc aggressive)
 	add_test(NAME emulator_vram_limit_invalid
@@ -1038,9 +1040,11 @@ if(BUILD_TESTING)
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-profile 8gb)
 	add_test(NAME emulator_rt_arena_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --rt-arena-mb -1)
+	add_test(NAME emulator_video_out_resolution_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --video-out-resolution 1440p)
 	set_tests_properties(emulator_vram_gc_invalid emulator_vram_limit_invalid
 	                     emulator_vram_profile_invalid emulator_rt_arena_invalid
-	                     PROPERTIES WILL_FAIL TRUE)
+	                     emulator_video_out_resolution_invalid PROPERTIES WILL_FAIL TRUE)
 
 	add_custom_target(kyty_tests DEPENDS
 		ime_dialog_tests

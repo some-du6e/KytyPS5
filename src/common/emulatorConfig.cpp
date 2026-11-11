@@ -385,4 +385,8 @@ uint32_t GetVramLimitMb() {
 	return g_config != nullptr ? g_config->vram_limit_mb : 0;
 }
 
+VideoOutResolution GetVideoOutResolution() {
+	return g_config != nullptr ? g_config->video_out_resolution : VideoOutResolution::Auto;
+}
+
 } // namespace Config

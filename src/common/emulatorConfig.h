@@ -150,6 +150,8 @@ struct ConfigOptions {
 	// --rt-arena-mb: the BLAS memory of native ray tracing in MiB (0: no limit); unset: the
 	// profile's share of the largest device-local heap. KYTY_RT_ARENA_MB still wins.
 	std::optional<uint32_t>     rt_arena_mb;
+	// --video-out-resolution auto|1080p|4k: what VideoOutGetOutputStatus reports.
+	VideoOutResolution          video_out_resolution = VideoOutResolution::Auto;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -270,6 +272,8 @@ const std::vector<std::string>& GetGuestArguments();
 const VramSettings& GetVramSettings();
 // --vram-limit-mb, 0 (off) without a loaded configuration.
 uint32_t GetVramLimitMb();
+// --video-out-resolution, Auto without a loaded configuration.
+VideoOutResolution GetVideoOutResolution();
 
 } // namespace Config
 

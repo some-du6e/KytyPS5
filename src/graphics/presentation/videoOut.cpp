@@ -19,6 +19,7 @@
 #include "graphics/presentation/performanceOverlay.h"
 #include "graphics/presentation/presenter.h"
 #include "graphics/presentation/renderDoc.h"
+#include "graphics/presentation/videoOutResolution.h"
 #include "kernel/pthread.h"
 #include "libs/errno.h"
 #include "libs/hmd2.h"
@@ -1710,9 +1711,10 @@ KYTY_SYSV_ABI int VideoOutGetOutputStatus(int handle, VideoOutOutputStatus* stat
 	const bool hdr_allowed = !Loader::SystemContentParamSfoGetInt("ATTRIBUTE", &attribute) ||
 	                         (attribute & 0x20000000) != 0;
 	ctx->mutex.Lock();
-	// Primary output reports 4K unless param.json Video-out Info enables resolution detection.
-	status->resolution =
-	    ((attribute3 & 4) != 0 && driver.width < 3840 && driver.height < 2160 ? 1u : 2u);
+	// Primary output reports 4K unless param.json Video-out Info enables resolution detection;
+	// --video-out-resolution fixes it (gta6-prep: vram).
+	status->resolution = ReportedOutputResolution(attribute3, driver.width, driver.height,
+	                                              Config::GetVideoOutResolution());
 	status->dynamicRange = hdr_allowed && driver.IsHdrSupported() ? 2u : 1u;
 	status->refreshRate =
 	    (ctx->output_mode == VIDEO_OUT_OUTPUT_MODE_119_88HZ || Config::GetVblankFrequency() >= 119
