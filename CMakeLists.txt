@@ -641,6 +641,14 @@ add_executable(slot_vector_tests EXCLUDE_FROM_ALL
 )
 target_include_directories(slot_vector_tests PRIVATE ${inc_headers})
 
+# gta6-prep: config
+add_executable(title_profile_tests EXCLUDE_FROM_ALL
+	"${KYTY_TESTS_DIR}/TitleProfileTests.cpp"
+	"${KYTY_SOURCE_DIR}/common/presets.cpp"
+	"${KYTY_SOURCE_DIR}/common/titleProfile.cpp"
+)
+target_include_directories(title_profile_tests PRIVATE ${inc_headers})
+
 add_executable(common_tests EXCLUDE_FROM_ALL "${KYTY_TESTS_DIR}/CommonTests.cpp")
 target_link_libraries(common_tests common kyty_test_gtest)
 
@@ -915,6 +923,7 @@ if(BUILD_TESTING)
 	add_test(NAME avplayer_file COMMAND $<TARGET_FILE:avplayer_file_tests>)
 	add_test(NAME vdecsw COMMAND $<TARGET_FILE:vdecsw_tests>)
 	add_test(NAME bit_array COMMAND $<TARGET_FILE:bit_array_tests>)
+	add_test(NAME title_profile COMMAND $<TARGET_FILE:title_profile_tests>)
 	add_test(NAME lru_cache COMMAND $<TARGET_FILE:lru_cache_tests>)
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)
@@ -1035,6 +1044,7 @@ if(BUILD_TESTING)
 		avplayer_file_tests
 		vdecsw_tests
 		bit_array_tests
+		title_profile_tests
 		lru_cache_tests
 		common_tests
 		shader_vertex_metadata_tests
