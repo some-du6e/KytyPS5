@@ -399,4 +399,8 @@ bool UniformBuffersEnabled() {
 	return g_config == nullptr || g_config->uniform_buffers_enabled;
 }
 
+bool LodStatsEnabled() {
+	return g_config == nullptr || g_config->lod_stats_enabled;
+}
+
 } // namespace Config

@@ -30,6 +30,8 @@ struct Profile {
 	// Constant-only buffers are read through uniform buffer views (556973e7; with
 	// KYTY_UNIFORM_BUFFERS=0 they are not either way).
 	bool uniform_buffers = true;
+	// Pixel shaders record GET_LOD_STATS mip statistics, with a plain variant (66074f88).
+	bool mip_stats = true;
 };
 
 inline constexpr Profile DefaultProfile {};

@@ -160,6 +160,9 @@ struct ConfigOptions {
 	bool spirv_forwarding_enabled = true;
 	// --no-uniform-buffers: constant buffers are read through storage buffers (556973e7).
 	bool uniform_buffers_enabled = true;
+	// --no-lod-stats: GET_LOD_STATS reports every counter unsampled, and pixel shaders are compiled
+	// once, without the mip statistics recording (as before 66074f88).
+	bool lod_stats_enabled = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -308,6 +311,12 @@ bool SpirvForwardingEnabled();
 // (556973e7). KYTY_UNIFORM_BUFFERS=0 still turns it off as well. Part of the SPIR-V profile.
 // On without a loaded configuration.
 bool UniformBuffersEnabled();
+
+// GET_LOD_STATS mip statistics are emulated (66074f88): pixel shaders that sample a T# the
+// draw supplies record them and are compiled a second time without the recording. Off, they
+// are compiled once without it and every report says "no samples", as upstream's default
+// before 66074f88. Part of the SPIR-V profile. On without a loaded configuration.
+bool LodStatsEnabled();
 
 } // namespace Config
 

@@ -504,7 +504,8 @@ ShaderRecompiler::Spirv::Profile SpirvProfile(const GraphicContext& graphics) {
 	        // gta6-prep: config
 	        .masked_select_elimination = Config::MaskedSelectEliminationEnabled(),
 	        .spirv_forwarding          = Config::SpirvForwardingEnabled(),
-	        .uniform_buffers           = Config::UniformBuffersEnabled()};
+	        .uniform_buffers           = Config::UniformBuffersEnabled(),
+	        .mip_stats                 = Config::LodStatsEnabled()};
 }
 
 std::filesystem::path ShaderStorePath() {

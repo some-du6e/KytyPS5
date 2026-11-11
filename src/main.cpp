@@ -214,6 +214,8 @@ static void PrintUsage() {
 	::printf("                                       forwarding and value numbering).\n");
 	::printf("  --no-uniform-buffers                 Read constant buffers through storage buffers, not\n");
 	::printf("                                       uniform buffer views (as KYTY_UNIFORM_BUFFERS=0).\n");
+	::printf("  --no-lod-stats                       Report GET_LOD_STATS counters as unsampled, and\n");
+	::printf("                                       compile pixel shaders once, without mip statistics.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -371,6 +373,8 @@ static constexpr Flag FLAGS[] = {
     {"--no-spirv-forwarding", &ConfigOptions::spirv_forwarding_enabled, false},
     {"--uniform-buffers", &ConfigOptions::uniform_buffers_enabled},
     {"--no-uniform-buffers", &ConfigOptions::uniform_buffers_enabled, false},
+    {"--lod-stats", &ConfigOptions::lod_stats_enabled},
+    {"--no-lod-stats", &ConfigOptions::lod_stats_enabled, false},
 };
 
 // gta6-prep: config

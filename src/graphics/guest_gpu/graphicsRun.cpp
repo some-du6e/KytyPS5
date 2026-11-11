@@ -2,6 +2,7 @@
 
 #include "common/assert.h"
 #include "common/debugCounters.h"
+#include "common/emulatorConfig.h"
 #include "common/hackNotice.h"
 #include "common/logging/log.h"
 #include "common/profiler.h"
@@ -2555,6 +2556,27 @@ void CommandProcessor::ExecuteTriggerEvent(uint32_t event_type, uint32_t event_i
 }
 
 void CommandProcessor::WriteLodStats(void* dst, uint32_t size, uint32_t control) {
+	// gta6-prep: config: --no-lod-stats writes the report upstream wrote before 66074f88, and
+	// the shaders record nothing.
+	if (!Config::LodStatsEnabled()) {
+		if (dst == nullptr || size < 64) {
+			return;
+		}
+		// Each of up to 256 2-dword slots after the 16-dword header reports its id (dword 0 bits
+		// 24-31) and finest sampled mip 15 (dword 1 bits 24-27), i.e. no samples. A non-zero
+		// dword 0 then marks the report complete.
+		const auto slots    = std::min((size - 64) / 8, 256u);
+		const auto sequence = EmitCallback([dst, slots] {
+			auto* report = static_cast<volatile uint32_t*>(dst);
+			for (uint32_t slot = 0; slot < slots; slot++) {
+				report[16 + slot * 2]     = slot << 24u;
+				report[16 + slot * 2 + 1] = 15u << 24u;
+			}
+			report[0] = 1;
+		});
+		NoteGuestWrite(sequence, reinterpret_cast<uint64_t>(dst), 64 + slots * 8);
+		return;
+	}
 	// The report reaches guest memory when the GPU completes it (LodStatsCounter::Report).
 	EmitCallback([this, dst, size, control] {
 		m_renderer.GetLodStats().Report(reinterpret_cast<uint64_t>(dst), size, control);
