@@ -14,6 +14,14 @@
 namespace Config {
 
 static std::unique_ptr<ConfigOptions> g_config;
+// gta6-prep: vram
+static VramSettings g_vram_settings;
+
+static VramRequest VramRequestOf(const ConfigOptions& cfg) {
+	VramRequest request;
+	request.gc_policy = cfg.vram_gc;
+	return request;
+}
 
 void Initialize() {
 	EXIT_IF(g_config != nullptr);
@@ -24,6 +32,7 @@ void Initialize() {
 void Shutdown() {
 	Common::DebugCounters::SetEnabled(false);
 	g_config.reset();
+	g_vram_settings = {}; // gta6-prep: vram
 }
 
 void Load(const ConfigOptions& cfg) {
@@ -34,6 +43,7 @@ void Load(const ConfigOptions& cfg) {
 	EXIT_IF(cfg.keyboard_player > static_cast<uint32_t>(MAX_PLAYERS));
 
 	*g_config = cfg;
+	g_vram_settings = ResolveVramSettings(VramRequestOf(cfg)); // gta6-prep: vram
 	Common::DebugCounters::SetEnabled(cfg.perf_overlay_enabled);
 }
 
@@ -360,6 +370,11 @@ const Keymap& GetKeymap() {
 
 const std::vector<std::string>& GetGuestArguments() {
 	return g_config->guest_arguments;
+}
+
+// gta6-prep: vram
+const VramSettings& GetVramSettings() {
+	return g_vram_settings;
 }
 
 } // namespace Config

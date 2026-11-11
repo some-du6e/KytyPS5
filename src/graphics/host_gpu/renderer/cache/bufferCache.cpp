@@ -4,12 +4,14 @@
 #include "gpu_tiler_shaders/buffer_scatter_spv.h"
 #include "common/assert.h"
 #include "common/debugCounters.h"
+#include "common/emulatorConfig.h"
 #include "common/hackNotice.h"
 #include "common/logging/log.h"
 #include "common/profiler.h"
 #include "common/spscQueue.h"
 #include "graphics/guest_gpu/graphicsRun.h"
 #include "graphics/host_gpu/graphicContext.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 #include "graphics/host_gpu/renderer/cache/textureCache.h"
 #include "graphics/host_gpu/renderer/commandScheduler.h"
 #include "graphics/host_gpu/renderer/render.h"
@@ -293,15 +295,11 @@ BufferCache::BufferCache(GraphicContext& graphics, CommandScheduler& scheduler,
 	if (!m_graphics.CanReportMemoryUsage()) {
 		return;
 	}
-	constexpr int64_t GiB              = 1024ll * 1024 * 1024;
-	constexpr int64_t target_threshold = 8 * GiB;
-	const auto        budget =
-	    static_cast<int64_t>(std::min<uint64_t>(m_graphics.GetTotalMemoryBudget(), INT64_MAX));
-	const auto threshold = std::min(budget, target_threshold);
-	const auto expected  = std::min(budget - 6 * threshold / 10, budget - GiB);
-	const auto critical  = std::min(budget - 2 * threshold / 10, budget - GiB / 2);
-	m_trigger_gc_memory  = static_cast<uint64_t>(std::max<int64_t>(expected, GiB));
-	m_critical_gc_memory = static_cast<uint64_t>(std::max<int64_t>(critical, 2 * GiB));
+	// gta6-prep: vram: --vram-gc (MemoryPolicy::LegacyGcThresholds() is the formula that was here).
+	const auto thresholds = MemoryPolicy::ComputeGcThresholds(m_graphics.GetTotalMemoryBudget(),
+	                                                          Config::GetVramSettings().gc_policy);
+	m_trigger_gc_memory  = thresholds.buffer_trigger;
+	m_critical_gc_memory = thresholds.buffer_critical;
 }
 
 BufferCache::~BufferCache() {

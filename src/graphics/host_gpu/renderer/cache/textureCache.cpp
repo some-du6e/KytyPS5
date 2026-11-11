@@ -11,6 +11,7 @@
 #include "graphics/guest_gpu/tile.h"
 #include "graphics/host_gpu/graphicContext.h"
 #include "graphics/host_gpu/renderer/cache/bufferCache.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 #include "graphics/host_gpu/renderer/commandScheduler.h"
 #include "graphics/host_gpu/renderer/image/imageView.h"
 #include "graphics/host_gpu/renderer/image/textureCommon.h"
@@ -139,15 +140,13 @@ TextureCache::TextureCache(GraphicContext& graphics, CommandScheduler& scheduler
       m_readback_tiled_images(Config::ReadbackTiledImagesEnabled()),
       m_readback_storage_images(Config::ReadbackStorageImagesEnabled()) {
 	if (m_graphics.CanReportMemoryUsage()) {
-		constexpr int64_t GiB = 1024ll * 1024 * 1024;
-		const auto        budget =
-		    static_cast<int64_t>(std::min<uint64_t>(m_graphics.GetTotalMemoryBudget(), INT64_MAX));
-		const auto threshold = std::min<int64_t>(budget, 8 * GiB);
-		m_pressure_gc_memory = static_cast<uint64_t>(
-		    std::max<int64_t>(std::min(budget - 6 * threshold / 10, budget - GiB), GiB + GiB / 2));
-		m_critical_gc_memory = static_cast<uint64_t>(
-		    std::max<int64_t>(std::min(budget - 2 * threshold / 10, budget - GiB / 2), 3 * GiB));
-		m_trigger_gc_memory = static_cast<uint64_t>(std::max<int64_t>((budget - threshold) / 2, 0));
+		// gta6-prep: vram: --vram-gc (MemoryPolicy::LegacyGcThresholds() is the formula that was
+		// here).
+		const auto thresholds = MemoryPolicy::ComputeGcThresholds(
+		    m_graphics.GetTotalMemoryBudget(), Config::GetVramSettings().gc_policy);
+		m_pressure_gc_memory = thresholds.texture_pressure;
+		m_critical_gc_memory = thresholds.texture_critical;
+		m_trigger_gc_memory  = thresholds.texture_trigger;
 	}
 }
 

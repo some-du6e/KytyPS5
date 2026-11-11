@@ -625,6 +625,12 @@ add_executable(bit_array_tests EXCLUDE_FROM_ALL
 )
 target_include_directories(bit_array_tests PRIVATE ${inc_headers})
 
+# gta6-prep: vram
+add_executable(vram_policy_tests EXCLUDE_FROM_ALL
+	"${KYTY_TESTS_DIR}/VramPolicyTests.cpp"
+)
+target_include_directories(vram_policy_tests PRIVATE ${inc_headers})
+
 add_executable(lru_cache_tests EXCLUDE_FROM_ALL
 	"${KYTY_TESTS_DIR}/LruCacheTests.cpp"
 )
@@ -910,6 +916,7 @@ if(BUILD_TESTING)
 	add_test(NAME vdecsw COMMAND $<TARGET_FILE:vdecsw_tests>)
 	add_test(NAME bit_array COMMAND $<TARGET_FILE:bit_array_tests>)
 	add_test(NAME lru_cache COMMAND $<TARGET_FILE:lru_cache_tests>)
+	add_test(NAME vram_policy COMMAND $<TARGET_FILE:vram_policy_tests>) # gta6-prep: vram
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)
 	add_test(NAME resource_materialization COMMAND $<TARGET_FILE:resource_materialization_tests>)
@@ -1016,6 +1023,13 @@ if(BUILD_TESTING)
 	add_test(NAME buffer_cache_ranges
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --buffer-cache-range-only)
 
+	# gta6-prep: vram
+	add_test(NAME emulator_vram_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc proportional --vram-gc legacy)
+	add_test(NAME emulator_vram_gc_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc aggressive)
+	set_tests_properties(emulator_vram_gc_invalid PROPERTIES WILL_FAIL TRUE)
+
 	add_custom_target(kyty_tests DEPENDS
 		ime_dialog_tests
 		shader_cfg_tests
@@ -1030,6 +1044,7 @@ if(BUILD_TESTING)
 		vdecsw_tests
 		bit_array_tests
 		lru_cache_tests
+		vram_policy_tests
 		common_tests
 		shader_vertex_metadata_tests
 		resource_materialization_tests

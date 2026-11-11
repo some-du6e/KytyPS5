@@ -2,6 +2,7 @@
 #define KYTY_COMMON_EMULATOR_CONFIG_H_
 
 #include "common/common.h"
+#include "common/vramOptions.h"
 
 #include <cstddef>
 #include <array>
@@ -135,6 +136,10 @@ struct ConfigOptions {
 	Keymap keymap;
 	// Ordinary boots need a non-null argv[0]; --guest-exec supplies the caller's arguments.
 	std::vector<std::string> guest_arguments {""};
+
+	// gta6-prep: vram
+	// --vram-gc legacy|proportional; unset: the profile's (legacy without one).
+	std::optional<VramGcPolicy> vram_gc;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -248,6 +253,11 @@ bool RedZoneProtectionEnabled();
 
 const Keymap& GetKeymap();
 const std::vector<std::string>& GetGuestArguments();
+
+// gta6-prep: vram
+// The video memory settings in effect (ResolveVramSettings() of the loaded options). The Auto
+// profile's built-in values without a loaded configuration.
+const VramSettings& GetVramSettings();
 
 } // namespace Config
 

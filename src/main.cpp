@@ -66,6 +66,14 @@ static void StartPgoDumps() {
 }
 #endif
 
+// gta6-prep: vram
+static void PrintVramUsage() {
+	::printf("\nVideo memory (8 GB cards):\n");
+	::printf("  --vram-gc <legacy|proportional>      Texture and buffer collection thresholds: the\n"
+	         "                                       built-in formulas (legacy, default) or fixed\n"
+	         "                                       shares of the memory budget.\n");
+}
+
 static void PrintUsage() {
 	::printf("%s, %s, ver = %s, git = %s, date = %s\n",
 	         KYTY_BUILD == KYTY_BUILD_DEBUG ? "Debug" : "Release", KYTY_TOOLCHAIN, KYTY_VERSION,
@@ -166,6 +174,7 @@ static void PrintUsage() {
 	::printf("  --gpu-pipeline <0|1|mask>            Emulated GPU stages on their own threads.\n"
 	         "                                       0: all inline, 1: all (default). The\n"
 	         "                                       KYTY_GPU_PIPELINE variable overrides it.\n");
+	PrintVramUsage(); // gta6-prep: vram
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 	::printf("  --redzone                            Protect the guest SysV red zone (default).\n");
 	::printf("  --no-redzone                         Do not protect the guest SysV red zone.\n");
@@ -308,6 +317,22 @@ static constexpr Flag FLAGS[] = {
 #endif
 };
 
+// gta6-prep: vram
+// The video memory options that take a value. nullopt: not one of them.
+static std::optional<bool> ParseVramOption(const std::string& arg, const std::string& value,
+                                           ConfigOptions& config) {
+	if (arg == "--vram-gc") {
+		const auto policy = Config::ParseVramGcPolicy(value);
+		if (!policy.has_value()) {
+			::printf("invalid VRAM collection policy (legacy or proportional): %s\n", value.c_str());
+			return false;
+		}
+		config.vram_gc = *policy;
+		return true;
+	}
+	return std::nullopt;
+}
+
 static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_help) {
 	show_help = false;
 
@@ -337,6 +362,14 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 
 		if (arg == "--gpu-pipeline") {
 			options.config.gpu_pipeline_stages = Config::ParseGpuPipelineStages(value.c_str());
+			continue;
+		}
+
+		// gta6-prep: vram
+		if (const auto parsed = ParseVramOption(arg, value, options.config); parsed.has_value()) {
+			if (!*parsed) {
+				return false;
+			}
 			continue;
 		}
 
