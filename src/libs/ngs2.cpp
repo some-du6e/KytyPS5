@@ -2,6 +2,7 @@
 
 #include "common/assert.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/threads.h"
 #include "libs/ajm/atrac9_decoder.h"
 #include "libs/errno.h"
@@ -42,6 +43,13 @@ constexpr int32_t NGS2_ERROR_INVALID_WAVEFORM_FORMAT =
     static_cast<int32_t>(0x804a8431u);
 constexpr int32_t NGS2_ERROR_UNKNOWN_WAVEFORM_FORMAT =
     static_cast<int32_t>(0x804a8432u);
+// gta6-prep: hle. Returned where an unexpected option size or rack ID used to abort. The values
+// follow the 0x804a8xxx block above but are not confirmed against firmware; callers only need a
+// negative code to take their failure path.
+constexpr int32_t NGS2_ERROR_INVALID_OPTION_SIZE =
+    static_cast<int32_t>(0x804a8081u);
+constexpr int32_t NGS2_ERROR_INVALID_RACK_ID =
+    static_cast<int32_t>(0x804a8230u);
 
 constexpr uint32_t NGS2_WAVEFORM_TYPE_ATRAC9 = 0x40;
 
@@ -1023,7 +1031,10 @@ struct Ngs2VoiceInternal {
 					state = Ngs2VoicePlayState::Playing;
 				}
 				break;
-			default: EXIT("unknown event_id: 0x%08" PRIx32 "\n", id);
+			default:
+				KYTY_SOFT_FAIL("sceNgs2VoiceControl", "unsupported event_id 0x%08" PRIx32 ", ignored",
+				               id);
+				break;
 		}
 	}
 };
@@ -1204,7 +1215,10 @@ int KYTY_SYSV_ABI Ngs2SystemQueryBufferSize(const Ngs2SystemOption* option,
 		LOGF("\t option            = nullptr, using reset defaults\n");
 	}
 
-	EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2SystemOption));
+	if (!KYTY_ACCEPT_PARAM_SIZE("sceNgs2SystemQueryBufferSize", "option", option->size,
+	                            sizeof(Ngs2SystemOption))) {
+		return NGS2_ERROR_INVALID_OPTION_SIZE;
+	}
 
 	std::memset(buffer_info, 0, sizeof(Ngs2ContextBufferInfo));
 	buffer_info->host_buffer_size = sizeof(Ngs2Internal);
@@ -1227,12 +1241,44 @@ int KYTY_SYSV_ABI Ngs2SystemCreate(const Ngs2SystemOption*      option,
 		LOGF("\t option            = nullptr, using reset defaults\n");
 	}
 
-	EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2SystemOption));
+	if (!KYTY_ACCEPT_PARAM_SIZE("sceNgs2SystemCreate", "option", option->size,
+	                            sizeof(Ngs2SystemOption))) {
+		return NGS2_ERROR_INVALID_OPTION_SIZE;
+	}
 
 	auto* ngs = Ngs2CreateSystemInternal(option, buffer_info);
 
 	*handle = reinterpret_cast<uintptr_t>(ngs);
 
+	return OK;
+}
+
+// The option struct a rack type takes; 0 for a rack_id Kyty does not know.
+static size_t Ngs2RackOptionSize(uint32_t rack_id) {
+	switch (rack_id) {
+		case 0x1000: return sizeof(Ngs2SamplerRackOption);
+		case 0x2000: return sizeof(Ngs2SubmixerRackOption);
+		case 0x2001: return sizeof(Ngs2ReverbRackOption);
+		case 0x3000: return sizeof(Ngs2MasteringRackOption);
+		case 0x4001: return sizeof(Ngs2CustomSamplerRackOption);
+		case 0x4002: return sizeof(Ngs2CustomSubmixerRackOption);
+		case 0x4003: return sizeof(Ngs2CustomMasteringRackOption);
+		default: return 0;
+	}
+}
+
+// OK, or the error a rack create returns for an unknown rack_id or a too small option (a larger
+// one is accepted: only the known prefix is copied).
+static int32_t Ngs2CheckRackOption(const char* api, uint32_t rack_id,
+                                   const Ngs2RackOption* option) {
+	const auto expected = Ngs2RackOptionSize(rack_id);
+	if (expected == 0) {
+		KYTY_SOFT_FAIL(api, "unsupported rack_id 0x%" PRIx32, rack_id);
+		return NGS2_ERROR_INVALID_RACK_ID;
+	}
+	if (option != nullptr && !KYTY_ACCEPT_PARAM_SIZE(api, "rack option", option->size, expected)) {
+		return NGS2_ERROR_INVALID_OPTION_SIZE;
+	}
 	return OK;
 }
 
@@ -1334,6 +1380,11 @@ int KYTY_SYSV_ABI Ngs2RackQueryBufferSize(uint32_t rack_id, const Ngs2RackOption
 
 	Ngs2RackOptionUnion default_option {};
 	if (option == nullptr) {
+		if (Ngs2RackOptionSize(rack_id) == 0) {
+			KYTY_SOFT_FAIL("sceNgs2RackQueryBufferSize", "unsupported rack_id 0x%" PRIx32,
+			               rack_id);
+			return NGS2_ERROR_INVALID_RACK_ID;
+		}
 		Ngs2FillDefaultRackOption(rack_id, &default_option);
 		option = &default_option.common;
 		LOGF("\t option     = nullptr, using reset defaults for rack_id 0x%" PRIx32 "\n", rack_id);
@@ -1365,7 +1416,10 @@ int KYTY_SYSV_ABI Ngs2SystemCreateWithAllocator(const Ngs2SystemOption*    optio
 		LOGF("\t option            = nullptr, using reset defaults\n");
 	}
 
-	EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2SystemOption));
+	if (!KYTY_ACCEPT_PARAM_SIZE("sceNgs2SystemCreateWithAllocator", "option", option->size,
+	                            sizeof(Ngs2SystemOption))) {
+		return NGS2_ERROR_INVALID_OPTION_SIZE;
+	}
 
 	LOGF("\t name              = %.64s\n"
 	     "\t flags             = %u\n"
@@ -1515,6 +1569,10 @@ int KYTY_SYSV_ABI Ngs2RackCreate(uintptr_t system_handle, uint32_t rack_id,
 	EXIT_NOT_IMPLEMENTED(buffer_info->host_buffer_size == 0);
 	EXIT_NOT_IMPLEMENTED(system_handle == 0);
 
+	if (const auto check = Ngs2CheckRackOption("sceNgs2RackCreate", rack_id, option); check != OK) {
+		return check;
+	}
+
 	Ngs2RackOptionUnion default_option {};
 	if (option == nullptr) {
 		Ngs2FillDefaultRackOption(rack_id, &default_option);
@@ -1523,8 +1581,6 @@ int KYTY_SYSV_ABI Ngs2RackCreate(uintptr_t system_handle, uint32_t rack_id,
 		     "\n",
 		     rack_id);
 	}
-
-	EXIT_NOT_IMPLEMENTED(option->size < sizeof(Ngs2RackOption));
 
 	LOGF("\t rack_id                = 0x%" PRIx32 "\n"
 	     "\t name                   = %.64s\n"
@@ -1552,39 +1608,32 @@ int KYTY_SYSV_ABI Ngs2RackCreate(uintptr_t system_handle, uint32_t rack_id,
 
 	switch (rack_id) {
 		case 0x1000:
-			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2SamplerRackOption));
 			rack->option.sampler = *reinterpret_cast<const Ngs2SamplerRackOption*>(option);
 			rack->type           = Ngs2RackType::Sampler;
 			break;
 		case 0x2000:
-			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2SubmixerRackOption));
 			rack->option.submixer = *reinterpret_cast<const Ngs2SubmixerRackOption*>(option);
 			rack->type            = Ngs2RackType::Submixer;
 			break;
 		case 0x2001:
-			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2ReverbRackOption));
 			rack->option.reverb = *reinterpret_cast<const Ngs2ReverbRackOption*>(option);
 			rack->type          = Ngs2RackType::Reverb;
 			break;
 		case 0x3000:
-			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2MasteringRackOption));
 			rack->option.mastering = *reinterpret_cast<const Ngs2MasteringRackOption*>(option);
 			rack->type             = Ngs2RackType::Mastering;
 			break;
 		case 0x4002:
-			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2CustomSubmixerRackOption));
 			rack->option.custom_submixer =
 			    *reinterpret_cast<const Ngs2CustomSubmixerRackOption*>(option);
 			rack->type = Ngs2RackType::CustomSubmixer;
 			break;
 		case 0x4003:
-			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2CustomMasteringRackOption));
 			rack->option.custom_mastering =
 			    *reinterpret_cast<const Ngs2CustomMasteringRackOption*>(option);
 			rack->type = Ngs2RackType::CustomMastering;
 			break;
 		case 0x4001:
-			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2CustomSamplerRackOption));
 			rack->option.custom_sampler =
 			    *reinterpret_cast<const Ngs2CustomSamplerRackOption*>(option);
 			rack->type = Ngs2RackType::CustomSampler;
@@ -1632,6 +1681,12 @@ int KYTY_SYSV_ABI Ngs2RackCreateWithAllocator(uintptr_t system_handle, uint32_t 
 	EXIT_NOT_IMPLEMENTED(allocator->free_handler == nullptr);
 	EXIT_NOT_IMPLEMENTED(system_handle == 0);
 
+	// Before the allocation, which a failing Ngs2RackCreate would leak.
+	if (const auto check = Ngs2CheckRackOption("sceNgs2RackCreateWithAllocator", rack_id, option);
+	    check != OK) {
+		return check;
+	}
+
 	Ngs2RackOptionUnion default_option {};
 	if (option == nullptr) {
 		Ngs2FillDefaultRackOption(rack_id, &default_option);
@@ -1640,8 +1695,6 @@ int KYTY_SYSV_ABI Ngs2RackCreateWithAllocator(uintptr_t system_handle, uint32_t 
 		     "\n",
 		     rack_id);
 	}
-
-	EXIT_NOT_IMPLEMENTED(option->size < sizeof(Ngs2RackOption));
 
 	LOGF("\t alloc_handler          = 0x%016" PRIx64 "\n"
 	     "\t free_handler           = 0x%016" PRIx64 "\n"

@@ -26,6 +26,7 @@
 #include "common/common.h"
 #include "common/emulatorConfig.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/threads.h"
 #include "kernel/fileSystem.h"
 #include "kernel/pthread.h"
@@ -3857,7 +3858,11 @@ int KYTY_SYSV_ABI NetCtlGetNatInfo(NetCtlNatInfo* nat_info) {
 	PRINT_NAME();
 
 	EXIT_NOT_IMPLEMENTED(nat_info == nullptr);
-	EXIT_NOT_IMPLEMENTED(nat_info->size != sizeof(NetCtlNatInfo));
+	// NetCtl has no invalid-size code in this tree; INVALID_ADDR is the closest it defines.
+	if (!KYTY_ACCEPT_PARAM_SIZE("sceNetCtlGetNatInfo", "param", nat_info->size,
+	                            sizeof(NetCtlNatInfo))) {
+		return NET_CTL_ERROR_INVALID_ADDR;
+	}
 
 	nat_info->stunStatus        = 0;
 	nat_info->natType           = 0;
@@ -4235,7 +4240,10 @@ int KYTY_SYSV_ABI NpSetContentRestriction(const NpContentRestriction* restrictio
 	PRINT_NAME();
 
 	EXIT_NOT_IMPLEMENTED(restriction == nullptr);
-	EXIT_NOT_IMPLEMENTED(restriction->size != sizeof(NpContentRestriction));
+	if (!KYTY_ACCEPT_PARAM_SIZE("sceNpSetContentRestriction", "param", restriction->size,
+	                            sizeof(NpContentRestriction))) {
+		return np_error_invalid_size;
+	}
 
 	LOGF("\t default_age_restriction = %" PRIi8 "\n"
 	     "\t age_restriction_count   = %" PRIi32 "\n",

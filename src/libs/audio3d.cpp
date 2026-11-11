@@ -1,6 +1,7 @@
 #include "libs/audio3d.h"
 
 #include "common/assert.h"
+#include "common/softFail.h"
 #include "common/threads.h"
 #include "kernel/semaphore.h"
 #include "libs/errno.h"
@@ -50,6 +51,10 @@ struct Audio3dInternal {
 };
 
 constexpr uint32_t MAX_PORTS = 4;
+
+// gta6-prep: hle. SCE_AUDIO3D_ERROR_INVALID_PARAMETER as other PS4/PS5 emulators list it; not
+// confirmed against firmware here.
+constexpr int AUDIO3D_ERROR_INVALID_PARAMETER = static_cast<int>(0x80EA0004u);
 
 static Audio3dInternal g_ports[MAX_PORTS] = {};
 
@@ -115,7 +120,10 @@ int KYTY_SYSV_ABI Audio3dPortOpen(int user_id, const Audio3dOpenParameters* para
 
 	EXIT_NOT_IMPLEMENTED(parameters == nullptr);
 	EXIT_NOT_IMPLEMENTED(id == nullptr);
-	EXIT_NOT_IMPLEMENTED(parameters->size != 0x20);
+	if (!KYTY_ACCEPT_PARAM_SIZE("sceAudio3dPortOpen", "param", parameters->size,
+	                            sizeof(Audio3dOpenParameters))) {
+		return AUDIO3D_ERROR_INVALID_PARAMETER;
+	}
 
 	LOGF("\t user_id     = %d\n"
 	     "\t granularity = %u\n"
