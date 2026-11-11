@@ -695,6 +695,96 @@ void TestScalarMemoryNops() {
 	CompileToValidSpirv(code, "scalar memory no-ops", 64, &clock);
 }
 
+// ---- VOPC: f16 ordered/false/true, CMPX forms and CLASS_F64 ----
+
+void TestVopcGaps() {
+	CheckEncodings({
+	    {"v_cmp_f_f16 vcc_lo, v1, v2", {0x7d900501u}, Opcode::V_CMP_F_F16},
+	    {"v_cmp_o_f16 vcc_lo, v1, v2", {0x7d9e0501u}, Opcode::V_CMP_O_F16},
+	    {"v_cmp_nlg_f16 vcc_lo, v1, v2", {0x7dd40501u}, Opcode::V_CMP_NLG_F16},
+	    {"v_cmp_nle_f16 vcc_lo, v1, v2", {0x7dd80501u}, Opcode::V_CMP_NLE_F16},
+	    {"v_cmp_tru_f16 vcc_lo, v1, v2", {0x7dde0501u}, Opcode::V_CMP_TRU_F16},
+	    {"v_cmpx_f_f16 v1, v2", {0x7db00501u}, Opcode::V_CMPX_F_F16},
+	    {"v_cmpx_lg_f16 v1, v2", {0x7dba0501u}, Opcode::V_CMPX_LG_F16},
+	    {"v_cmpx_o_f16 v1, v2", {0x7dbe0501u}, Opcode::V_CMPX_O_F16},
+	    {"v_cmpx_u_f16 v1, v2", {0x7df00501u}, Opcode::V_CMPX_U_F16},
+	    {"v_cmpx_nge_f16 v1, v2", {0x7df20501u}, Opcode::V_CMPX_NGE_F16},
+	    {"v_cmpx_nlg_f16 v1, v2", {0x7df40501u}, Opcode::V_CMPX_NLG_F16},
+	    {"v_cmpx_tru_f16 v1, v2", {0x7dfe0501u}, Opcode::V_CMPX_TRU_F16},
+	    {"v_cmpx_f_f32 v1, v2", {0x7c200501u}, Opcode::V_CMPX_F_F32},
+	    {"v_cmpx_tru_f32 v1, v2", {0x7c3e0501u}, Opcode::V_CMPX_TRU_F32},
+	    {"v_cmpx_f_i32 v1, v2", {0x7d200501u}, Opcode::V_CMPX_F_I32},
+	    {"v_cmpx_t_i32 v1, v2", {0x7d2e0501u}, Opcode::V_CMPX_T_I32},
+	    {"v_cmpx_f_u32 v1, v2", {0x7da00501u}, Opcode::V_CMPX_F_U32},
+	    {"v_cmpx_t_u32 v1, v2", {0x7dae0501u}, Opcode::V_CMPX_T_U32},
+	    {"v_cmpx_le_u16 v1, v2", {0x7d760501u}, Opcode::V_CMPX_LE_U16},
+	    {"v_cmpx_ge_u16 v1, v2", {0x7d7c0501u}, Opcode::V_CMPX_GE_U16},
+	    {"v_cmp_class_f64 vcc_lo, v[1:2], v3", {0x7d500701u}, Opcode::V_CMP_CLASS_F64},
+	    {"v_cmpx_class_f64 v[1:2], v3", {0x7d700701u}, Opcode::V_CMPX_CLASS_F64},
+	    {"v_cmp_class_f64_e64 s0, -v[1:2], v3", {0xd4a80000u, 0x20020701u}, Opcode::V_CMP_CLASS_F64},
+	    {"v_cmp_o_f16_e64 s0, |v1|, v2", {0xd4cf0100u, 0x00020501u}, Opcode::V_CMP_O_F16},
+	    {"v_cmpx_lg_f16_e64 -v1, v2", {0xd4dd007eu, 0x20020501u}, Opcode::V_CMPX_LG_F16},
+	});
+	const uint32_t cmpx[] = {0x7d760501u}; // v_cmpx_le_u16 v1, v2
+	Check(DecodeOne(cmpx).dst.kind == Decoder::OperandKind::ExecLo,
+	      "a V_CMPX compare did not write EXEC");
+	const uint32_t vop3_class[] = {0xd4a80000u, 0x20020701u}; // v_cmp_class_f64_e64 s0, -v[1:2], v3
+	const auto     inst         = DecodeOne(vop3_class);
+	Check(inst.src0.negate && inst.dst.kind == Decoder::OperandKind::Sgpr && inst.dst.reg == 0u,
+	      "VOP3 V_CMP_CLASS_F64 lost its NEG or scalar destination");
+	// 64-bit compares have no SDWA or DPP forms.
+	const uint32_t sdwa_class[] = {0x7d5006f9u, 0x86060001u};
+	Check(DecodeOne(sdwa_class).opcode == Opcode::UNSUPPORTED, "V_CMP_CLASS_F64 accepted SDWA");
+
+	const uint32_t code[] = {
+	    0x7e3e0280u, // v_mov_b32 v31, 0
+	    0xbe94037eu, // s_mov_b32 s20, exec_lo
+	    0x7e0202ffu, 0x3c00bc00u, // v_mov_b32 v1, 0x3c00bc00
+	    0x7e04a100u, // v_cvt_f16_u16 v2, v0
+	    0x7e0602ffu, 0x000003ffu, // v_mov_b32 v3, 0x3ff
+	    0x7e0802ffu, 0x7ff80000u, // v_mov_b32 v4, 0x7ff80000
+	    0x7e0a0280u, // v_mov_b32 v5, 0
+	    0x7d900501u, // v_cmp_f_f16 vcc_lo, v1, v2
+	    0xd5010006u, 0x01a90280u, // v_cndmask_b32 v6, 0, 1, vcc_lo
+	    0x7d9e0501u, // v_cmp_o_f16 vcc_lo, v1, v2
+	    0xd5010007u, 0x01a90280u, // v_cndmask_b32 v7, 0, 1, vcc_lo
+	    0x7dd40501u, // v_cmp_nlg_f16 vcc_lo, v1, v2
+	    0xd5010008u, 0x01a90280u, // v_cndmask_b32 v8, 0, 1, vcc_lo
+	    0x7dd80501u, // v_cmp_nle_f16 vcc_lo, v1, v2
+	    0xd5010009u, 0x01a90280u, // v_cndmask_b32 v9, 0, 1, vcc_lo
+	    0x7dde0501u, // v_cmp_tru_f16 vcc_lo, v1, v2
+	    0xd501000au, 0x01a90280u, // v_cndmask_b32 v10, 0, 1, vcc_lo
+	    0x7d500704u, // v_cmp_class_f64 vcc_lo, v[4:5], v3
+	    0xd501000bu, 0x01a90280u, // v_cndmask_b32 v11, 0, 1, vcc_lo
+	    0xd4a80000u, 0x20020704u, // v_cmp_class_f64_e64 s0, -v[4:5], v3
+	    0x7dba0501u, // v_cmpx_lg_f16 v1, v2
+	    0x7dbe0501u, // v_cmpx_o_f16 v1, v2
+	    0x7df00501u, // v_cmpx_u_f16 v1, v2
+	    0x7df20501u, // v_cmpx_nge_f16 v1, v2
+	    0x7df40501u, // v_cmpx_nlg_f16 v1, v2
+	    0x7dfe0501u, // v_cmpx_tru_f16 v1, v2
+	    0x7c3e0501u, // v_cmpx_tru_f32 v1, v2
+	    0x7d2e0501u, // v_cmpx_t_i32 v1, v2
+	    0x7dae0501u, // v_cmpx_t_u32 v1, v2
+	    0x7d760501u, // v_cmpx_le_u16 v1, v2
+	    0x7d7c0501u, // v_cmpx_ge_u16 v1, v2
+	    0x7d700704u, // v_cmpx_class_f64 v[4:5], v3
+	    0x7db00501u, // v_cmpx_f_f16 v1, v2
+	    0x7c200501u, // v_cmpx_f_f32 v1, v2
+	    0x7d200501u, // v_cmpx_f_i32 v1, v2
+	    0x7da00501u, // v_cmpx_f_u32 v1, v2
+	    0xbefe0314u, // s_mov_b32 exec_lo, s20
+	    0xe0701000u, 0x8000061fu, // buffer_store_dword v6, v31, s[0:3], 0 offen
+	    0xe0701004u, 0x8000071fu, // buffer_store_dword v7, v31, s[0:3], 0 offen offset:4
+	    0xe0701008u, 0x8000081fu, // buffer_store_dword v8, v31, s[0:3], 0 offen offset:8
+	    0xe070100cu, 0x8000091fu, // buffer_store_dword v9, v31, s[0:3], 0 offen offset:12
+	    0xe0701010u, 0x80000a1fu, // buffer_store_dword v10, v31, s[0:3], 0 offen offset:16
+	    0xe0701014u, 0x80000b1fu, // buffer_store_dword v11, v31, s[0:3], 0 offen offset:20
+	    0xbf810000u, // s_endpgm
+	};
+	CompileToValidSpirv(code, "VOPC gaps", 32);
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -711,6 +801,7 @@ int main() {
 	TestDotProducts();
 	TestScalarModeAndHintNops();
 	TestScalarMemoryNops();
+	TestVopcGaps();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

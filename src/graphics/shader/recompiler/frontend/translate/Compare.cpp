@@ -84,4 +84,38 @@ void Translator::EmitFloatClassCompare(const Decoder::Instruction& inst, bool ha
 	EmitCompareResult(inst, IR::U1(ir.Emit(opcode, {value, mask})), false);
 }
 
+// gta6-prep: shader-alu. D.lane = S1.u[class(S0.f64)]: bit 0 signaling NaN, 1 quiet NaN, 2 -inf,
+// 3 -normal, 4 -denormal, 5 -0, 6 +0, 7 +denormal, 8 +normal, 9 +inf. S0 takes ABS / NEG.
+void Translator::V_CMP_CLASS_F64(const Decoder::Instruction& inst) {
+	const auto u32  = [](uint32_t value) { return IR::U32(IR::Value(value)); };
+	auto       pair = ReadU32Pair(PlainOperand(inst.src0));
+	if (inst.src0.kind == Decoder::OperandKind::LiteralConstant) {
+		// A 64-bit float literal supplies the high word.
+		pair = {u32(0u), ReadU32(PlainOperand(inst.src0))};
+	}
+	auto high = pair[1];
+	if (inst.src0.absolute) {
+		high = ir.BitwiseAnd(high, u32(0x7fffffffu));
+	}
+	if (inst.src0.negate) {
+		high = ir.BitwiseXor(high, u32(0x80000000u));
+	}
+	const auto mask     = ReadU32(PlainOperand(inst.src1));
+	const auto exponent = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+	                                      {high, IR::Value(20u), IR::Value(11u)}));
+	const auto mantissa = ir.LogicalOr(ir.INotEqual(ir.BitwiseAnd(high, u32(0xfffffu)), u32(0u)),
+	                                   ir.INotEqual(pair[0], u32(0u)));
+	const auto negative = ir.INotEqual(ir.ShiftRightLogical(high, u32(31u)), u32(0u));
+	const auto quiet    = ir.INotEqual(ir.BitwiseAnd(high, u32(0x80000u)), u32(0u));
+	const auto signed_class = [&](uint32_t negative_bit, uint32_t positive_bit) {
+		return ir.Select(negative, u32(negative_bit), u32(positive_bit));
+	};
+	const auto special = ir.Select(mantissa, ir.Select(quiet, u32(1u), u32(0u)), signed_class(2u, 9u));
+	const auto tiny    = ir.Select(mantissa, signed_class(4u, 7u), signed_class(5u, 6u));
+	const auto index   = ir.Select(ir.IEqual(exponent, u32(0x7ffu)), special,
+	                               ir.Select(ir.IEqual(exponent, u32(0u)), tiny, signed_class(3u, 8u)));
+	const auto bit = ir.BitwiseAnd(ir.ShiftRightLogical(mask, index), u32(1u));
+	EmitCompareResult(inst, ir.INotEqual(bit, u32(0u)), false);
+}
+
 } // namespace Libs::Graphics::ShaderRecompiler::Frontend

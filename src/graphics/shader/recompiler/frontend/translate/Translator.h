@@ -292,6 +292,7 @@ private:
 	void    V_DOT2_F32_F16(const Decoder::Instruction& inst);
 	void    V_DOT_INTEGER(const Decoder::Instruction& inst, uint32_t bits, bool sign,
 	                      bool accumulate_destination);
+	void    V_CMP_CLASS_F64(const Decoder::Instruction& inst);
 
 	void EmitScalar(const Decoder::Instruction& inst);
 	void EmitVector(const Decoder::Instruction& inst);
