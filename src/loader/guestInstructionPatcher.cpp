@@ -1695,6 +1695,44 @@ void RelocateGuestInstructions(PatchModule* module, const DecodedFunction& funct
 }
 } // namespace
 
+GuestSyscallScan CountGuestSyscallInstructions(u64 segment_addr, u64 segment_size,
+                                               std::span<const uintptr_t> function_starts) {
+	GuestSyscallScan result {};
+	if (segment_size == 0 || function_starts.empty()) {
+		return result;
+	}
+	const uintptr_t        segment_end = segment_addr + segment_size;
+	std::vector<uintptr_t> starts;
+	for (const uintptr_t start: function_starts) {
+		if (start >= segment_addr && start < segment_end) {
+			starts.push_back(start);
+		}
+	}
+	std::ranges::sort(starts);
+	starts.erase(std::ranges::unique(starts).begin(), starts.end());
+
+	constexpr std::array<u8, 2> Syscall {0x0f, 0x05};
+	for (size_t index = 0; index < starts.size(); ++index) {
+		const uintptr_t start = starts[index];
+		const uintptr_t end   = index + 1 < starts.size() ? starts[index + 1] : segment_end;
+		const std::span code(reinterpret_cast<const u8*>(start), end - start);
+		// Only functions holding the encoding are decoded.
+		if (std::ranges::search(code, Syscall).empty()) {
+			continue;
+		}
+		const auto function = DecodeFunction(start, end, segment_addr, segment_end);
+		for (const auto& [address, decoded]: function.instructions) {
+			if (decoded.instruction.mnemonic == ZYDIS_MNEMONIC_SYSCALL) {
+				if (result.count == 0 || address < result.first) {
+					result.first = address;
+				}
+				++result.count;
+			}
+		}
+	}
+	return result;
+}
+
 GuestInstructionHostFeatures GetGuestInstructionHostFeatures() {
 	static const auto features = [] {
 		const Xbyak::util::Cpu cpu;

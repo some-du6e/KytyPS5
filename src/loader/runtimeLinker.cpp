@@ -2091,19 +2091,37 @@ void RuntimeLinker::LoadProgramToMemory(Program* program) {
 			program->proc_param_vaddr = phdr[i].p_vaddr + program->base_vaddr;
 		}
 
-		if (patch_guest_instructions && phdr[i].p_type == PT_GNU_EH_FRAME) {
+		if (phdr[i].p_type == PT_GNU_EH_FRAME) {
 			eh_frame_header_addr = phdr[i].p_vaddr + program->base_vaddr;
 			eh_frame_header_size = phdr[i].p_memsz;
 		}
 	}
 
+	std::vector<uintptr_t> function_starts;
+	const bool             have_function_starts =
+	    DecodeEhFrameFunctionStarts(eh_frame_header_addr, eh_frame_header_size, &function_starts) &&
+	    !function_starts.empty();
+	const auto module_name = Common::PathToString(program->file_name.filename());
+
+	// Before the instruction patches, which only rewrite other instructions. Log only.
+	if (have_function_starts) {
+		GuestSyscallScan syscalls {};
+		for (const auto& [segment_addr, segment_size]: executable_segments) {
+			const auto scan = CountGuestSyscallInstructions(segment_addr, segment_size, function_starts);
+			if (scan.count != 0 && (syscalls.count == 0 || scan.first < syscalls.first)) {
+				syscalls.first = scan.first;
+			}
+			syscalls.count += scan.count;
+		}
+		if (syscalls.count != 0) {
+			Log::WriteToConsoleAndLog(fmt::format(
+			    "Guest syscall: {} raw syscall instruction(s) in {} (first at +0x{:x}); raw "
+			    "syscalls are not emulated\n",
+			    syscalls.count, module_name, syscalls.first - program->base_vaddr));
+		}
+	}
+
 	if (patch_guest_instructions) {
-		std::vector<uintptr_t> function_starts;
-		const bool             have_function_starts =
-		    DecodeEhFrameFunctionStarts(eh_frame_header_addr, eh_frame_header_size,
-		                                &function_starts) &&
-		    !function_starts.empty();
-		const auto module_name = Common::PathToString(program->file_name.filename());
 		if (!have_function_starts) {
 			Log::WriteToConsoleAndLog(fmt::format(
 			    "Guest instruction patches: {} not applied (function boundaries unavailable)\n",
