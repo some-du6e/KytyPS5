@@ -94,7 +94,7 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          cmake --build _Build/linux --target launcher ${{ steps.targets.outputs.targets }} --parallel
+          cmake --build _Build/linux --target launcher ${{ steps.targets.outputs.targets }} --parallel -- -k 0
 
       - name: Vulkan devices on the runner
         shell: bash
@@ -197,7 +197,7 @@ jobs:
 
       - name: Build
         shell: cmd
-        run: cmake --build _Build/windows --target launcher ${{ steps.targets.outputs.targets }} --parallel
+        run: cmake --build _Build/windows --target launcher ${{ steps.targets.outputs.targets }} --parallel -- -k 0
 
       - name: Test
         shell: bash
