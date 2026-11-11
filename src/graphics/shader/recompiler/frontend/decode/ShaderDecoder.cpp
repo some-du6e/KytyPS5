@@ -570,7 +570,8 @@ std::string InstructionToString(const Instruction& inst) {
 			return fmt::format("0x{:08x}: s_setpc_b64 {}", inst.pc,
 			                   OperandToString(inst.src0).c_str());
 		case Opcode::S_SETREG_B32:
-			return fmt::format("0x{:08x}: s_setreg_b32 {}, {}", inst.pc,
+		case Opcode::S_SETREG_IMM32_B32:
+			return fmt::format("0x{:08x}: {} {}, {}", inst.pc, magic_enum::enum_name(inst.opcode),
 			                   OperandToString(inst.src0).c_str(),
 			                   OperandToString(inst.src1).c_str());
 		case Opcode::S_WAITCNT_VSCNT: return FormatSources(inst);
@@ -584,6 +585,17 @@ std::string InstructionToString(const Instruction& inst) {
 		case Opcode::S_TTRACEDATA:
 		case Opcode::S_INST_PREFETCH:
 		case Opcode::S_CLAUSE:
+		// gta6-prep: shader-alu
+		case Opcode::S_VERSION:
+		case Opcode::S_ROUND_MODE:
+		case Opcode::S_DENORM_MODE:
+		case Opcode::S_ICACHE_INV:
+		case Opcode::S_WAKEUP:
+		case Opcode::S_INCPERFLEVEL:
+		case Opcode::S_DECPERFLEVEL:
+		case Opcode::S_WAIT_IDLE:
+		case Opcode::S_TTRACEDATA_IMM:
+		case Opcode::S_CODE_END:
 			return fmt::format("0x{:08x}: {} {}", inst.pc, magic_enum::enum_name(inst.opcode),
 			                   OperandToString(inst.src0).c_str());
 		case Opcode::S_BARRIER: return fmt::format("0x{:08x}: s_barrier", inst.pc);

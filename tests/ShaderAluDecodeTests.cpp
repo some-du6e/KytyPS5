@@ -613,6 +613,54 @@ void TestDotProducts() {
 	CompileToValidSpirv(code, "dot products");
 }
 
+// ---- Scalar mode, hint, marker and cache no-ops ----
+
+void TestScalarModeAndHintNops() {
+	CheckEncodings({
+	    {"s_setreg_imm32_b32 hwreg(HW_REG_MODE, 0, 4), 3", {0xba801801u, 0x00000003u}, Opcode::S_SETREG_IMM32_B32},
+	    {"s_version 0x1234", {0xb0801234u}, Opcode::S_VERSION},
+	    {"s_round_mode 0x3", {0xbfa40003u}, Opcode::S_ROUND_MODE},
+	    {"s_denorm_mode 0xf", {0xbfa5000fu}, Opcode::S_DENORM_MODE},
+	    {"s_icache_inv", {0xbf930000u}, Opcode::S_ICACHE_INV},
+	    {"s_wakeup", {0xbf830000u}, Opcode::S_WAKEUP},
+	    {"s_incperflevel 1", {0xbf940001u}, Opcode::S_INCPERFLEVEL},
+	    {"s_decperflevel 1", {0xbf950001u}, Opcode::S_DECPERFLEVEL},
+	    {"s_wait_idle", {0xbfa20000u}, Opcode::S_WAIT_IDLE},
+	    {"s_ttracedata_imm 0x10", {0xbfa80010u}, Opcode::S_TTRACEDATA_IMM},
+	    {"s_code_end", {0xbf9f0000u}, Opcode::S_CODE_END},
+	});
+	const uint32_t setreg[] = {0xba801801u, 0x00000003u, EndPgm};
+	auto           inst     = DecodeOne(setreg);
+	Check(inst.src0.kind == Decoder::OperandKind::LiteralConstant && inst.src0.value == 3u &&
+	          inst.src1.value == 0x1801u && inst.dst.kind == Decoder::OperandKind::Null,
+	      "S_SETREG_IMM32_B32 lost its literal data or register field");
+	Decoder::Program program;
+	Decoder::DecodeProgram(setreg, program);
+	Check(program.instructions.size() == 2u && program.instructions[1].opcode == Opcode::S_ENDPGM,
+	      "S_SETREG_IMM32_B32 did not consume its literal");
+	const uint32_t round[] = {0xbfa40003u};
+	Check(DecodeOne(round).src0.value == 3u, "S_ROUND_MODE lost its mode bits");
+
+	const uint32_t code[] = {
+	    0xb0801234u, // s_version 0x1234
+	    0xba801801u, 0x00000003u, // s_setreg_imm32_b32 hwreg(HW_REG_MODE, 0, 4), 3
+	    0xbfa40000u, // s_round_mode 0x0
+	    0xbfa5000fu, // s_denorm_mode 0xf
+	    0x7e025500u, // v_rcp_f32 v1, v0
+	    0xbfa5000cu, // s_denorm_mode 0xc
+	    0xbf930000u, // s_icache_inv
+	    0xbf830000u, // s_wakeup
+	    0xbf940001u, // s_incperflevel 1
+	    0xbf950001u, // s_decperflevel 1
+	    0xbfa20000u, // s_wait_idle
+	    0xbfa80010u, // s_ttracedata_imm 0x10
+	    0x7e3e0280u, // v_mov_b32 v31, 0
+	    0xe0701000u, 0x8000011fu, // buffer_store_dword v1, v31, s[0:3], 0 offen
+	    0xbf810000u, // s_endpgm
+	};
+	CompileToValidSpirv(code, "scalar no-ops");
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -627,6 +675,7 @@ int main() {
 	TestSaveexecFamily();
 	TestVop3F16Modifiers();
 	TestDotProducts();
+	TestScalarModeAndHintNops();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

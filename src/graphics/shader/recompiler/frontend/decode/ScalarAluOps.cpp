@@ -120,6 +120,8 @@ constexpr OpcodeMap SOPK_OPCODE_LIST[] = {
     {0x12u, Opcode::S_GETREG_B32}, {0x13u, Opcode::S_SETREG_B32}, {0x17u, Opcode::S_WAITCNT_VSCNT}, {0x18u, Opcode::S_WAITCNT},
     {0x19u, Opcode::S_WAITCNT},    {0x1au, Opcode::S_WAITCNT},
     {0x1bu, Opcode::S_SUBVECTOR_LOOP_BEGIN}, {0x1cu, Opcode::S_SUBVECTOR_LOOP_END},
+    // gta6-prep: shader-alu
+    {0x01u, Opcode::S_VERSION},    {0x15u, Opcode::S_SETREG_IMM32_B32},
 };
 
 constexpr OpcodeMap SOPP_OPCODE_LIST[] = {
@@ -147,6 +149,16 @@ constexpr OpcodeMap SOPP_OPCODE_LIST[] = {
     {0x20u, Opcode::S_INST_PREFETCH},
     {0x21u, Opcode::S_CLAUSE},
     {0x23u, Opcode::S_WAITCNT_DEPCTR},
+    // gta6-prep: shader-alu
+    {0x03u, Opcode::S_WAKEUP},
+    {0x13u, Opcode::S_ICACHE_INV},
+    {0x14u, Opcode::S_INCPERFLEVEL},
+    {0x15u, Opcode::S_DECPERFLEVEL},
+    {0x1fu, Opcode::S_CODE_END},
+    {0x22u, Opcode::S_WAIT_IDLE},
+    {0x24u, Opcode::S_ROUND_MODE},
+    {0x25u, Opcode::S_DENORM_MODE},
+    {0x28u, Opcode::S_TTRACEDATA_IMM},
 };
 
 constexpr auto SOP1_OPS = Detail::MakeOpcodeTable<0x100>(SOP1_OPCODE_LIST);
@@ -316,6 +328,24 @@ void DecodeSopk(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 			inst.src1.signed_val = static_cast<int32_t>(imm);
 			inst.src_count       = 2;
 			DecodeScalarSource(sdst, pc, inst.src0);
+			return;
+		// gta6-prep: shader-alu
+		case Opcode::S_SETREG_IMM32_B32:
+			// The data is the 32-bit literal after the instruction; SIMM16 names the register.
+			SetRawWords(inst, code, word_index, 2);
+			inst.dst.kind        = OperandKind::Null;
+			inst.src1.kind       = OperandKind::LiteralConstant;
+			inst.src1.value      = word & 0xffffu;
+			inst.src1.signed_val = static_cast<int32_t>(imm);
+			inst.src0            = {};
+			inst.src0.kind       = OperandKind::LiteralConstant;
+			inst.src0.value      = code[word_index + 1u];
+			inst.src0.signed_val = static_cast<int32_t>(inst.src0.value);
+			inst.src_count       = 2;
+			return;
+		case Opcode::S_VERSION:
+			// Only a marker for the hardware version the code was compiled for.
+			inst.dst.kind = OperandKind::Null;
 			return;
 		default: break;
 	}

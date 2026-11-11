@@ -1,5 +1,8 @@
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 
+#include "common/hackNotice.h"
+
+#include <atomic>
 #include <fmt/format.h>
 
 namespace Libs::Graphics::ShaderRecompiler::Frontend {
@@ -34,6 +37,30 @@ void Translator::EmitScalar(const Decoder::Instruction& inst) {
 			WriteOperand(inst.dst, IR::Value(inst.src0.value == 0x1818u ? 6u : 0u));
 			return;
 		case O::S_SETREG_B32: EmitControlNop(); return;
+		// gta6-prep: shader-alu. MODE writes keep the stage's float mode (as S_SETREG_B32 does);
+		// the others are hints, markers and cache maintenance without an emulated effect.
+		case O::S_SETREG_IMM32_B32:
+		case O::S_VERSION:
+		case O::S_ICACHE_INV:
+		case O::S_WAKEUP:
+		case O::S_INCPERFLEVEL:
+		case O::S_DECPERFLEVEL:
+		case O::S_WAIT_IDLE:
+		case O::S_TTRACEDATA_IMM:
+		case O::S_CODE_END: EmitControlNop(); return;
+		case O::S_ROUND_MODE:
+		case O::S_DENORM_MODE: {
+			// The SPIR-V keeps the stage's rounding and denormal modes (RNE; the float_mode
+			// denormals); LLVM switches f32 denormals on around precise divisions.
+			static std::atomic<bool> reported {false};
+			if (!reported.exchange(true, std::memory_order_relaxed)) {
+				Common::HackNotice::Report("shader rounding and denormal mode changes ignored",
+				                           "Translator::EmitScalar", program.shader_hash, inst.pc,
+				                           Decoder::InstructionToString(inst));
+			}
+			EmitControlNop();
+			return;
+		}
 		case O::S_WAITCNT_VSCNT: S_WAITCNT_VSCNT(inst); return;
 		case O::S_WAITCNT: return;
 
