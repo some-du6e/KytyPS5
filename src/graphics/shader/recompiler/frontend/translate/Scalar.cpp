@@ -20,6 +20,9 @@ void Translator::EmitScalar(const Decoder::Instruction& inst) {
 		case O::S_CSELECT_B32: S_CSELECT_B32(inst); return;
 		case O::S_CSELECT_B64: ScalarSelect64(inst, inst.src1); return;
 		case O::S_CMOV_B64: ScalarSelect64(inst, inst.dst); return;
+		case O::S_CMOV_B32:
+		case O::S_CMOVK_I32: S_CMOV_B32(inst); return;
+		case O::S_BFE_I64: return S_BFE_I64(inst);
 		case O::S_GETREG_B32:
 			if (!graphics_compute || (inst.src0.value != 0x1818u && inst.src0.value != 0x0a18u)) {
 				return FailTranslation(

@@ -204,6 +204,23 @@ Decoder::Instruction DecodeOne(std::span<const uint32_t> words) {
 	return inst;
 }
 
+// An encoding as llvm-mc -arch=amdgcn -mcpu=gfx1030 -show-encoding assembles `text`.
+struct Encoding {
+	const char*           text;
+	std::vector<uint32_t> words;
+	Opcode                opcode;
+};
+
+void CheckEncodings(std::initializer_list<Encoding> encodings) {
+	for (const auto& encoding: encodings) {
+		const auto inst = DecodeOne(encoding.words);
+		Check(inst.opcode == encoding.opcode &&
+		          inst.word_count == static_cast<uint32_t>(encoding.words.size()),
+		      std::string("did not decode to its opcode and length: ") + encoding.text + " -> " +
+		          Decoder::InstructionToString(inst));
+	}
+}
+
 // ---- Skipping programs with unsupported instructions ----
 
 void TestUnsupportedEncodingsDecodeWithoutExit() {
@@ -342,6 +359,69 @@ void TestStrictShadersDefault() {
 	Check(!options.strict_shaders, "ConfigOptions::strict_shaders defaults to on");
 }
 
+// ---- Scalar conditional moves, S_BFE_I64, V_PERM_B32, V_SWAP_B32 ----
+
+void TestMovesPermSwap() {
+	CheckEncodings({
+	    {"s_cmov_b32 s0, s1", {0xbe800501u}, Opcode::S_CMOV_B32},
+	    {"s_cmovk_i32 s0, 0x1234", {0xb1001234u}, Opcode::S_CMOVK_I32},
+	    {"s_bfe_i64 s[0:1], s[2:3], s4", {0x95000402u}, Opcode::S_BFE_I64},
+	    {"s_bfe_i64 s[0:1], s[2:3], 0x80004", {0x9500ff02u, 0x00080004u}, Opcode::S_BFE_I64},
+	    {"v_perm_b32 v0, v1, v2, v3", {0xd7440000u, 0x040e0501u}, Opcode::V_PERM_B32},
+	    {"v_perm_b32 v0, v1, v2, 0x0c0c0105", {0xd7440000u, 0x03fe0501u, 0x0c0c0105u},
+	     Opcode::V_PERM_B32},
+	    {"v_swap_b32 v0, v1", {0x7e00cb01u}, Opcode::V_SWAP_B32},
+	});
+	const uint32_t cmovk[] = {0xb108fffdu}; // s_cmovk_i32 s8, -3
+	auto           inst    = DecodeOne(cmovk);
+	Check(inst.dst.kind == Decoder::OperandKind::Sgpr && inst.dst.reg == 8u &&
+	          inst.src0.signed_val == -3 && inst.src_count == 1u,
+	      "S_CMOVK_I32 lost its destination or sign-extended immediate");
+	const uint32_t bfe[] = {0x950a0e0cu}; // s_bfe_i64 s[10:11], s[12:13], s14
+	inst                 = DecodeOne(bfe);
+	Check(inst.data_dwords == 2u && inst.dst.reg == 10u && inst.src0.reg == 12u && inst.src1.reg == 14u,
+	      "S_BFE_I64 lost its 64-bit destination or sources");
+	const uint32_t swap[] = {0x7e06cb04u}; // v_swap_b32 v3, v4
+	inst                  = DecodeOne(swap);
+	Check(inst.dst.kind == Decoder::OperandKind::Vgpr && inst.dst.reg == 3u &&
+	          inst.src0.kind == Decoder::OperandKind::Vgpr && inst.src0.reg == 4u,
+	      "V_SWAP_B32 lost its VGPR operands");
+	// V_SWAP_B32 writes its source: a scalar or constant source, SDWA, DPP and VOP3 are rejected.
+	for (const uint32_t source: {1u, InlineU32(1), 249u, 250u}) {
+		const uint32_t invalid[] = {EncodeVop1(0x65u, 3, source), 0x00060604u};
+		Check(DecodeOne(invalid).opcode == Opcode::UNSUPPORTED,
+		      "V_SWAP_B32 accepted a source that is not a VGPR");
+	}
+	const uint32_t vop3_swap[] = {EncodeVop3Word0(0x1e5u, 3), EncodeVop3Word1(Vgpr(4), 0)};
+	Check(DecodeOne(vop3_swap).opcode == Opcode::UNSUPPORTED, "V_SWAP_B32 accepted a VOP3 form");
+
+	const uint32_t code[] = {
+	    0x7e0202ffu, 0x11223344u,              // v_mov_b32 v1, 0x11223344
+	    0x7e0402ffu, 0x8566f788u,              // v_mov_b32 v2, 0x8566f788
+	    0xd7440003u, 0x04020501u,              // v_perm_b32 v3, v1, v2, v0
+	    0xd7440004u, 0x03fe0501u, 0x0c0b0d05u, // v_perm_b32 v4, v1, v2, 0x0c0b0d05
+	    0x7e06cb04u,                           // v_swap_b32 v3, v4
+	    0xbf060504u,                           // s_cmp_eq_u32 s4, s5
+	    0xbe860507u,                           // s_cmov_b32 s6, s7
+	    0xb108fffdu,                           // s_cmovk_i32 s8, -3
+	    0x950a0e0cu,                           // s_bfe_i64 s[10:11], s[12:13], s14
+	    0x9510ff0cu, 0x00200005u,              // s_bfe_i64 s[16:17], s[12:13], 0x200005
+	    0x7e3e0280u,                           // v_mov_b32 v31, 0
+	    0xe0701000u, 0x8000031fu,              // buffer_store_dword v3, v31, s[0:3], 0 offen
+	    0xe0701004u, 0x8000041fu,              // buffer_store_dword v4, v31, s[0:3], 0 offen offset:4
+	    0x7e0a0206u,                           // v_mov_b32 v5, s6
+	    0xe0701008u, 0x8000051fu,              // buffer_store_dword v5, v31, s[0:3], 0 offen offset:8
+	    0x7e0a0208u,                           // v_mov_b32 v5, s8
+	    0xe070100cu, 0x8000051fu,              // buffer_store_dword v5, v31, s[0:3], 0 offen offset:12
+	    0x7e0a020au,                           // v_mov_b32 v5, s10
+	    0x7e0c0211u,                           // v_mov_b32 v6, s17
+	    0xe0701010u, 0x8000051fu,              // buffer_store_dword v5, v31, s[0:3], 0 offen offset:16
+	    0xe0701014u, 0x8000061fu,              // buffer_store_dword v6, v31, s[0:3], 0 offen offset:20
+	    0xbf810000u,                           // s_endpgm
+	};
+	CompileToValidSpirv(code, "moves, perm and swap");
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -352,6 +432,7 @@ int main() {
 	TestUnsupportedEncodingsDecodeWithoutExit();
 	TestPrepareShaderSourceRecordsUnsupported();
 	TestTranslateProgramReportsFailures();
+	TestMovesPermSwap();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

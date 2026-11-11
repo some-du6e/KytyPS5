@@ -146,6 +146,8 @@ constexpr OpcodeMap VOP1_OPCODE_LIST[] = {
     {0x5fu, Opcode::V_FRACT_F16},
     {0x60u, Opcode::V_SIN_F16},
     {0x61u, Opcode::V_COS_F16},
+    // gta6-prep: shader-alu
+    {0x65u, Opcode::V_SWAP_B32},
 };
 
 constexpr auto VOP1_OPS = Detail::MakeOpcodeTable<0x100>(VOP1_OPCODE_LIST);
@@ -338,6 +340,8 @@ constexpr OpcodeMap VOP3_OPCODE_LIST[] = {
     {0x35au, Opcode::V_INTERP_P2_F16},
     {0x36du, Opcode::V_ADD3_U32},
     {0x14fu, Opcode::V_ALIGNBYTE_B32},
+    // gta6-prep: shader-alu
+    {0x344u, Opcode::V_PERM_B32},
 };
 
 constexpr auto VOP3_OPS = Detail::MakeOpcodeTable<0x400>(VOP3_OPCODE_LIST);
@@ -1632,6 +1636,11 @@ void DecodeVop1(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		inst.src_count = 0;
 		return;
 	}
+	if (inst.opcode == Opcode::V_SWAP_B32 && src0 < 256u) {
+		// gta6-prep: shader-alu. Both operands are written: SRC0 is a VGPR, without SDWA or DPP.
+		SetUnsupported(inst, Family::VOP1, opcode, "V_SWAP_B32 source is not a VGPR");
+		return;
+	}
 	switch (src0) {
 		case 233u:
 		case 234u: DecodeVop1Dpp(pc, code, word_index, opcode, vdst, inst); return;
@@ -1733,7 +1742,8 @@ void DecodeVop3(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		SetUnsupported(inst, Family::VOP3, opcode, reason);
 		return;
 	}
-	if (inst.opcode == Opcode::UNSUPPORTED) {
+	if (inst.opcode == Opcode::UNSUPPORTED || inst.opcode == Opcode::V_SWAP_B32) {
+		// V_SWAP_B32 has no VOP3 encoding.
 		SetUnsupported(inst, Family::VOP3, opcode, "VOP3 opcode is not implemented");
 		return;
 	}

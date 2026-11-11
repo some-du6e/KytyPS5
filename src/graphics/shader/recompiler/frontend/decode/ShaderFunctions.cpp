@@ -80,6 +80,8 @@ bool ReadsScc(const Instruction& inst) {
 		case Opcode::S_CSELECT_B32:
 		case Opcode::S_CSELECT_B64:
 		case Opcode::S_CMOV_B64:
+		case Opcode::S_CMOV_B32:  // gta6-prep: shader-alu
+		case Opcode::S_CMOVK_I32: // gta6-prep: shader-alu
 		case Opcode::S_ADDC_U32:
 		case Opcode::S_SUBB_U32:
 		case Opcode::S_CBRANCH_SCC0:
@@ -134,6 +136,7 @@ bool WritesScc(const Instruction& inst) {
 		case Opcode::S_BFE_U32:
 		case Opcode::S_BFE_I32:
 		case Opcode::S_BFE_U64:
+		case Opcode::S_BFE_I64: // gta6-prep: shader-alu
 		case Opcode::S_ABSDIFF_I32:
 		case Opcode::S_LSHL1_ADD_U32:
 		case Opcode::S_LSHL2_ADD_U32:

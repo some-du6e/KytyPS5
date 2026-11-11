@@ -513,4 +513,103 @@ void Translator::PackB16(const Decoder::Instruction& inst, bool high0, bool high
 	WriteOperand(DestinationOperand(inst), result);
 }
 
+// gta6-prep: shader-alu
+
+// if SCC then D = S0 (S0 is SIMM16, sign extended, for S_CMOVK_I32). SCC is unchanged.
+void Translator::S_CMOV_B32(const Decoder::Instruction& inst) {
+	WriteOperand(DestinationOperand(inst),
+	             ir.Select(ir.GetScc(), ReadU32(inst.src0), ReadU32(inst.dst)));
+}
+
+// D.i64 = signext((S0.u64 >> S1[5:0]) & ((1 << S1[22:16]) - 1)) from bit S1[22:16] - 1; SCC =
+// D != 0. A width of 0 gives 0; widths past the remaining bits keep the field zero extended.
+void Translator::S_BFE_I64(const Decoder::Instruction& inst) {
+	const auto source = ReadU64(inst.src0);
+	const auto field  = ReadU32(inst.src1);
+	const auto offset =
+	    IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract, {field, IR::Value(0u), IR::Value(6u)}));
+	const auto raw_width =
+	    IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract, {field, IR::Value(16u), IR::Value(7u)}));
+	const auto width   = IR::U32(ir.Emit(IR::ValueOpcode::UMin32, {raw_width, IR::Value(64u)}));
+	const auto shifted = ir.Emit(IR::ValueOpcode::ShiftRightLogical64, {source, offset});
+	// 64 - width is 64 only for width 0, whose result the mask clears: shift by 63 instead.
+	const auto empty   = ir.IEqual(width, IR::U32(IR::Value(0u)));
+	const auto unused  = ir.Select(empty, IR::U32(IR::Value(63u)), ir.ISub(IR::U32(IR::Value(64u)), width));
+	const auto high    = ir.Emit(IR::ValueOpcode::ShiftLeftLogical64, {shifted, unused});
+	const auto extended = ir.Emit(IR::ValueOpcode::ShiftRightArithmetic64, {high, unused});
+	const auto keep     = ir.Select(empty, IR::U32(IR::Value(0u)), IR::U32(IR::Value(0xffffffffu)));
+	const auto result   = ir.Emit(IR::ValueOpcode::BitwiseAnd64, {extended, ir.ConstructU64(keep, keep)});
+	WriteOperand(DestinationOperand(inst), result);
+	ir.SetScc(IR::U1(ir.Emit(IR::ValueOpcode::INotEqual64, {result, IR::Value(uint64_t {0})})));
+}
+
+// D.byte[i] = select(S2.byte[i]) over the bytes of {S0, S1}: 0-7 a byte, 8-11 the sign of the
+// 16-bit halves (8: S1[15], 9: S1[31], 10: S0[15], 11: S0[31]) replicated, 12 zero, 13+ 0xff.
+void Translator::V_PERM_B32(const Decoder::Instruction& inst) {
+	const auto s0 = ReadU32(inst.src0);
+	const auto s1 = ReadU32(inst.src1);
+	const bool constant_selector =
+	    !runtime_word && (inst.src2.kind == Decoder::OperandKind::LiteralConstant ||
+	                      inst.src2.kind == Decoder::OperandKind::IntegerInlineConstant);
+	const auto u32 = [](uint32_t value) { return IR::U32(IR::Value(value)); };
+	IR::U32 result = u32(0u);
+	if (constant_selector) {
+		// The usual form: each byte is a shifted byte of a source or a constant.
+		uint32_t constant = 0;
+		for (uint32_t i = 0; i < 4u; i++) {
+			const auto sel = (inst.src2.value >> (i * 8u)) & 0xffu;
+			IR::U32    byte;
+			if (sel >= 12u) {
+				constant |= (sel == 12u ? 0u : 0xffu) << (i * 8u);
+				continue;
+			}
+			if (sel >= 8u) {
+				const auto word = (sel & 2u) != 0u ? s0 : s1;
+				byte            = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldSExtract,
+				                                  {word, IR::Value((sel & 1u) != 0u ? 31u : 15u), IR::Value(1u)}));
+				byte            = ir.BitwiseAnd(byte, u32(0xffu));
+			} else {
+				byte = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+				                       {(sel & 4u) != 0u ? s0 : s1, IR::Value((sel & 3u) * 8u), IR::Value(8u)}));
+			}
+			result = ir.BitwiseOr(result, ir.ShiftLeftLogical(byte, u32(i * 8u)));
+		}
+		if (constant != 0u) {
+			result = ir.BitwiseOr(result, u32(constant));
+		}
+		WriteOperand(DestinationOperand(inst), result);
+		return;
+	}
+	const auto s2 = ReadU32(inst.src2);
+	for (uint32_t i = 0; i < 4u; i++) {
+		const auto sel  = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+		                                  {s2, IR::Value(i * 8u), IR::Value(8u)}));
+		const auto bit  = [&](uint32_t mask) { return ir.INotEqual(ir.BitwiseAnd(sel, u32(mask)), u32(0u)); };
+		const auto word = ir.Select(bit(4u), s0, s1);
+		const auto byte = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+		                                  {word, ir.ShiftLeftLogical(ir.BitwiseAnd(sel, u32(3u)), u32(3u)),
+		                                   IR::Value(8u)}));
+		const auto sign_word = ir.Select(bit(2u), s0, s1);
+		const auto sign = ir.BitwiseAnd(
+		    IR::U32(ir.Emit(IR::ValueOpcode::BitFieldSExtract,
+		                    {sign_word, ir.Select(bit(1u), u32(31u), u32(15u)), IR::Value(1u)})),
+		    u32(0xffu));
+		const auto value = ir.Select(
+		    IR::U1(ir.Emit(IR::ValueOpcode::UGreaterThanEqual32, {sel, IR::Value(13u)})), u32(0xffu),
+		    ir.Select(ir.IEqual(sel, u32(12u)), u32(0u),
+		              ir.Select(IR::U1(ir.Emit(IR::ValueOpcode::UGreaterThanEqual32, {sel, IR::Value(8u)})),
+		                        sign, byte)));
+		result = ir.BitwiseOr(result, ir.ShiftLeftLogical(value, u32(i * 8u)));
+	}
+	WriteOperand(DestinationOperand(inst), result);
+}
+
+// tmp = D; D = S0; S0 = tmp, in the lanes of EXEC (both are VGPRs).
+void Translator::V_SWAP_B32(const Decoder::Instruction& inst) {
+	const auto destination = ReadU32(PlainOperand(inst.dst));
+	const auto source      = ReadU32(PlainOperand(inst.src0));
+	WriteOperand(PlainOperand(inst.dst), source);
+	WriteOperand(PlainOperand(inst.src0), destination);
+}
+
 } // namespace Libs::Graphics::ShaderRecompiler::Frontend

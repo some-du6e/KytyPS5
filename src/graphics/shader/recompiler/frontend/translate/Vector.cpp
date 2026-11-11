@@ -614,6 +614,9 @@ void Translator::EmitVector(const Decoder::Instruction& inst) {
 			return Integer3(inst, IR::ValueOpcode::ShiftLeftLogical32,
 			                IR::ValueOpcode::BitwiseOr32);
 		case O::V_CNDMASK_B32: return V_CNDMASK_B32(inst);
+		// gta6-prep: shader-alu
+		case O::V_PERM_B32: return V_PERM_B32(inst);
+		case O::V_SWAP_B32: return V_SWAP_B32(inst);
 		default: return FailMissingTranslation(inst);
 	}
 }

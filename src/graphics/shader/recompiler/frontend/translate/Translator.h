@@ -279,6 +279,12 @@ private:
 	void V_INTERP_MOV_F32(const Decoder::Instruction& inst);
 	void EXP(const Decoder::Instruction& inst);
 
+	// gta6-prep: shader-alu
+	void S_CMOV_B32(const Decoder::Instruction& inst);
+	void S_BFE_I64(const Decoder::Instruction& inst);
+	void V_PERM_B32(const Decoder::Instruction& inst);
+	void V_SWAP_B32(const Decoder::Instruction& inst);
+
 	void EmitScalar(const Decoder::Instruction& inst);
 	void EmitVector(const Decoder::Instruction& inst);
 	void EmitInterpolation(const Decoder::Instruction& inst);

@@ -772,6 +772,14 @@ enum class Opcode {
 	RT_COMMIT,
 	RT_EXIT,
 	RT_ALPHA,
+
+	// gta6-prep: shader-alu
+	S_CMOV_B32,
+	S_CMOVK_I32,
+	S_BFE_I64,
+	V_PERM_B32,
+	V_SWAP_B32,
+
 	COUNT
 };
 
