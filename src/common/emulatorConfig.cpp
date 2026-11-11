@@ -362,4 +362,10 @@ const std::vector<std::string>& GetGuestArguments() {
 	return g_config->guest_arguments;
 }
 
+// gta6-prep: hle
+const std::filesystem::path& GetNidNamesFile() {
+	static const std::filesystem::path none;
+	return g_config != nullptr ? g_config->nid_names_file : none;
+}
+
 } // namespace Config

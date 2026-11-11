@@ -23,6 +23,7 @@
 #include "libs/libs.h"
 #include "libs/network.h"
 #include "loader/additionalContent.h"
+#include "loader/nid.h"
 #include "loader/runtimeLinker.h"
 #include "loader/systemContent.h"
 
@@ -114,6 +115,22 @@ static void Init(const Config::ConfigOptions& cfg, const std::filesystem::path& 
 	subsystems.Initialize<Libs::Graphics::Lifecycle>();
 }
 
+// gta6-prep: hle. --nid-names: the names of the NIDs the unresolved-import logs mention.
+static void LoadNidNames() {
+	const auto& file = Config::GetNidNamesFile();
+	if (file.empty()) {
+		return;
+	}
+	size_t added = 0;
+	if (Loader::Nid::GlobalNames().LoadFile(file, &added)) {
+		Log::WriteToConsoleAndLog(
+		    fmt::format("NID names: {} names from {}\n", added, Common::PathToString(file)));
+	} else {
+		Log::WriteToConsoleAndLog(
+		    fmt::format("NID names: cannot read {}\n", Common::PathToString(file)));
+	}
+}
+
 static void LoadElf(const std::filesystem::path& elf, bool dbg_print_reloc = false,
                     const std::filesystem::path& save_name = {}) {
 	auto* rt = Common::Singleton<Loader::RuntimeLinker>::Instance();
@@ -153,6 +170,7 @@ void Run(const RunOptions& options) {
 	Init(options.config, param_json, subsystems);
 
 	PrintSystemInfo();
+	LoadNidNames();
 	std::string title_id;
 	Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id);
 	if (title_id.empty()) {

@@ -135,6 +135,9 @@ struct ConfigOptions {
 	Keymap keymap;
 	// Ordinary boots need a non-null argv[0]; --guest-exec supplies the caller's arguments.
 	std::vector<std::string> guest_arguments {""};
+	// gta6-prep: hle
+	// --nid-names: symbol names, one per line, hashed to name the NIDs of unresolved imports.
+	std::filesystem::path nid_names_file;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -248,6 +251,10 @@ bool RedZoneProtectionEnabled();
 
 const Keymap& GetKeymap();
 const std::vector<std::string>& GetGuestArguments();
+
+// gta6-prep: hle
+// --nid-names <file>; empty: none.
+const std::filesystem::path& GetNidNamesFile();
 
 } // namespace Config
 

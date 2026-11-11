@@ -172,6 +172,9 @@ static void PrintUsage() {
 #endif
 	::printf("  --keymap <Control=Input>             DualSense mapping; may be repeated.\n");
 	::printf("  --rd                                 Enable RenderDoc capture.\n");
+	// gta6-prep: hle
+	::printf("  --nid-names <file>                   Symbol names, one per line, to name the NIDs\n"
+	         "                                       of unresolved imports in the log.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -529,6 +532,8 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 				return false;
 			}
 			options.config.keymap.push_back(value);
+		} else if (arg == "--nid-names") { // gta6-prep: hle (through the last branch)
+			options.config.nid_names_file = Common::PathFromUtf8(value);
 		} else {
 			::printf("unknown option: %s\n", arg.c_str());
 			return false;
