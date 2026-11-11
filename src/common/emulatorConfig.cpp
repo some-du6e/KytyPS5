@@ -380,4 +380,9 @@ bool RebindImportsEnabled() {
 	return g_config == nullptr || g_config->rebind_imports;
 }
 
+const std::filesystem::path& GetDumpImportsFile() {
+	static const std::filesystem::path none;
+	return g_config != nullptr ? g_config->dump_imports_file : none;
+}
+
 } // namespace Config

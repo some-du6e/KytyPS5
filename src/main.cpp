@@ -180,6 +180,9 @@ static void PrintUsage() {
 	         "                                       instead of an offline error.\n");
 	::printf("  --no-rebind-imports                  Keep imports stubbed at boot stubbed when a module\n"
 	         "                                       loaded later exports them.\n");
+	::printf("  --dump-imports <file>                With --game: write which imports of eboot.bin and\n"
+	         "                                       sce_module/*.prx Kyty implements, a PRX exports or\n"
+	         "                                       nothing resolves, then exit. No GPU, no guest code.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -543,6 +546,8 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 			options.config.keymap.push_back(value);
 		} else if (arg == "--nid-names") { // gta6-prep: hle (through the last branch)
 			options.config.nid_names_file = Common::PathFromUtf8(value);
+		} else if (arg == "--dump-imports") {
+			options.config.dump_imports_file = Common::PathFromUtf8(value);
 		} else {
 			::printf("unknown option: %s\n", arg.c_str());
 			return false;
@@ -618,6 +623,11 @@ static int Main(int argc, char* argv[]) {
 	if (show_help) {
 		PrintUsage();
 		return 0;
+	}
+
+	// gta6-prep: hle
+	if (!options.config.dump_imports_file.empty()) {
+		return DumpImports(options);
 	}
 
 	Run(options);

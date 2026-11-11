@@ -144,6 +144,9 @@ struct ConfigOptions {
 	bool                  unresolved_return_zero = false;
 	// --no-rebind-imports: imports stubbed at load stay stubbed when a later module exports them.
 	bool                  rebind_imports         = true;
+	// --dump-imports <file>: write the import report of eboot.bin and sce_module/*.prx and exit,
+	// without a GPU and without running guest code. Empty: normal run.
+	std::filesystem::path dump_imports_file;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -264,6 +267,7 @@ const std::filesystem::path& GetNidNamesFile();
 bool StrictImportsEnabled();
 bool UnresolvedReturnZero();
 bool RebindImportsEnabled();
+const std::filesystem::path& GetDumpImportsFile();
 
 } // namespace Config
 

@@ -83,6 +83,8 @@ void TestLibraryFromGeneratedName() {
 	CheckEqual(Diag::LibraryFromGeneratedName("x[libSceNpManager_v1][NpManager_v1.1][Func]"),
 	           "NpManager", "libSce prefix stripped");
 	CheckEqual(Diag::LibraryFromGeneratedName("plain#1#1"), "", "raw name has no library segment");
+	CheckEqual(Diag::LibraryDisplayName("libSceNpWebApi2"), "NpWebApi2", "raw library name");
+	CheckEqual(Diag::LibraryDisplayName("libkernel"), "libkernel", "libkernel keeps its name");
 	CheckEqual(Diag::NidFromName("9T2pDF2Ryqg[Net_v1][Net_v1.1][Func]"), "9T2pDF2Ryqg",
 	           "NID of a generated name");
 	CheckEqual(Diag::NidFromName("9T2pDF2Ryqg#A#B"), "9T2pDF2Ryqg", "NID of a raw name");

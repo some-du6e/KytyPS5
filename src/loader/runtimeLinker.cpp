@@ -1574,6 +1574,13 @@ void RuntimeLinker::Clear() {
 
 void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* program,
                             SymbolRecord* out_info, bool* bind_self) {
+	if (!ResolveImport(name, type, program, out_info, bind_self)) {
+		EXIT("l == nullptr || m == nullptr");
+	}
+}
+
+bool RuntimeLinker::ResolveImport(const std::string& name, SymbolType type, Program* program,
+                                  SymbolRecord* out_info, bool* bind_self) {
 	KYTY_PROFILER_FUNCTION();
 
 	Common::LockGuard lock(m_mutex);
@@ -1670,10 +1677,10 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 			if (rec == nullptr) {
 				if (resolve_by_nid(sr.name, out_info)) {
 					LOGF("PS5 NID fallback: %s -> %s\n", sr.name.c_str(), out_info->name.c_str());
-					return;
+					return true;
 				}
 				if (resolve_notype_by_nid(sr.name, SymbolDatabase::GenerateName(sr), out_info)) {
-					return;
+					return true;
 				}
 			}
 
@@ -1688,19 +1695,88 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 			if (resolve_by_nid(ids.at(0), out_info)) {
 				LOGF("PS5 NID fallback: %s -> %s (missing lib/module metadata)\n",
 				     ids.at(0).c_str(), out_info->name.c_str());
-				return;
+				return true;
 			}
 			if (resolve_notype_by_nid(ids.at(0), ids.at(0), out_info)) {
-				return;
+				return true;
 			}
 
-			EXIT("l == nullptr || m == nullptr");
+			return false;
 		}
 	} else {
 		out_info->vaddr    = 0;
 		out_info->name     = name;
 		out_info->dbg_name = "";
 	}
+	return true;
+}
+
+std::vector<ImportDiagnostics::ImportReportEntry> RuntimeLinker::CollectImportReport() {
+	Common::LockGuard lock(m_mutex);
+
+	std::vector<ImportDiagnostics::ImportReportEntry> entries;
+	for (auto* program: m_programs) {
+		if (program->dynamic_info == nullptr || program->dynamic_info->symbol_table == nullptr ||
+		    program->dynamic_info->str_table == nullptr) {
+			continue;
+		}
+		const auto& info     = *program->dynamic_info;
+		const auto  importer = Common::PathToString(program->file_name.filename());
+		ForEachRelocation(program, [&](Elf64_Rela* r, uint32_t /*index*/, bool /*jmprela*/) {
+			const auto rela_type = r->GetType();
+			if (rela_type != R_X86_64_64 && rela_type != R_X86_64_GLOB_DAT &&
+			    rela_type != R_X86_64_JUMP_SLOT) {
+				return;
+			}
+			const auto& symbol = info.symbol_table[r->GetSymbol()];
+			if (symbol.GetBind() != STB_GLOBAL && symbol.GetBind() != STB_WEAK) {
+				return;
+			}
+			SymbolType type = SymbolType::Unknown;
+			switch (symbol.GetType()) {
+				case STT_NOTYPE: type = SymbolType::NoType; break;
+				case STT_FUNC: type = SymbolType::Func; break;
+				case STT_OBJECT: type = SymbolType::Object; break;
+				default: return;
+			}
+			const std::string raw = info.str_table + symbol.st_name;
+			const auto        ids = Common::Split(raw, '#');
+
+			ImportDiagnostics::ImportReportEntry entry {};
+			entry.importer = importer;
+			entry.nid      = ids.empty() ? raw : ids.at(0);
+			entry.type     = std::string(magic_enum::enum_name(type));
+			if (ids.size() == 3) {
+				const auto* library = FindLibrary(*program, ids.at(1));
+				entry.library = library != nullptr
+				                    ? std::string(ImportDiagnostics::LibraryDisplayName(library->name))
+				                    : std::string();
+			}
+
+			SymbolRecord resolved {};
+			resolved.vaddr = 0;
+			if (ResolveImport(raw, type, program, &resolved, nullptr) && resolved.vaddr != 0) {
+				const auto it = std::find_if(m_programs.begin(), m_programs.end(), [&](auto* p) {
+					return resolved.vaddr >= p->base_vaddr &&
+					       resolved.vaddr < p->base_vaddr + p->mapped_size;
+				});
+				if (it != m_programs.end()) {
+					entry.state  = ImportDiagnostics::ImportState::Lle;
+					entry.target = Common::PathToString((*it)->file_name.filename());
+				} else {
+					entry.state  = ImportDiagnostics::ImportState::Hle;
+					entry.target = resolved.dbg_name.empty() ? resolved.name : resolved.dbg_name;
+				}
+			} else {
+				entry.state = ImportDiagnostics::ImportState::Unresolved;
+				if (const auto* name = Nid::FindNameForImport(raw); name != nullptr) {
+					entry.target = *name;
+				}
+			}
+			entries.push_back(std::move(entry));
+		});
+	}
+	return entries;
 }
 
 uint64_t RuntimeLinker::ReadFromElf(Program* program, uint64_t vaddr) {

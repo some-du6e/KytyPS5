@@ -18,6 +18,10 @@ static std::string_view StripLibScePrefix(std::string_view library) {
 	return library.starts_with(prefix) ? library.substr(prefix.size()) : library;
 }
 
+std::string_view LibraryDisplayName(std::string_view library) {
+	return StripLibScePrefix(library);
+}
+
 std::string_view LibraryFromGeneratedName(std::string_view name) {
 	const auto open = name.find('[');
 	if (open == std::string_view::npos) {

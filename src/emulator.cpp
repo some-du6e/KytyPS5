@@ -23,12 +23,16 @@
 #include "libs/libs.h"
 #include "libs/network.h"
 #include "loader/additionalContent.h"
+#include "loader/elf.h"
+#include "loader/importDiagnostics.h"
 #include "loader/nid.h"
 #include "loader/runtimeLinker.h"
 #include "loader/systemContent.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <thread>
 
 namespace Emulator {
@@ -203,6 +207,90 @@ void Run(const RunOptions& options) {
 	LoadElf(options.elf);
 
 	Execute(options.game_patch);
+}
+
+// gta6-prep: hle
+int DumpImports(const RunOptions& options) {
+	if (options.app0_dir.empty() || options.elf.empty()) {
+		EXIT("--dump-imports needs --game\n");
+	}
+
+	auto cfg = options.config;
+	// Nothing runs, so no instruction patches or trampolines are needed.
+	cfg.guest_tsc_enabled = false;
+	cfg.amd_cpu_enabled   = false;
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	cfg.red_zone_protection_enabled = false;
+#endif
+	cfg.splash_enabled = false;
+
+	Common::Subsystems subsystems(false);
+	subsystems.Initialize<Config::Lifecycle>();
+	Config::Load(cfg);
+	subsystems.Initialize<Log::Lifecycle>();
+	if (const auto param_json = options.app0_dir / "sce_sys" / "param.json";
+	    Common::File::IsFileExisting(param_json)) {
+		Loader::SystemContentLoadParamSfo(param_json);
+	}
+	subsystems.Initialize<Libs::LibKernel::PthreadLifecycle>();
+	subsystems.Initialize<Profiler::Lifecycle>();
+	subsystems.Initialize<Libs::LibKernel::Memory::Lifecycle>();
+	subsystems.Initialize<Libs::LibKernel::FileSystem::Lifecycle>();
+	LoadNidNames();
+
+	Libs::LibKernel::FileSystem::Mount(options.app0_dir, "/app0");
+	Libs::LibKernel::FileSystem::Mount(options.app0_dir, "/hostapp");
+
+	auto* rt = Common::Singleton<Loader::RuntimeLinker>::Instance();
+	Libs::InitAll(rt->Symbols());
+
+	std::vector<std::filesystem::path> files {
+	    Libs::LibKernel::FileSystem::GetRealFilename(Common::PathToGenericString(options.elf))};
+	const auto module_dir = Libs::LibKernel::FileSystem::GetRealFilename("/app0/sce_module");
+	if (Common::File::IsDirectoryExisting(module_dir)) {
+		std::vector<std::string> names;
+		for (const auto& entry: Common::File::GetDirEntries(module_dir)) {
+			if (entry.is_file && Common::ToLower(entry.name).ends_with(".prx")) {
+				names.push_back(entry.name);
+			}
+		}
+		std::sort(names.begin(), names.end());
+		for (const auto& name: names) {
+			files.push_back(module_dir / Common::PathFromUtf8(name));
+		}
+	}
+
+	std::vector<std::string> programs;
+	for (const auto& file: files) {
+		const auto name = Common::PathToString(file.filename());
+		// LoadProgram ends the process on an ELF it cannot use (an encrypted PRX, say).
+		Loader::Elf64 elf;
+		elf.Open(file);
+		if (!elf.IsValid()) {
+			Log::WriteToConsoleAndLog(fmt::format("Import report: skipped {} (not a valid ELF)\n",
+			                                      Common::PathToString(file)));
+			continue;
+		}
+		rt->LoadProgram(file);
+		programs.push_back(name);
+	}
+
+	const auto entries = rt->CollectImportReport();
+	const auto text    = Loader::ImportDiagnostics::FormatImportReport(programs, entries);
+	const auto& out    = options.config.dump_imports_file;
+	std::ofstream file(out, std::ios::binary | std::ios::trunc);
+	file.write(text.data(), static_cast<std::streamsize>(text.size()));
+	file.close();
+	const bool written = !file.fail();
+
+	Log::WriteToConsoleAndLog(
+	    written ? fmt::format("Import report: {} programs written to {}\n", programs.size(),
+	                          Common::PathToString(out))
+	            : fmt::format("Import report: cannot write {}\n", Common::PathToString(out)));
+
+	// Before the memory subsystem goes away with `subsystems`.
+	rt->Clear();
+	return written ? 0 : 1;
 }
 
 } // namespace Emulator

@@ -919,6 +919,10 @@ if(BUILD_TESTING)
 	add_test(NAME vdecsw COMMAND $<TARGET_FILE:vdecsw_tests>)
 	add_test(NAME bit_array COMMAND $<TARGET_FILE:bit_array_tests>)
 	add_test(NAME hle_softfail COMMAND $<TARGET_FILE:hle_softfail_tests>)
+	# The gta6-prep: hle options parse (--help stops before any of them acts).
+	add_test(NAME emulator_hle_options_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --strict-imports --unresolved-return-zero
+	                 --no-rebind-imports --nid-names names.txt --dump-imports imports.txt)
 	add_test(NAME lru_cache COMMAND $<TARGET_FILE:lru_cache_tests>)
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)

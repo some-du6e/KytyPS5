@@ -18,6 +18,8 @@ namespace Loader::ImportDiagnostics {
 // library name ("libSceNpManager") loses its "libSce" prefix the way GenerateName strips it.
 // Empty when the name has no library segment.
 std::string_view LibraryFromGeneratedName(std::string_view name);
+// A raw ELF library name as generated names show it: "libSceNpManager" -> "NpManager".
+std::string_view LibraryDisplayName(std::string_view library);
 // The NID part of a generated ("<nid>[...") or raw ("<nid>#lib#mod") import name.
 std::string_view NidFromName(std::string_view name);
 

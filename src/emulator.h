@@ -19,6 +19,11 @@ struct RunOptions {
 };
 
 void Run(const RunOptions& options);
+// gta6-prep: hle. --dump-imports: loads options.elf and every /app0/sce_module/*.prx, writes the
+// import report (Loader::ImportDiagnostics::FormatImportReport) to the --dump-imports file and
+// returns the process exit code. Initializes only what loading needs: no GPU, audio, input or
+// network, and no guest code runs.
+int DumpImports(const RunOptions& options);
 int LoadExec(const char* path, const char* const argv[]);
 // In a process LoadExec started: waits until the process that started it has exited.
 void WaitForLoadExecParent();
