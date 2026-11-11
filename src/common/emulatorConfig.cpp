@@ -407,4 +407,8 @@ bool KeepSmallLayerTargets() {
 	return g_config == nullptr || g_config->keep_small_layer_targets;
 }
 
+bool TlasCacheEnabled() {
+	return g_config == nullptr || g_config->tlas_cache_enabled;
+}
+
 } // namespace Config

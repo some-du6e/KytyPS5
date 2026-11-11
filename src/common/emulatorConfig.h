@@ -165,6 +165,9 @@ struct ConfigOptions {
 	bool lod_stats_enabled = true;
 	// --no-keep-small-layer-targets: memory pressure may evict small render targets (17fd75d1).
 	bool keep_small_layer_targets = true;
+	// --no-tlas-cache: without native ray tracing, CPU-written guest TLASes are not cached and
+	// pinned before their dispatches (b4bee7b8).
+	bool tlas_cache_enabled = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -324,6 +327,11 @@ bool LodStatsEnabled();
 // glyph atlases, UI), so their GPU-only content is never lost (17fd75d1). Off, they are evicted
 // like other images. On without a loaded configuration.
 bool KeepSmallLayerTargets();
+
+// Without native ray tracing, the CPU-written TLAS (and BLASes) of a program whose BVH walk the
+// ray tracing patch recognizes get pinned cached buffers before its dispatch (b4bee7b8). With
+// native ray tracing they always do. On without a loaded configuration.
+bool TlasCacheEnabled();
 
 } // namespace Config
 

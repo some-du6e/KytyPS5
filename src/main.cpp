@@ -218,6 +218,8 @@ static void PrintUsage() {
 	::printf("                                       compile pixel shaders once, without mip statistics.\n");
 	::printf("  --no-keep-small-layer-targets        Let memory pressure evict render targets up to\n");
 	::printf("                                       1024x1024 like other images (saves video memory).\n");
+	::printf("  --no-tlas-cache                      Without --native-raytracing, do not cache and pin\n");
+	::printf("                                       CPU-written guest TLASes before their dispatches.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -379,6 +381,8 @@ static constexpr Flag FLAGS[] = {
     {"--no-lod-stats", &ConfigOptions::lod_stats_enabled, false},
     {"--keep-small-layer-targets", &ConfigOptions::keep_small_layer_targets},
     {"--no-keep-small-layer-targets", &ConfigOptions::keep_small_layer_targets, false},
+    {"--tlas-cache", &ConfigOptions::tlas_cache_enabled},
+    {"--no-tlas-cache", &ConfigOptions::tlas_cache_enabled, false},
 };
 
 // gta6-prep: config

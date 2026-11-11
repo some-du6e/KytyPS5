@@ -15,6 +15,7 @@ constexpr std::string_view SafeTokens[] = {
     "--no-uniform-buffers",
     "--no-lod-stats",
     "--no-keep-small-layer-targets",
+    "--no-tlas-cache",
 };
 
 // Options that use less video memory. Only options that exist are listed.
