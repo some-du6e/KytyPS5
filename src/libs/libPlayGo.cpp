@@ -3,6 +3,7 @@
 #include "common/common.h"
 #include "common/emulatorConfig.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/stringUtils.h"
 #include "libs/errno.h"
 #include "libs/libs.h"
@@ -29,6 +30,8 @@ static constexpr uint64_t PLAYGO_LANGUAGE_MASK_ALL      = 0xffffffffffffffffull;
 static constexpr uint64_t PLAYGO_SCENARIO_MASK_ALL      = 0x1full;
 
 static uint32_t g_chunks_num = 0;
+// --playgo-hack made up g_chunks_num because the package has no chunk metadata.
+static bool     g_chunks_faked = false;
 
 struct PlayGoInitParams {
 	const void* buf_addr;
@@ -58,7 +61,20 @@ static bool ensure_chunks_loaded() {
 }
 
 static bool is_valid_chunk(uint16_t chunk_id) {
-	return ensure_chunks_loaded() && chunk_id < g_chunks_num;
+	if (!ensure_chunks_loaded()) {
+		return false;
+	}
+	if (chunk_id < g_chunks_num) {
+		return true;
+	}
+	// The made-up count can be smaller than the title's real layout: every chunk is installed.
+	if (g_chunks_faked) {
+		KYTY_SOFT_FAIL("scePlayGo", "chunk id %u beyond the %u chunks --playgo-hack assumes, "
+		               "reported installed",
+		               static_cast<unsigned>(chunk_id), g_chunks_num);
+		return true;
+	}
+	return false;
 }
 
 static bool is_valid_locus(int8_t locus) {
@@ -99,7 +115,8 @@ int KYTY_SYSV_ABI PlayGoInitialize(const PlayGoInitParams* init) {
 	     reinterpret_cast<uint64_t>(init->buf_addr), init->buf_size, init->reserved);
 
 	if (Config::PlayGoHackEnabled() && !ensure_chunks_loaded()) {
-		g_chunks_num = PLAYGO_DEFAULT_CHUNKS_NUM;
+		g_chunks_num   = PLAYGO_DEFAULT_CHUNKS_NUM;
+		g_chunks_faked = true;
 		LOGF("\t playgo_hack chunks = %" PRIu32 "\n", g_chunks_num);
 	}
 

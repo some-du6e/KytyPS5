@@ -2,6 +2,7 @@
 #include "common/assert.h"
 #include "common/file.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/stringUtils.h"
 #include "kernel/eventQueue.h"
 #include "kernel/fileSystem.h"
@@ -1897,7 +1898,13 @@ static int KYTY_SYSV_ABI CommandBufferWaitOnCounter(void* command_buffer, uint8_
 	if (command_buffer == nullptr || access > 7 || compare > 6 || mask_op > 1 || flush > 1) {
 		return LibKernel::KERNEL_ERROR_EINVAL;
 	}
-	EXIT_NOT_IMPLEMENTED(access != 1 || mask_op != 0 || flush != 0 || value > UINT32_MAX);
+	if (access != 1 || mask_op != 0 || flush != 0 || value > UINT32_MAX) {
+		KYTY_SOFT_FAIL("sceAmprCommandBufferWaitOnCounter",
+		               "unsupported access %u, mask_op %u, flush %u or value 0x%" PRIx64
+		               ", EINVAL",
+		               access, mask_op, flush, value);
+		return LibKernel::KERNEL_ERROR_EINVAL;
+	}
 	return AppendCommandRecord(reinterpret_cast<uint64_t>(command_buffer),
 	                           CommandBufferState::WaitCommand {index, value, compare, true},
 	                           0x20)
@@ -1942,7 +1949,12 @@ static int KYTY_SYSV_ABI CommandBufferWriteCounter(void* command_buffer, uint8_t
 	if (command_buffer == nullptr || index >= 128 || access > 7 || operation > 4 || mode > 1) {
 		return LibKernel::KERNEL_ERROR_EINVAL;
 	}
-	EXIT_NOT_IMPLEMENTED(access != 1 || operation != 0 || mode != 0);
+	if (access != 1 || operation != 0 || mode != 0) {
+		KYTY_SOFT_FAIL("sceAmprCommandBufferWriteCounter",
+		               "unsupported access %u, operation %u or mode %u, EINVAL", access, operation,
+		               mode);
+		return LibKernel::KERNEL_ERROR_EINVAL;
+	}
 	return AppendCommandRecord(reinterpret_cast<uint64_t>(command_buffer),
 	                           CommandBufferState::WriteCounterCommand {
 	                               index, static_cast<uint32_t>(value)},
