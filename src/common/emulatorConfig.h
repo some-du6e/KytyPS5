@@ -150,6 +150,8 @@ struct ConfigOptions {
 	// Config::OptionKey() of every option the command line set, presets included: the title's
 	// default preset leaves them alone.
 	std::vector<std::string> explicit_options;
+	// --no-overlap-dispatches: every direct dispatch records its barrier after it (39765baa).
+	bool overlap_dispatches_enabled = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -273,6 +275,11 @@ const std::vector<std::string>& GetGuestArguments();
 // param.json is loaded. None until then.
 void SetTitleQuirks(Common::QuirkMask quirks);
 bool QuirkEnabled(Common::Quirk quirk);
+
+// Direct dispatches of one guest queue that the guest does not order overlap: the barrier after
+// one is deferred and dropped when the next operation is such a dispatch. Off, each records it.
+// On without a loaded configuration.
+bool OverlapDispatchesEnabled();
 
 } // namespace Config
 

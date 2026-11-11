@@ -8,6 +8,7 @@ namespace {
 // behaviour changes is turned off (each one also has its own --no- flag).
 constexpr std::string_view SafeTokens[] = {
     "--no-async-pipelines",
+    "--no-overlap-dispatches",
 };
 
 // Options that use less video memory. Only options that exist are listed.

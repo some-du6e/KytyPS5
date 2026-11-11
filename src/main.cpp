@@ -204,6 +204,8 @@ static void PrintUsage() {
 	         "                                       --relaxed-shader-float, --shader-cache and\n"
 	         "                                       --perf-overlay (--occlusion-queries is the on form\n"
 	         "                                       of --no-occlusion-queries).\n");
+	::printf("  --no-overlap-dispatches              Record a barrier after every direct dispatch\n");
+	::printf("                                       instead of letting unordered ones overlap.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -351,6 +353,8 @@ static constexpr Flag FLAGS[] = {
     {"--no-shader-cache", &ConfigOptions::shader_cache_enabled, false},
     {"--no-perf-overlay", &ConfigOptions::perf_overlay_enabled, false},
     {"--occlusion-queries", &ConfigOptions::occlusion_queries_enabled},
+    {"--overlap-dispatches", &ConfigOptions::overlap_dispatches_enabled},
+    {"--no-overlap-dispatches", &ConfigOptions::overlap_dispatches_enabled, false},
 };
 
 // gta6-prep: config

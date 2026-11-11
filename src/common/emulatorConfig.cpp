@@ -379,4 +379,8 @@ bool QuirkEnabled(Common::Quirk quirk) {
 	return (g_title_quirks.load(std::memory_order_relaxed) & Common::QuirkBit(quirk)) != 0;
 }
 
+bool OverlapDispatchesEnabled() {
+	return g_config == nullptr || g_config->overlap_dispatches_enabled;
+}
+
 } // namespace Config
