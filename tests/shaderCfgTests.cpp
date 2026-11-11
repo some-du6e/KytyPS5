@@ -23,6 +23,7 @@
 #include "graphics/shader/recompiler/frontend/translate/Translate.h"
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 #include "graphics/shader/recompiler/ir/IREmitter.h"
+#include "graphics/shader/recompiler/ir/Serialize.h"
 #include "graphics/shader/recompiler/ir/ShaderIR.h"
 #include "graphics/shader/recompiler/ir/passes/ConstantPropagation.h"
 #include "graphics/shader/recompiler/ir/passes/DeadCodeElimination.h"
@@ -10191,6 +10192,25 @@ void TestMaskedSelectElimination() {
         "masked select elimination dropped an old value another lane reads");
 }
 
+// gta6-prep: config: the switches of the fork's shader optimizations are part of the SPIR-V
+// profile, which the shader store header records, so a store written with one setting is not
+// read with another. Their defaults keep the optimizations on.
+void TestSpirvProfileSwitches() {
+  using ShaderRecompiler::Spirv::Profile;
+  const auto bytes = [](const Profile &profile) {
+    ShaderRecompiler::IR::Writer writer;
+    ShaderRecompiler::IR::IoAll(writer, profile);
+    return writer.bytes;
+  };
+  const Profile defaults{};
+  Check(defaults.masked_select_elimination,
+        "masked select elimination is off by default");
+  Profile masked_off = defaults;
+  masked_off.masked_select_elimination = false;
+  Check(bytes(masked_off) != bytes(defaults),
+        "the shader store header ignores --no-masked-select-elimination");
+}
+
 void TestLaneMaskProjection() {
   using namespace ShaderRecompiler::IR;
   for (const uint32_t wave_size : {32u, 64u}) {
@@ -14593,6 +14613,7 @@ int main() {
   TestValuePhiValidation();
   TestLaneMaskProjection();
   TestMaskedSelectElimination();
+  TestSpirvProfileSwitches();
   TestLateConstantPropagation();
   TestRepeatedBitcastPropagation();
   TestMaskedShiftConstantPropagation();

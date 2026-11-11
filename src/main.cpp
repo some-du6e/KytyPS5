@@ -208,6 +208,8 @@ static void PrintUsage() {
 	::printf("                                       instead of letting unordered ones overlap.\n");
 	::printf("  --no-defer-draw-barriers             End rendering and record a barrier after every\n");
 	::printf("                                       draw that writes memory.\n");
+	::printf("  --no-masked-select-elimination       Keep the masked selects of guest vector writes in\n");
+	::printf("                                       recompiled shaders.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -359,6 +361,8 @@ static constexpr Flag FLAGS[] = {
     {"--no-overlap-dispatches", &ConfigOptions::overlap_dispatches_enabled, false},
     {"--defer-draw-barriers", &ConfigOptions::defer_draw_barriers_enabled},
     {"--no-defer-draw-barriers", &ConfigOptions::defer_draw_barriers_enabled, false},
+    {"--masked-select-elimination", &ConfigOptions::masked_select_elimination_enabled},
+    {"--no-masked-select-elimination", &ConfigOptions::masked_select_elimination_enabled, false},
 };
 
 // gta6-prep: config

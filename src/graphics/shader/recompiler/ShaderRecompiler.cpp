@@ -761,11 +761,15 @@ CompileResult CompileProgram(TranslateResult translated, const CompileOptions& o
 	ir.value_storage.clear();
 	IR::RemoveIdentities(ir);
 	IR::EliminateDeadCode(ir.blocks);
-	if (const auto selects = IR::EliminateMaskedSelects(ir.blocks); selects != 0) {
-		LOGF("ShaderRecompiler %s masked select elimination: selects=%" PRIu32 "\n", stage, selects);
+	// gta6-prep: config: --no-masked-select-elimination skips the pass and its clean-up, as
+	// before d50d233e.
+	if (options.profile->masked_select_elimination) {
+		if (const auto selects = IR::EliminateMaskedSelects(ir.blocks); selects != 0) {
+			LOGF("ShaderRecompiler %s masked select elimination: selects=%" PRIu32 "\n", stage, selects);
+		}
+		IR::RemoveIdentities(ir);
+		IR::EliminateDeadCode(ir.blocks);
 	}
-	IR::RemoveIdentities(ir);
-	IR::EliminateDeadCode(ir.blocks);
 
 	IR::CollectShaderInfo(ir, options.input_info);
 	std::string ir_dump;

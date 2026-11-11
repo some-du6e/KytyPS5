@@ -387,4 +387,8 @@ bool DeferDrawBarriersEnabled() {
 	return g_config == nullptr || g_config->defer_draw_barriers_enabled;
 }
 
+bool MaskedSelectEliminationEnabled() {
+	return g_config == nullptr || g_config->masked_select_elimination_enabled;
+}
+
 } // namespace Config

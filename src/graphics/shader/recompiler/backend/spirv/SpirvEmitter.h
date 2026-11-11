@@ -22,6 +22,9 @@ struct Profile {
 	bool r8g8_srgb_views = false;
 	// Native float ops: NaN, signed-zero and denormal results may differ from the guest.
 	bool relaxed_float = false;
+	// gta6-prep: config: switches of the fork's shader optimizations (--no-<name> turns them off).
+	// IR::EliminateMaskedSelects() runs (d50d233e).
+	bool masked_select_elimination = true;
 };
 
 inline constexpr Profile DefaultProfile {};

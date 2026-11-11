@@ -154,6 +154,8 @@ struct ConfigOptions {
 	bool overlap_dispatches_enabled = true;
 	// --no-defer-draw-barriers: a draw that writes memory ends its rendering instance (2e91a677).
 	bool defer_draw_barriers_enabled = true;
+	// --no-masked-select-elimination: the recompiler keeps masked selects (d50d233e).
+	bool masked_select_elimination_enabled = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -287,6 +289,11 @@ bool OverlapDispatchesEnabled();
 // while draws of its queue that the guest does not order after it follow. Off, each such draw
 // ends rendering and records its barrier. On without a loaded configuration.
 bool DeferDrawBarriersEnabled();
+
+// The shader recompiler replaces select(exec, new, old) by new where every consumer is masked
+// by the same condition again (IR::EliminateMaskedSelects). Part of the SPIR-V profile, so the
+// shader store does not mix programs compiled with and without it. On without a configuration.
+bool MaskedSelectEliminationEnabled();
 
 } // namespace Config
 
