@@ -55,6 +55,44 @@ void Translator::EmitScalar(const Decoder::Instruction& inst) {
 		case O::S_ORN2_SAVEEXEC_B64:
 			S_SAVEEXEC(inst, IR::ValueOpcode::LogicalOr, true, false, true);
 			return;
+		// gta6-prep: shader-alu. D = EXEC (WREXEC: the new EXEC); EXEC = f(S0, EXEC);
+		// SCC = EXEC != 0.
+		case O::S_OR_SAVEEXEC_B32:
+		case O::S_OR_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalOr, false, false,
+			                  inst.opcode == O::S_OR_SAVEEXEC_B64);
+		case O::S_XOR_SAVEEXEC_B32:
+		case O::S_XOR_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalXor, false, false,
+			                  inst.opcode == O::S_XOR_SAVEEXEC_B64);
+		case O::S_ANDN2_SAVEEXEC_B32: // S0 & ~EXEC
+		case O::S_ANDN2_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalAnd, true, false,
+			                  inst.opcode == O::S_ANDN2_SAVEEXEC_B64);
+		case O::S_NAND_SAVEEXEC_B32:
+		case O::S_NAND_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalAnd, false, false,
+			                  inst.opcode == O::S_NAND_SAVEEXEC_B64, true);
+		case O::S_NOR_SAVEEXEC_B32:
+		case O::S_NOR_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalOr, false, false,
+			                  inst.opcode == O::S_NOR_SAVEEXEC_B64, true);
+		case O::S_XNOR_SAVEEXEC_B32:
+		case O::S_XNOR_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalXor, false, false,
+			                  inst.opcode == O::S_XNOR_SAVEEXEC_B64, true);
+		case O::S_ORN1_SAVEEXEC_B32: // ~S0 | EXEC
+		case O::S_ORN1_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalOr, false, true,
+			                  inst.opcode == O::S_ORN1_SAVEEXEC_B64);
+		case O::S_ANDN1_WREXEC_B32: // EXEC = ~S0 & EXEC; D = EXEC
+		case O::S_ANDN1_WREXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalAnd, false, true,
+			                  inst.opcode == O::S_ANDN1_WREXEC_B64, false, true);
+		case O::S_ANDN2_WREXEC_B32: // EXEC = S0 & ~EXEC; D = EXEC
+		case O::S_ANDN2_WREXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalAnd, true, false,
+			                  inst.opcode == O::S_ANDN2_WREXEC_B64, false, true);
 		case O::S_ADD_U32: ADD_U32(inst, false, false); return;
 		case O::S_ADDC_U32: ADD_U32(inst, false, true); return;
 		case O::S_SUB_U32: SUB_U32(inst, false, false); return;

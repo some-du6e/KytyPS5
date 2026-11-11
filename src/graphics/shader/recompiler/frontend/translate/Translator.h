@@ -246,8 +246,11 @@ private:
 	void    PackB16(const Decoder::Instruction& inst, bool high0, bool high1);
 
 	void S_SUBVECTOR_LOOP(const Decoder::Instruction& inst, bool begin);
+	// `operation` is LogicalAnd, LogicalOr or LogicalXor. negate_result and write_new
+	// (gta6-prep: shader-alu): EXEC = ~op(...) (NAND/NOR/XNOR); D = the new EXEC (WREXEC).
 	void S_SAVEEXEC(const Decoder::Instruction& inst, IR::ValueOpcode operation, bool negate_exec,
-	                bool negate_source, bool write_64);
+	                bool negate_source, bool write_64, bool negate_result = false,
+	                bool write_new = false);
 	void ADD_U32(const Decoder::Instruction& inst, bool vector, bool use_carry_in);
 	void SUB_U32(const Decoder::Instruction& inst, bool vector, bool reverse);
 	void SUBB_U32(const Decoder::Instruction& inst, bool vector, bool reverse);

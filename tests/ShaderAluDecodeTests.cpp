@@ -177,8 +177,11 @@ void CheckSpirvValidates(const std::vector<uint32_t>& binary, const char* name) 
 
 // Translates and compiles a compute program; it must not be skipped.
 void CompileToValidSpirv(std::span<const uint32_t> code, const char* name, uint32_t wave_size = 64) {
-	auto options      = ComputeOptions(true);
-	options.wave_size = wave_size;
+	auto options                 = ComputeOptions(true);
+	ShaderComputeInputInfo compute = *options.input_info.compute;
+	compute.wave_size            = wave_size;
+	options.input_info.compute   = &compute;
+	options.wave_size            = wave_size;
 	auto source       = ShaderRecompiler::PrepareShaderSource(code, options);
 	Check(source.unsupported_pc == UINT32_MAX,
 	      std::string(name) + ": decoded an unsupported instruction: " + source.unsupported_text);
@@ -422,6 +425,77 @@ void TestMovesPermSwap() {
 	CompileToValidSpirv(code, "moves, perm and swap");
 }
 
+// ---- The S_*_SAVEEXEC and S_*_WREXEC family ----
+
+void TestSaveexecFamily() {
+	CheckEncodings({
+	    {"s_or_saveexec_b64 s[0:1], s[2:3]", {0xbe802502u}, Opcode::S_OR_SAVEEXEC_B64},
+	    {"s_xor_saveexec_b64 s[0:1], s[2:3]", {0xbe802602u}, Opcode::S_XOR_SAVEEXEC_B64},
+	    {"s_andn2_saveexec_b64 s[0:1], s[2:3]", {0xbe802702u}, Opcode::S_ANDN2_SAVEEXEC_B64},
+	    {"s_nand_saveexec_b64 s[0:1], s[2:3]", {0xbe802902u}, Opcode::S_NAND_SAVEEXEC_B64},
+	    {"s_nor_saveexec_b64 s[0:1], s[2:3]", {0xbe802a02u}, Opcode::S_NOR_SAVEEXEC_B64},
+	    {"s_xnor_saveexec_b64 s[0:1], s[2:3]", {0xbe802b02u}, Opcode::S_XNOR_SAVEEXEC_B64},
+	    {"s_orn1_saveexec_b64 s[0:1], s[2:3]", {0xbe803802u}, Opcode::S_ORN1_SAVEEXEC_B64},
+	    {"s_andn1_wrexec_b64 s[0:1], s[2:3]", {0xbe803902u}, Opcode::S_ANDN1_WREXEC_B64},
+	    {"s_andn2_wrexec_b64 s[0:1], s[2:3]", {0xbe803a02u}, Opcode::S_ANDN2_WREXEC_B64},
+	    {"s_or_saveexec_b32 s0, s2", {0xbe803d02u}, Opcode::S_OR_SAVEEXEC_B32},
+	    {"s_xor_saveexec_b32 s0, s2", {0xbe803e02u}, Opcode::S_XOR_SAVEEXEC_B32},
+	    {"s_andn2_saveexec_b32 s0, s2", {0xbe803f02u}, Opcode::S_ANDN2_SAVEEXEC_B32},
+	    {"s_nand_saveexec_b32 s0, s2", {0xbe804102u}, Opcode::S_NAND_SAVEEXEC_B32},
+	    {"s_nor_saveexec_b32 s0, s2", {0xbe804202u}, Opcode::S_NOR_SAVEEXEC_B32},
+	    {"s_xnor_saveexec_b32 s0, s2", {0xbe804302u}, Opcode::S_XNOR_SAVEEXEC_B32},
+	    {"s_orn1_saveexec_b32 s0, s2", {0xbe804502u}, Opcode::S_ORN1_SAVEEXEC_B32},
+	    {"s_andn1_wrexec_b32 s0, s2", {0xbe804602u}, Opcode::S_ANDN1_WREXEC_B32},
+	    {"s_andn2_wrexec_b32 s0, s2", {0xbe804702u}, Opcode::S_ANDN2_WREXEC_B32},
+	    {"s_xor_saveexec_b32 s0, 0x12345", {0xbe803effu, 0x00012345u}, Opcode::S_XOR_SAVEEXEC_B32},
+	});
+	const uint32_t pair[] = {0xbe982516u}; // s_or_saveexec_b64 s[24:25], s[22:23]
+	Check(DecodeOne(pair).data_dwords == 2u, "a 64-bit SAVEEXEC did not write an SGPR pair");
+
+	const uint32_t wave64[] = {
+	    0x7e3e0280u,              // v_mov_b32 v31, 0
+	    0xbe94047eu,              // s_mov_b64 s[20:21], exec
+	    0xd4c40016u, 0x00020087u, // v_cmp_gt_u32 s[22:23], 7, v0
+	    0xbe982516u,              // s_or_saveexec_b64 s[24:25], s[22:23]
+	    0xbe982616u,              // s_xor_saveexec_b64 s[24:25], s[22:23]
+	    0xbe982716u,              // s_andn2_saveexec_b64 s[24:25], s[22:23]
+	    0xbe982916u,              // s_nand_saveexec_b64 s[24:25], s[22:23]
+	    0xbe982a16u,              // s_nor_saveexec_b64 s[24:25], s[22:23]
+	    0xbe982b16u,              // s_xnor_saveexec_b64 s[24:25], s[22:23]
+	    0xbe983816u,              // s_orn1_saveexec_b64 s[24:25], s[22:23]
+	    0xbe983916u,              // s_andn1_wrexec_b64 s[24:25], s[22:23]
+	    0xbe9a3a16u,              // s_andn2_wrexec_b64 s[26:27], s[22:23]
+	    0x7e020218u,              // v_mov_b32 v1, s24
+	    0xe0701000u, 0x8000011fu, // buffer_store_dword v1, v31, s[0:3], 0 offen
+	    0xbefe0414u,              // s_mov_b64 exec, s[20:21]
+	    0x7e02021au,              // v_mov_b32 v1, s26
+	    0xe0701004u, 0x8000011fu, // buffer_store_dword v1, v31, s[0:3], 0 offen offset:4
+	    0xbf810000u,              // s_endpgm
+	};
+	CompileToValidSpirv(wave64, "64-bit SAVEEXEC and WREXEC", 64);
+	const uint32_t wave32[] = {
+	    0x7e3e0280u,              // v_mov_b32 v31, 0
+	    0xbe94037eu,              // s_mov_b32 s20, exec_lo
+	    0xd4c40016u, 0x00020087u, // v_cmp_gt_u32 s22, 7, v0
+	    0xbe983d16u,              // s_or_saveexec_b32 s24, s22
+	    0xbe983e16u,              // s_xor_saveexec_b32 s24, s22
+	    0xbe983f16u,              // s_andn2_saveexec_b32 s24, s22
+	    0xbe984116u,              // s_nand_saveexec_b32 s24, s22
+	    0xbe984216u,              // s_nor_saveexec_b32 s24, s22
+	    0xbe984316u,              // s_xnor_saveexec_b32 s24, s22
+	    0xbe984516u,              // s_orn1_saveexec_b32 s24, s22
+	    0xbe984616u,              // s_andn1_wrexec_b32 s24, s22
+	    0xbe9a4716u,              // s_andn2_wrexec_b32 s26, s22
+	    0x7e020218u,              // v_mov_b32 v1, s24
+	    0xe0701000u, 0x8000011fu, // buffer_store_dword v1, v31, s[0:3], 0 offen
+	    0xbefe0314u,              // s_mov_b32 exec_lo, s20
+	    0x7e02021au,              // v_mov_b32 v1, s26
+	    0xe0701004u, 0x8000011fu, // buffer_store_dword v1, v31, s[0:3], 0 offen offset:4
+	    0xbf810000u,              // s_endpgm
+	};
+	CompileToValidSpirv(wave32, "32-bit SAVEEXEC and WREXEC", 32);
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -433,6 +507,7 @@ int main() {
 	TestPrepareShaderSourceRecordsUnsupported();
 	TestTranslateProgramReportsFailures();
 	TestMovesPermSwap();
+	TestSaveexecFamily();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

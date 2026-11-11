@@ -156,6 +156,25 @@ bool WritesScc(const Instruction& inst) {
 		case Opcode::S_ORN2_SAVEEXEC_B64:
 		case Opcode::S_ANDN1_SAVEEXEC_B32:
 		case Opcode::S_ANDN1_SAVEEXEC_B64:
+		// gta6-prep: shader-alu
+		case Opcode::S_OR_SAVEEXEC_B32:
+		case Opcode::S_XOR_SAVEEXEC_B32:
+		case Opcode::S_ANDN2_SAVEEXEC_B32:
+		case Opcode::S_NAND_SAVEEXEC_B32:
+		case Opcode::S_NOR_SAVEEXEC_B32:
+		case Opcode::S_XNOR_SAVEEXEC_B32:
+		case Opcode::S_ORN1_SAVEEXEC_B32:
+		case Opcode::S_ANDN1_WREXEC_B32:
+		case Opcode::S_ANDN2_WREXEC_B32:
+		case Opcode::S_OR_SAVEEXEC_B64:
+		case Opcode::S_XOR_SAVEEXEC_B64:
+		case Opcode::S_ANDN2_SAVEEXEC_B64:
+		case Opcode::S_NAND_SAVEEXEC_B64:
+		case Opcode::S_NOR_SAVEEXEC_B64:
+		case Opcode::S_XNOR_SAVEEXEC_B64:
+		case Opcode::S_ORN1_SAVEEXEC_B64:
+		case Opcode::S_ANDN1_WREXEC_B64:
+		case Opcode::S_ANDN2_WREXEC_B64:
 		case Opcode::S_QUADMASK_B32:
 		case Opcode::S_QUADMASK_B64:
 		case Opcode::S_ABS_I32: return true;
