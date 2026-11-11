@@ -50089,6 +50089,329 @@ TestCase DispatcherIrreducibleControlFlow() {
 
 #include "ShaderRayTracingGpuTests.inc"
 
+// gta6-prep: shader-alu. Execution of the ALU opcodes the recompiler gained for GTA 6 readiness,
+// checked against C++ references of the RDNA2 ISA semantics.
+
+u32 Gta6PermByte(u32 s0, u32 s1, u32 sel) {
+  if (sel >= 13u) return 0xffu;
+  if (sel == 12u) return 0u;
+  if (sel >= 8u) {
+    const u32 word = (sel & 2u) != 0u ? s0 : s1;
+    return ((word >> ((sel & 1u) != 0u ? 31u : 15u)) & 1u) != 0u ? 0xffu : 0u;
+  }
+  const u32 word = (sel & 4u) != 0u ? s0 : s1;
+  return (word >> ((sel & 3u) * 8u)) & 0xffu;
+}
+
+u32 Gta6Perm(u32 s0, u32 s1, u32 s2) {
+  u32 result = 0;
+  for (u32 i = 0; i < 4u; i++) {
+    result |= Gta6PermByte(s0, s1, (s2 >> (i * 8u)) & 0xffu) << (i * 8u);
+  }
+  return result;
+}
+
+// v_perm_b32 with runtime selectors (a select chain per byte) and a literal one.
+TestCase Gta6PermB32() {
+  using O = ShaderOpcode;
+  struct Input {
+    u32 s0, s1, s2;
+  };
+  constexpr Input inputs[] = {
+      {0x11223344u, 0x55667788u, 0x00010203u}, {0x11223344u, 0x55667788u, 0x07060504u},
+      {0x8000ffffu, 0x00807fffu, 0x0b0a0908u}, {0x7fff8000u, 0xffff0000u, 0x0b0a0908u},
+      {0xdeadbeefu, 0xcafef00du, 0x0c0d0eff}, {0x01020304u, 0x05060708u, 0x04050607u},
+      {0x80008000u, 0x80008000u, 0x08090a0bu},
+  };
+  constexpr u32 literal = 0x0c0b0105u;
+  TestCase test;
+  test.name = "Gta6PermB32";
+  for (const auto &input : inputs) {
+    test.initial.insert(test.initial.end(), {input.s0, input.s1, input.s2});
+  }
+  test.expected = test.initial;
+  auto &code = test.code;
+  for (u32 i = 0; i < std::size(inputs); i++) {
+    for (u32 word = 0; word < 3u; word++) {
+      AppendVMovU32(&code, 30, (i * 3u + word) * 4u);
+      AppendBufferLoadDword(&code, word + 1u, 30);
+    }
+    AppendVop3(&code, 0x344u, 10, Vgpr(1), Vgpr(2), Vgpr(3));
+    code.push_back(EncodeVop3Word0(0x344u, 11));
+    code.push_back(EncodeVop3Word1(Vgpr(1), Vgpr(2), 255u));
+    code.push_back(literal);
+    const auto output = static_cast<u32>(test.expected.size());
+    AppendStoreVgpr(&code, 10, output);
+    AppendStoreVgpr(&code, 11, output + 1u);
+    test.expected.push_back(Gta6Perm(inputs[i].s0, inputs[i].s1, inputs[i].s2));
+    test.expected.push_back(Gta6Perm(inputs[i].s0, inputs[i].s1, literal));
+  }
+  AppendEnd(&code);
+  test.initial.resize(test.expected.size());
+  test.opcodes = {O::V_MOV_B32, O::BUFFER_LOAD_DWORD, O::V_PERM_B32, O::BUFFER_STORE_DWORD,
+                  O::S_ENDPGM};
+  return test;
+}
+
+int64_t Gta6Field(u32 value, u32 index, u32 bits, bool sign) {
+  const u32 mask = (1u << bits) - 1u;
+  const u32 field = (value >> (index * bits)) & mask;
+  if (sign && (field & (1u << (bits - 1u))) != 0u) {
+    return static_cast<int64_t>(field) - static_cast<int64_t>(1u << bits);
+  }
+  return field;
+}
+
+u32 Gta6Dot(u32 a, u32 b, u32 c, u32 bits, bool sign, bool clamp) {
+  int64_t sum = sign ? static_cast<int64_t>(static_cast<int32_t>(c)) : static_cast<int64_t>(c);
+  for (u32 i = 0; i < 32u / bits; i++) {
+    sum += Gta6Field(a, i, bits, sign) * Gta6Field(b, i, bits, sign);
+  }
+  if (clamp) {
+    sum = sign ? std::clamp<int64_t>(sum, INT32_MIN, INT32_MAX)
+               : std::clamp<int64_t>(sum, 0, UINT32_MAX);
+  }
+  return static_cast<u32>(sum);
+}
+
+// The VOP3P integer dot products (with and without CLAMP) and v_dot4c_i32_i8.
+TestCase Gta6IntegerDotProducts() {
+  using O = ShaderOpcode;
+  struct Input {
+    u32 a, b, c;
+  };
+  constexpr Input inputs[] = {
+      {0x01020304u, 0x05060708u, 10u},          {0x80ff7f01u, 0x80017fffu, 0xfffffff0u},
+      {0x7f7f7f7fu, 0x7f7f7f7fu, 0x7fffff00u},  {0x80808080u, 0x7f7f7f7fu, 0x80000100u},
+      {0xffffffffu, 0xffffffffu, 0xfffff000u},  {0x8000ffffu, 0x80007fffu, 0x12345678u},
+      {0x7fff7fffu, 0x7fff7fffu, 0x7fffffffu},  {0xf0e1d2c3u, 0x0f1e2d3cu, 0u},
+  };
+  struct Op {
+    u32 opcode, bits;
+    bool sign, clamp;
+  };
+  constexpr Op ops[] = {
+      {0x16u, 8u, true, false},  {0x16u, 8u, true, true},   {0x17u, 8u, false, false},
+      {0x17u, 8u, false, true},  {0x14u, 16u, true, false}, {0x14u, 16u, true, true},
+      {0x15u, 16u, false, true}, {0x18u, 4u, true, false},  {0x18u, 4u, true, true},
+      {0x19u, 4u, false, false},
+  };
+  TestCase test;
+  test.name = "Gta6IntegerDotProducts";
+  for (const auto &input : inputs) {
+    test.initial.insert(test.initial.end(), {input.a, input.b, input.c});
+  }
+  test.expected = test.initial;
+  auto &code = test.code;
+  for (u32 i = 0; i < std::size(inputs); i++) {
+    for (u32 word = 0; word < 3u; word++) {
+      AppendVMovU32(&code, 30, (i * 3u + word) * 4u);
+      AppendBufferLoadDword(&code, word + 1u, 30);
+    }
+    for (const auto &op : ops) {
+      code.push_back(EncodeVop3pWord0(op.opcode, 10, 7u, 0u, 0u, op.clamp));
+      code.push_back(EncodeVop3pWord1(Vgpr(1), Vgpr(2), Vgpr(3), 7u));
+      AppendStoreVgpr(&code, 10, static_cast<u32>(test.expected.size()));
+      test.expected.push_back(
+          Gta6Dot(inputs[i].a, inputs[i].b, inputs[i].c, op.bits, op.sign, op.clamp));
+    }
+    // v_dot4c_i32_i8 v10, v1, v2 accumulates into its destination (no CLAMP).
+    code.push_back(EncodeVop1(0x01, 10, Vgpr(3)));
+    code.push_back(EncodeVop2(0x0du, 10, Vgpr(1), 2));
+    AppendStoreVgpr(&code, 10, static_cast<u32>(test.expected.size()));
+    test.expected.push_back(Gta6Dot(inputs[i].a, inputs[i].b, inputs[i].c, 8u, true, false));
+  }
+  AppendEnd(&code);
+  test.initial.resize(test.expected.size());
+  test.opcodes = {O::V_MOV_B32,      O::BUFFER_LOAD_DWORD, O::V_DOT4_I32_I8,      O::V_DOT4_U32_U8,
+                  O::V_DOT2_I32_I16, O::V_DOT2_U32_U16,    O::V_DOT8_I32_I4,      O::V_DOT8_U32_U4,
+                  O::V_DOT4C_I32_I8, O::BUFFER_STORE_DWORD, O::S_ENDPGM};
+  return test;
+}
+
+// v_dot2_f32_f16: S0.lo * S1.lo + S0.hi * S1.hi + S2 with exactly representable values.
+TestCase Gta6Dot2F32F16() {
+  using O = ShaderOpcode;
+  TestCase test;
+  test.name = "Gta6Dot2F32F16";
+  // {1.5, -2.0} . {4.0, 0.25} + 0.5 = 6.0 - 0.5 + 0.5 = 6.0; NEG and NEG_HI on S0:
+  // -6.0 + 0.5 + 0.5 = -5.0; CLAMP saturates 6.0 to 1.0.
+  test.initial = {0xc0003e00u, 0x34004400u, 0x3f000000u};
+  test.expected = test.initial;
+  auto &code = test.code;
+  for (u32 word = 0; word < 3u; word++) {
+    AppendVMovU32(&code, 30, word * 4u);
+    AppendBufferLoadDword(&code, word + 1u, 30);
+  }
+  code.push_back(EncodeVop3pWord0(0x13u, 10, 7u));
+  code.push_back(EncodeVop3pWord1(Vgpr(1), Vgpr(2), Vgpr(3), 7u));
+  code.push_back(EncodeVop3pWord0(0x13u, 11, 7u, 0u, 1u));
+  code.push_back(EncodeVop3pWord1(Vgpr(1), Vgpr(2), Vgpr(3), 7u, 1u));
+  code.push_back(EncodeVop3pWord0(0x13u, 12, 7u, 0u, 0u, true));
+  code.push_back(EncodeVop3pWord1(Vgpr(1), Vgpr(2), Vgpr(3), 7u));
+  AppendStoreVgpr(&code, 10, 3);
+  AppendStoreVgpr(&code, 11, 4);
+  AppendStoreVgpr(&code, 12, 5);
+  AppendEnd(&code);
+  test.expected.insert(test.expected.end(), {std::bit_cast<u32>(6.0f), std::bit_cast<u32>(-5.0f),
+                                             std::bit_cast<u32>(1.0f)});
+  test.initial.resize(test.expected.size());
+  test.opcodes = {O::V_MOV_B32, O::BUFFER_LOAD_DWORD, O::V_DOT2_F32_F16, O::BUFFER_STORE_DWORD,
+                  O::S_ENDPGM};
+  return test;
+}
+
+struct Gta6SaveexecOp {
+  u32 opcode64, opcode32;
+  uint64_t (*exec)(uint64_t s0, uint64_t exec);
+  bool write_new;
+};
+
+constexpr Gta6SaveexecOp Gta6SaveexecOps[] = {
+    {0x25u, 0x3du, [](uint64_t s, uint64_t e) { return s | e; }, false},
+    {0x26u, 0x3eu, [](uint64_t s, uint64_t e) { return s ^ e; }, false},
+    {0x27u, 0x3fu, [](uint64_t s, uint64_t e) { return s & ~e; }, false},
+    {0x29u, 0x41u, [](uint64_t s, uint64_t e) { return ~(s & e); }, false},
+    {0x2au, 0x42u, [](uint64_t s, uint64_t e) { return ~(s | e); }, false},
+    {0x2bu, 0x43u, [](uint64_t s, uint64_t e) { return ~(s ^ e); }, false},
+    {0x38u, 0x45u, [](uint64_t s, uint64_t e) { return ~s | e; }, false},
+    {0x39u, 0x46u, [](uint64_t s, uint64_t e) { return ~s & e; }, true},
+    {0x3au, 0x47u, [](uint64_t s, uint64_t e) { return s & ~e; }, true},
+};
+
+// Each SAVEEXEC / WREXEC form: D (the old EXEC, or the new one for WREXEC), the new EXEC words
+// and SCC = EXEC != 0, for wave64 (B64) and wave32 (B32).
+TestCase Gta6SaveexecFamily(u32 wave) {
+  using O = ShaderOpcode;
+  struct Input {
+    uint64_t s0, exec;
+  };
+  constexpr Input inputs[] = {
+      {0x00000000f0f0f0f0ull, 0xffffffff0000ffffull},
+      {0x8000000100000003ull, 0x00000000ffffffffull},
+      {0xffffffffffffffffull, 0xffffffffffffffffull},
+      {0x0000000000000000ull, 0x0000000000000001ull},
+  };
+  const bool wide = wave == 64u;
+  const uint64_t lanes = wide ? ~uint64_t{0} : 0xffffffffull;
+  TestCase test;
+  test.name = wide ? "Gta6SaveexecFamily64" : "Gta6SaveexecFamily32";
+  auto &code = test.code;
+  for (const auto &op : Gta6SaveexecOps) {
+    for (const auto &input : inputs) {
+      AppendSMovLiteral(&code, 20, static_cast<u32>(input.s0));
+      AppendSMovLiteral(&code, 21, static_cast<u32>(input.s0 >> 32u));
+      AppendSMovLiteral(&code, 126, static_cast<u32>(input.exec));
+      if (wide) AppendSMovLiteral(&code, 127, static_cast<u32>(input.exec >> 32u));
+      code.push_back(EncodeSop1(wide ? op.opcode64 : op.opcode32, 22, 20));
+      code.push_back(EncodeSop1(0x04, 24, 126)); // s_mov_b64 s[24:25], exec
+      // Lane 0 stores the results.
+      code.push_back(EncodeSMovB32(126, InlineU32(1)));
+      code.push_back(EncodeSMovB32(127, InlineU32(0)));
+      const auto output = static_cast<u32>(test.expected.size());
+      AppendStoreSgpr(&code, 253, output);
+      AppendStoreSgpr(&code, 22, output + 1u);
+      AppendStoreSgpr(&code, 24, output + 2u);
+      const uint64_t s0 = input.s0 & lanes;
+      const uint64_t old = input.exec & lanes;
+      const uint64_t next = op.exec(s0, old) & lanes;
+      const uint64_t d = op.write_new ? next : old;
+      test.expected.insert(test.expected.end(), {next != 0u ? 1u : 0u, static_cast<u32>(d),
+                                                 static_cast<u32>(next)});
+      if (wide) {
+        AppendStoreSgpr(&code, 23, output + 3u);
+        AppendStoreSgpr(&code, 25, output + 4u);
+        test.expected.insert(test.expected.end(),
+                             {static_cast<u32>(d >> 32u), static_cast<u32>(next >> 32u)});
+      }
+    }
+  }
+  AppendEnd(&code);
+  test.initial.resize(test.expected.size());
+  if (wide) {
+    test.opcodes = {O::S_MOV_B32,            O::S_MOV_B64,            O::S_OR_SAVEEXEC_B64,
+                    O::S_XOR_SAVEEXEC_B64,   O::S_ANDN2_SAVEEXEC_B64, O::S_NAND_SAVEEXEC_B64,
+                    O::S_NOR_SAVEEXEC_B64,   O::S_XNOR_SAVEEXEC_B64,  O::S_ORN1_SAVEEXEC_B64,
+                    O::S_ANDN1_WREXEC_B64,   O::S_ANDN2_WREXEC_B64,   O::V_MOV_B32,
+                    O::BUFFER_STORE_DWORD,   O::S_ENDPGM};
+  } else {
+    test.opcodes = {O::S_MOV_B32,            O::S_MOV_B64,            O::S_OR_SAVEEXEC_B32,
+                    O::S_XOR_SAVEEXEC_B32,   O::S_ANDN2_SAVEEXEC_B32, O::S_NAND_SAVEEXEC_B32,
+                    O::S_NOR_SAVEEXEC_B32,   O::S_XNOR_SAVEEXEC_B32,  O::S_ORN1_SAVEEXEC_B32,
+                    O::S_ANDN1_WREXEC_B32,   O::S_ANDN2_WREXEC_B32,   O::V_MOV_B32,
+                    O::BUFFER_STORE_DWORD,   O::S_ENDPGM};
+  }
+  // The cases read whole EXEC masks: a populated subgroup, as ScalarSaveExecOps has.
+  test.compute_info.wave_size = wave;
+  test.compute_info.threads_num[0] = wave;
+  test.has_compute_info = true;
+  return test;
+}
+
+// LLVM's precise f32 division (v_div_scale x2, v_rcp, the Newton FMA chain, v_div_fmas,
+// v_div_fixup) against C++ division, and the special cases V_DIV_FIXUP resolves.
+TestCase Gta6PreciseDivision() {
+  using O = ShaderOpcode;
+  const float inf = std::numeric_limits<float>::infinity();
+  const float nan = std::bit_cast<float>(0x7fc00000u);
+  const std::pair<float, float> inputs[] = {
+      {6.0f, 3.0f},    {1.0f, 3.0f},     {2.0f, 7.0f},  {-7.5f, 2.5f}, {1.0e10f, 3.0e-5f},
+      {123.456f, -0.789f}, {0.0f, 5.0f}, {-0.0f, 5.0f}, {1.0f, 0.0f},  {-1.0f, 0.0f},
+      {0.0f, 0.0f},    {inf, 2.0f},      {2.0f, -inf},  {inf, inf},    {nan, 1.0f},
+      {1.0f, nan},
+  };
+  const u32 division[] = {
+      0xd56d0802u, 0x04020301u, // v_div_scale_f32 v2, s[8:9], v1, v1, v0
+      0xd56d6a03u, 0x04020300u, // v_div_scale_f32 v3, vcc, v0, v1, v0
+      0x7e085502u,              // v_rcp_f32 v4, v2
+      0xbfa5000fu,              // s_denorm_mode 15
+      0xd54b0005u, 0x23ca0902u, // v_fma_f32 v5, -v2, v4, 1.0
+      0x56080905u,              // v_fmac_f32 v4, v5, v4
+      0x100a0903u,              // v_mul_f32 v5, v3, v4
+      0xd54b0006u, 0x240e0b02u, // v_fma_f32 v6, -v2, v5, v3
+      0x560a0906u,              // v_fmac_f32 v5, v6, v4
+      0xd54b0002u, 0x240e0b02u, // v_fma_f32 v2, -v2, v5, v3
+      0xbfa5000cu,              // s_denorm_mode 12
+      0xd56f0002u, 0x04160902u, // v_div_fmas_f32 v2, v2, v4, v5
+      0xd55f0007u, 0x04020302u, // v_div_fixup_f32 v7, v2, v1, v0
+  };
+  TestCase test;
+  test.name = "Gta6PreciseDivision";
+  for (const auto &[n, d] : inputs) {
+    test.initial.insert(test.initial.end(), {std::bit_cast<u32>(n), std::bit_cast<u32>(d)});
+  }
+  test.expected = test.initial;
+  auto &code = test.code;
+  for (u32 i = 0; i < std::size(inputs); i++) {
+    for (u32 word = 0; word < 2u; word++) {
+      AppendVMovU32(&code, 30, (i * 2u + word) * 4u);
+      AppendBufferLoadDword(&code, word, 30);
+    }
+    code.insert(code.end(), std::begin(division), std::end(division));
+    AppendStoreVgpr(&code, 7, static_cast<u32>(test.expected.size()));
+    const auto [n, d] = inputs[i];
+    u32 expected = std::bit_cast<u32>(n / d);
+    // V_DIV_FIXUP: an input NaN is returned quieted; 0/0 and inf/inf give the default NaN.
+    if (std::isnan(n)) {
+      expected = std::bit_cast<u32>(n) | 0x00400000u;
+    } else if (std::isnan(d)) {
+      expected = std::bit_cast<u32>(d) | 0x00400000u;
+    } else if ((n == 0.0f && d == 0.0f) || (std::isinf(n) && std::isinf(d))) {
+      expected = 0xffc00000u;
+    }
+    test.expected.push_back(expected);
+  }
+  AppendEnd(&code);
+  test.initial.resize(test.expected.size());
+  test.opcodes = {O::V_MOV_B32,       O::BUFFER_LOAD_DWORD, O::V_DIV_SCALE_F32, O::V_RCP_F32,
+                  O::S_DENORM_MODE,   O::V_FMA_F32,         O::V_FMAC_F32,      O::V_MUL_F32,
+                  O::V_DIV_FMAS_F32,  O::V_DIV_FIXUP_F32,   O::BUFFER_STORE_DWORD, O::S_ENDPGM};
+  return test;
+}
+
+TestCase Gta6SaveexecFamily64() { return Gta6SaveexecFamily(64u); }
+TestCase Gta6SaveexecFamily32() { return Gta6SaveexecFamily(32u); }
+
 std::vector<TestCase> MakeCases() {
   std::vector<TestCase> cases;
   cases.reserve(128);
@@ -50742,6 +51065,13 @@ std::vector<TestCase> MakeCases() {
   AddCase(ImageAtomicGlc0DoesNotReturnOldValue);
   AddCase(MultipleWorkitemsGlobalId);
   AddCase(DispatcherIrreducibleControlFlow);
+  // gta6-prep: shader-alu
+  AddCase(Gta6PermB32);
+  AddCase(Gta6IntegerDotProducts);
+  AddCase(Gta6Dot2F32F16);
+  AddCase(Gta6SaveexecFamily64);
+  AddCase(Gta6SaveexecFamily32);
+  AddCase(Gta6PreciseDivision);
 
   return cases;
 }
@@ -58034,6 +58364,17 @@ int main(int argc, char **argv) {
     RunCase(&vulkan, VectorMadU64U32CarryMasksInactiveLanes());
     RunCase(&vulkan, ScalarWqmB64SelectsSccDomain());
     RunCase(&vulkan, ScalarWqmB64PreservesPartialMasks());
+    return 0;
+  }
+  // gta6-prep: shader-alu
+  if (argc == 2 && std::strcmp(argv[1], "--gta6-alu-only") == 0) {
+    VulkanHarness vulkan;
+    RunCase(&vulkan, Gta6PermB32());
+    RunCase(&vulkan, Gta6IntegerDotProducts());
+    RunCase(&vulkan, Gta6Dot2F32F16());
+    RunCase(&vulkan, Gta6SaveexecFamily64());
+    RunCase(&vulkan, Gta6SaveexecFamily32());
+    RunCase(&vulkan, Gta6PreciseDivision());
     return 0;
   }
   if (argc == 2 && std::strcmp(argv[1], "--alignbyte-only") == 0) {

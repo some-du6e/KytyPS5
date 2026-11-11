@@ -1025,6 +1025,8 @@ if(BUILD_TESTING)
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --buffer-cache-range-only)
 	# gta6-prep: shader-alu
 	add_test(NAME shader_alu_decode COMMAND $<TARGET_FILE:shader_alu_decode_tests>)
+	add_test(NAME shader_recompiler_gta6_alu
+		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --gta6-alu-only)
 
 	add_custom_target(kyty_tests DEPENDS
 		ime_dialog_tests
