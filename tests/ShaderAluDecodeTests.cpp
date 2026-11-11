@@ -496,6 +496,59 @@ void TestSaveexecFamily() {
 	CompileToValidSpirv(wave32, "32-bit SAVEEXEC and WREXEC", 32);
 }
 
+// ---- VOP3 F16 arithmetic with source and result modifiers ----
+
+void TestVop3F16Modifiers() {
+	CheckEncodings({
+	    {"v_max_f16_e64 v0, |v1|, -v2 clamp", {0xd5398100u, 0x40020501u}, Opcode::V_MAX_F16},
+	    {"v_min_f16_e64 v0, v1, v2 mul:2", {0xd53a0000u, 0x08020501u}, Opcode::V_MIN_F16},
+	    {"v_add_f16_e64 v0, -v1, |v2| div:2", {0xd5320200u, 0x38020501u}, Opcode::V_ADD_F16},
+	    {"v_sub_f16_e64 v0, v1, v2 clamp", {0xd5338000u, 0x00020501u}, Opcode::V_SUB_F16},
+	    {"v_subrev_f16_e64 v0, -v1, v2 mul:4", {0xd5340000u, 0x30020501u}, Opcode::V_SUBREV_F16},
+	    {"v_mul_f16_e64 v0, |v1|, |v2|", {0xd5350300u, 0x00020501u}, Opcode::V_MUL_F16},
+	    {"v_fmac_f16_e64 v0, v1, -v2 clamp", {0xd5368000u, 0x40020501u}, Opcode::V_FMAC_F16},
+	    {"v_max_f16_e64 v0, 0x3c00, v2", {0xd5390000u, 0x000204f2u}, Opcode::V_MAX_F16},
+	});
+	const uint32_t max[] = {0xd5398100u, 0x40020501u};
+	auto           inst  = DecodeOne(max);
+	Check(inst.src0.absolute && !inst.src0.negate && inst.src1.negate && !inst.src1.absolute &&
+	          inst.dst.clamp && inst.dst.omod == 0u && inst.src_count == 2u,
+	      "VOP3 V_MAX_F16 lost its ABS/NEG or CLAMP");
+	const uint32_t add[] = {0xd5320200u, 0x38020501u};
+	inst                 = DecodeOne(add);
+	Check(inst.src0.negate && inst.src1.absolute && inst.dst.omod == 3u && !inst.dst.clamp,
+	      "VOP3 V_ADD_F16 lost its NEG/ABS or OMOD");
+	// OP_SEL and a modifier on the third (absent) source stay unsupported.
+	const uint32_t op_sel[] = {EncodeVop3Word0(0x139u, 0, 0, 1), EncodeVop3Word1(Vgpr(1), Vgpr(2))};
+	Check(DecodeOne(op_sel).opcode == Opcode::UNSUPPORTED, "VOP3 V_MAX_F16 accepted OP_SEL");
+	const uint32_t third[] = {EncodeVop3Word0(0x136u, 0, 4), EncodeVop3Word1(Vgpr(1), Vgpr(2))};
+	Check(DecodeOne(third).opcode == Opcode::UNSUPPORTED,
+	      "VOP3 V_FMAC_F16 accepted ABS on its accumulator");
+
+	const uint32_t code[] = {
+	    0x7e0202ffu, 0x3c00bc00u, // v_mov_b32 v1, 0x3c00bc00
+	    0x7e0402ffu, 0x4200c400u, // v_mov_b32 v2, 0x4200c400
+	    0xd5398103u, 0x40020501u, // v_max_f16_e64 v3, |v1|, -v2 clamp
+	    0xd53a0004u, 0x08020501u, // v_min_f16_e64 v4, v1, v2 mul:2
+	    0xd5320205u, 0x38020501u, // v_add_f16_e64 v5, -v1, |v2| div:2
+	    0xd5338006u, 0x00020501u, // v_sub_f16_e64 v6, v1, v2 clamp
+	    0xd5340007u, 0x30020501u, // v_subrev_f16_e64 v7, -v1, v2 mul:4
+	    0xd5350308u, 0x00020501u, // v_mul_f16_e64 v8, |v1|, |v2|
+	    0xd5368009u, 0x40020501u, // v_fmac_f16_e64 v9, v1, -v2 clamp
+	    0x7e3e0280u, // v_mov_b32 v31, 0
+	    0xe0701000u, 0x8000031fu, // buffer_store_dword v3, v31, s[0:3], 0 offen
+	    0xe0701004u, 0x8000041fu, // buffer_store_dword v4, v31, s[0:3], 0 offen offset:4
+	    0xe0701008u, 0x8000051fu, // buffer_store_dword v5, v31, s[0:3], 0 offen offset:8
+	    0xe070100cu, 0x8000061fu, // buffer_store_dword v6, v31, s[0:3], 0 offen offset:12
+	    0xe0701010u, 0x8000071fu, // buffer_store_dword v7, v31, s[0:3], 0 offen offset:16
+	    0xe0701014u, 0x8000081fu, // buffer_store_dword v8, v31, s[0:3], 0 offen offset:20
+	    0xe0701018u, 0x8000091fu, // buffer_store_dword v9, v31, s[0:3], 0 offen offset:24
+	    0xbf810000u, // s_endpgm
+	};
+
+	CompileToValidSpirv(code, "VOP3 F16 modifiers");
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -508,6 +561,7 @@ int main() {
 	TestTranslateProgramReportsFailures();
 	TestMovesPermSwap();
 	TestSaveexecFamily();
+	TestVop3F16Modifiers();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

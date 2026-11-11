@@ -367,8 +367,23 @@ bool IsVop2LiteralMadOpcode(uint32_t opcode) {
 }
 
 bool IsUnsupportedVop3EncodedVop2Alias(uint32_t opcode) {
-	return IsVop2LiteralMadOpcode(opcode) || opcode == 0x02u || opcode == 0x39u ||
-	       opcode == 0x3au;
+	// gta6-prep: shader-alu. V_MAX_F16 / V_MIN_F16 (0x39 / 0x3a) have VOP3 forms.
+	return IsVop2LiteralMadOpcode(opcode) || opcode == 0x02u;
+}
+
+// gta6-prep: shader-alu. The VOP2 F16 arithmetic whose VOP3 forms take ABS/NEG on their two
+// sources and CLAMP/OMOD on the result (Float16Binary / Float16Ternary apply them).
+bool IsVop3F16BinaryWithModifiers(Opcode opcode) {
+	switch (opcode) {
+		case Opcode::V_ADD_F16:
+		case Opcode::V_SUB_F16:
+		case Opcode::V_SUBREV_F16:
+		case Opcode::V_MUL_F16:
+		case Opcode::V_MAX_F16:
+		case Opcode::V_MIN_F16:
+		case Opcode::V_FMAC_F16: return true;
+		default: return false;
+	}
 }
 
 bool IsVop3EncodedVopc(uint32_t opcode) {
@@ -1343,7 +1358,7 @@ bool SupportsNativeVop3SourceModifiers(Opcode opcode) {
 	if (IsVopcFloatCompareOpcode(opcode)) {
 		return true;
 	}
-	if (IsNativeVop3F16TernaryOpcode(opcode)) {
+	if (IsNativeVop3F16TernaryOpcode(opcode) || IsVop3F16BinaryWithModifiers(opcode)) {
 		return true;
 	}
 	switch (opcode) {
@@ -1380,7 +1395,7 @@ bool SupportsNativeVop3SourceModifiers(Opcode opcode) {
 }
 
 bool SupportsNativeVop3ResultModifiers(Opcode opcode) {
-	if (IsVop1FloatResultOpcode(opcode)) {
+	if (IsVop1FloatResultOpcode(opcode) || IsVop3F16BinaryWithModifiers(opcode)) {
 		return true;
 	}
 	switch (opcode) {
@@ -1465,6 +1480,11 @@ bool HasUnsupportedNativeVop3Modifiers(Opcode opcode, bool permlane, bool mad_mi
 			return (abs & ~0x3u) != 0u || (op_sel & ~0x3u) != 0u || clamp != 0u || omod != 0u ||
 			       (neg & ~0x3u) != 0u;
 		default: break;
+	}
+	if (IsVop3F16BinaryWithModifiers(opcode)) {
+		// Two sources (V_FMAC_F16 accumulates into D, which takes no modifier); OP_SEL is not
+		// implemented for them.
+		return (abs & ~0x3u) != 0u || (neg & ~0x3u) != 0u || op_sel != 0u;
 	}
 	if (source_modifiers) {
 		return op_sel != 0u || (omod != 0u && !result_modifiers) ||
