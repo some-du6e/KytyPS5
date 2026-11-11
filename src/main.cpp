@@ -216,6 +216,8 @@ static void PrintUsage() {
 	::printf("                                       uniform buffer views (as KYTY_UNIFORM_BUFFERS=0).\n");
 	::printf("  --no-lod-stats                       Report GET_LOD_STATS counters as unsampled, and\n");
 	::printf("                                       compile pixel shaders once, without mip statistics.\n");
+	::printf("  --no-keep-small-layer-targets        Let memory pressure evict render targets up to\n");
+	::printf("                                       1024x1024 like other images (saves video memory).\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -375,6 +377,8 @@ static constexpr Flag FLAGS[] = {
     {"--no-uniform-buffers", &ConfigOptions::uniform_buffers_enabled, false},
     {"--lod-stats", &ConfigOptions::lod_stats_enabled},
     {"--no-lod-stats", &ConfigOptions::lod_stats_enabled, false},
+    {"--keep-small-layer-targets", &ConfigOptions::keep_small_layer_targets},
+    {"--no-keep-small-layer-targets", &ConfigOptions::keep_small_layer_targets, false},
 };
 
 // gta6-prep: config

@@ -403,4 +403,8 @@ bool LodStatsEnabled() {
 	return g_config == nullptr || g_config->lod_stats_enabled;
 }
 
+bool KeepSmallLayerTargets() {
+	return g_config == nullptr || g_config->keep_small_layer_targets;
+}
+
 } // namespace Config

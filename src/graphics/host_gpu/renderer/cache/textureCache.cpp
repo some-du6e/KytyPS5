@@ -2952,8 +2952,9 @@ void TextureCache::RunGarbageCollector() {
 			// (glyph atlases, cached UI): a few MB each, and a lost one is lost text (Wolverine's
 			// letters went missing when they were evicted under pressure). They are never
 			// evicted; freeing their memory is the guest's call.
-			if (owner->usage.render_target && owner->info.extent.width <= 1024 &&
-			    owner->info.extent.height <= 1024) {
+			// gta6-prep: config: --no-keep-small-layer-targets evicts them, as before 17fd75d1.
+			if (Config::KeepSmallLayerTargets() && owner->usage.render_target &&
+			    owner->info.extent.width <= 1024 && owner->info.extent.height <= 1024) {
 				continue;
 			}
 			if (owner->SafeToDownload() &&

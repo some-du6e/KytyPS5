@@ -163,6 +163,8 @@ struct ConfigOptions {
 	// --no-lod-stats: GET_LOD_STATS reports every counter unsampled, and pixel shaders are compiled
 	// once, without the mip statistics recording (as before 66074f88).
 	bool lod_stats_enabled = true;
+	// --no-keep-small-layer-targets: memory pressure may evict small render targets (17fd75d1).
+	bool keep_small_layer_targets = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -317,6 +319,11 @@ bool UniformBuffersEnabled();
 // are compiled once without it and every report says "no samples", as upstream's default
 // before 66074f88. Part of the SPIR-V profile. On without a loaded configuration.
 bool LodStatsEnabled();
+
+// The texture garbage collector never evicts render targets up to 1024x1024 (cached layers:
+// glyph atlases, UI), so their GPU-only content is never lost (17fd75d1). Off, they are evicted
+// like other images. On without a loaded configuration.
+bool KeepSmallLayerTargets();
 
 } // namespace Config
 

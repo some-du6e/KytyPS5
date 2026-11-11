@@ -14,6 +14,7 @@ constexpr std::string_view SafeTokens[] = {
     "--no-spirv-forwarding",
     "--no-uniform-buffers",
     "--no-lod-stats",
+    "--no-keep-small-layer-targets",
 };
 
 // Options that use less video memory. Only options that exist are listed.
@@ -28,6 +29,7 @@ constexpr std::string_view LowVramTokens[] = {
     "--no-trinity",
     "--no-readback-tiled-images",
     "--no-readback-storage-images",
+    "--no-keep-small-layer-targets",
 };
 
 // An RTX 3050 with 8 GB: low-vram's options (a preset cannot name another one, so they are
@@ -38,6 +40,7 @@ constexpr std::string_view Rtx3050Tokens[] = {
     "--no-trinity",
     "--no-readback-tiled-images",
     "--no-readback-storage-images",
+    "--no-keep-small-layer-targets",
 };
 
 constexpr Preset PresetTable[] = {
