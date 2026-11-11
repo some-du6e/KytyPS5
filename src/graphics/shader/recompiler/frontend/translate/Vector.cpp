@@ -398,9 +398,11 @@ void Translator::EmitVector(const Decoder::Instruction& inst) {
 		case O::V_PK_MAD_I16: return PackedInteger16Mad(inst, true);
 		case O::V_PK_MAD_U16: return PackedInteger16Mad(inst, false);
 		case O::V_PK_MUL_LO_U16: return PackedInteger16Binary(inst, IR::ValueOpcode::IMul32, false);
-		case O::V_PK_ADD_I16:
+		// The signed forms read sign-extended halves for their CLAMP (gta6-prep: shader-alu); the
+		// low 16 bits of the wrapped result do not depend on it.
+		case O::V_PK_ADD_I16: return PackedInteger16Binary(inst, IR::ValueOpcode::IAdd32, true);
 		case O::V_PK_ADD_U16: return PackedInteger16Binary(inst, IR::ValueOpcode::IAdd32, false);
-		case O::V_PK_SUB_I16:
+		case O::V_PK_SUB_I16: return PackedInteger16Binary(inst, IR::ValueOpcode::ISub32, true);
 		case O::V_PK_SUB_U16: return PackedInteger16Binary(inst, IR::ValueOpcode::ISub32, false);
 		case O::V_PK_MAX_I16: return PackedInteger16Binary(inst, IR::ValueOpcode::SMax32, true);
 		case O::V_PK_MIN_I16: return PackedInteger16Binary(inst, IR::ValueOpcode::SMin32, true);
@@ -669,6 +671,10 @@ void Translator::EmitVector(const Decoder::Instruction& inst) {
 		case O::V_SAT_PK_U8_I16: return V_SAT_PK_U8_I16(inst);
 		case O::V_CVT_NORM_I16_F16: return V_CVT_NORM_F16(inst, IR::ValueOpcode::PackSnorm2x16);
 		case O::V_CVT_NORM_U16_F16: return V_CVT_NORM_F16(inst, IR::ValueOpcode::PackUnorm2x16);
+		case O::V_SAD_U8: return V_SAD(inst, 8u, false, false);
+		case O::V_SAD_HI_U8: return V_SAD(inst, 8u, true, false);
+		case O::V_SAD_U16: return V_SAD(inst, 16u, false, false);
+		case O::V_MSAD_U8: return V_SAD(inst, 8u, false, true);
 		default: return FailMissingTranslation(inst);
 	}
 }

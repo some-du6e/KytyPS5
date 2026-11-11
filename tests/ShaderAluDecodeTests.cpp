@@ -934,6 +934,62 @@ void TestIntegerLongTail() {
 	CompileToValidSpirv(code, "integer long tail", 32);
 }
 
+// ---- SAD family and VOP3P integer CLAMP ----
+
+void TestSadAndPackedClamp() {
+	CheckEncodings({
+	    {"v_sad_u8 v0, v1, v2, v3", {0xd55a0000u, 0x040e0501u}, Opcode::V_SAD_U8},
+	    {"v_sad_hi_u8 v0, v1, v2, v3", {0xd55b0000u, 0x040e0501u}, Opcode::V_SAD_HI_U8},
+	    {"v_sad_u16 v0, v1, v2, v3", {0xd55c0000u, 0x040e0501u}, Opcode::V_SAD_U16},
+	    {"v_msad_u8 v0, v1, v2, v3", {0xd5710000u, 0x040e0501u}, Opcode::V_MSAD_U8},
+	    {"v_msad_u8 v0, v1, 0x01020304, v3", {0xd5710000u, 0x040dff01u, 0x01020304u}, Opcode::V_MSAD_U8},
+	    {"v_pk_add_u16 v0, v1, v2 clamp", {0xcc0ac000u, 0x18020501u}, Opcode::V_PK_ADD_U16},
+	    {"v_pk_sub_u16 v0, v1, v2 clamp", {0xcc0bc000u, 0x18020501u}, Opcode::V_PK_SUB_U16},
+	    {"v_pk_add_i16 v0, v1, v2 clamp", {0xcc02c000u, 0x18020501u}, Opcode::V_PK_ADD_I16},
+	    {"v_pk_sub_i16 v0, v1, v2 clamp", {0xcc03c000u, 0x18020501u}, Opcode::V_PK_SUB_I16},
+	    {"v_pk_mad_i16 v0, v1, v2, v3 clamp", {0xcc00c000u, 0x1c0e0501u}, Opcode::V_PK_MAD_I16},
+	    {"v_pk_mad_u16 v0, v1, v2, v3 clamp", {0xcc09c000u, 0x1c0e0501u}, Opcode::V_PK_MAD_U16},
+	    {"v_pk_mul_lo_u16 v0, v1, v2 clamp", {0xcc01c000u, 0x18020501u}, Opcode::V_PK_MUL_LO_U16},
+	});
+	const uint32_t clamp[] = {0xcc0bc000u, 0x18020501u}; // v_pk_sub_u16 v0, v1, v2 clamp
+	Check(DecodeOne(clamp).dst.clamp, "V_PK_SUB_U16 lost its CLAMP");
+	// The other packed integer opcodes keep rejecting CLAMP.
+	const uint32_t max_clamp[] = {0xcc0cc000u, 0x18020501u}; // v_pk_max_u16 v0, v1, v2 clamp
+	Check(DecodeOne(max_clamp).opcode == Opcode::UNSUPPORTED, "V_PK_MAX_U16 accepted CLAMP");
+	// The SAD opcodes take no modifiers.
+	const uint32_t sad_clamp[] = {EncodeVop3Word0(0x15au, 0, 0, 0, true),
+	                              EncodeVop3Word1(Vgpr(1), Vgpr(2), Vgpr(3))};
+	Check(DecodeOne(sad_clamp).opcode == Opcode::UNSUPPORTED, "V_SAD_U8 accepted CLAMP");
+
+	const uint32_t code[] = {
+	    0x7e0202ffu, 0x80ff7f01u, // v_mov_b32 v1, 0x80ff7f01
+	    0x7e0402ffu, 0x01fe8080u, // v_mov_b32 v2, 0x01fe8080
+	    0xd55a0003u, 0x04020501u, // v_sad_u8 v3, v1, v2, v0
+	    0xd55b0004u, 0x04020501u, // v_sad_hi_u8 v4, v1, v2, v0
+	    0xd55c0005u, 0x04020501u, // v_sad_u16 v5, v1, v2, v0
+	    0xd5710006u, 0x04020501u, // v_msad_u8 v6, v1, v2, v0
+	    0xcc0ac007u, 0x18020501u, // v_pk_add_u16 v7, v1, v2 clamp
+	    0xcc0bc008u, 0x18020501u, // v_pk_sub_u16 v8, v1, v2 clamp
+	    0xcc02c009u, 0x18020501u, // v_pk_add_i16 v9, v1, v2 clamp
+	    0xcc03c00au, 0x18020501u, // v_pk_sub_i16 v10, v1, v2 clamp
+	    0xcc00c00bu, 0x1c020501u, // v_pk_mad_i16 v11, v1, v2, v0 clamp
+	    0xcc09c00cu, 0x1c020501u, // v_pk_mad_u16 v12, v1, v2, v0 clamp
+	    0x7e3e0280u, // v_mov_b32 v31, 0
+	    0xe0701000u, 0x8000031fu, // buffer_store_dword v3, v31, s[0:3], 0 offen
+	    0xe0701004u, 0x8000041fu, // buffer_store_dword v4, v31, s[0:3], 0 offen offset:4
+	    0xe0701008u, 0x8000051fu, // buffer_store_dword v5, v31, s[0:3], 0 offen offset:8
+	    0xe070100cu, 0x8000061fu, // buffer_store_dword v6, v31, s[0:3], 0 offen offset:12
+	    0xe0701010u, 0x8000071fu, // buffer_store_dword v7, v31, s[0:3], 0 offen offset:16
+	    0xe0701014u, 0x8000081fu, // buffer_store_dword v8, v31, s[0:3], 0 offen offset:20
+	    0xe0701018u, 0x8000091fu, // buffer_store_dword v9, v31, s[0:3], 0 offen offset:24
+	    0xe070101cu, 0x80000a1fu, // buffer_store_dword v10, v31, s[0:3], 0 offen offset:28
+	    0xe0701020u, 0x80000b1fu, // buffer_store_dword v11, v31, s[0:3], 0 offen offset:32
+	    0xe0701024u, 0x80000c1fu, // buffer_store_dword v12, v31, s[0:3], 0 offen offset:36
+	    0xbf810000u, // s_endpgm
+	};
+	CompileToValidSpirv(code, "SAD and packed clamp", 32);
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -953,6 +1009,7 @@ int main() {
 	TestVopcGaps();
 	TestPreciseDivision();
 	TestIntegerLongTail();
+	TestSadAndPackedClamp();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

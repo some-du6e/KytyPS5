@@ -856,6 +856,10 @@ enum class Opcode {
 	V_SAT_PK_U8_I16,
 	V_CVT_NORM_I16_F16,
 	V_CVT_NORM_U16_F16,
+	V_SAD_U8,
+	V_SAD_HI_U8,
+	V_SAD_U16,
+	V_MSAD_U8,
 
 	COUNT
 };

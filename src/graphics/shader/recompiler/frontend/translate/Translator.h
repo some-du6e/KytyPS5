@@ -304,6 +304,8 @@ private:
 	void    V_CVT_PKNORM_F16(const Decoder::Instruction& inst, IR::ValueOpcode opcode);
 	void    V_SAT_PK_U8_I16(const Decoder::Instruction& inst);
 	void    V_CVT_NORM_F16(const Decoder::Instruction& inst, IR::ValueOpcode opcode);
+	void    V_SAD(const Decoder::Instruction& inst, uint32_t bits, bool high, bool masked);
+	IR::U32 SaturatePacked16(IR::U32 value, bool sign, bool subtract);
 
 	void EmitScalar(const Decoder::Instruction& inst);
 	void EmitVector(const Decoder::Instruction& inst);

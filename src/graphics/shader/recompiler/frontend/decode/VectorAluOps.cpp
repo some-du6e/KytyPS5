@@ -374,6 +374,10 @@ constexpr OpcodeMap VOP3_OPCODE_LIST[] = {
     {0x375u, Opcode::V_MAD_I32_I16},
     {0x376u, Opcode::V_SUB_NC_I32},
     {0x37fu, Opcode::V_ADD_NC_I32},
+    {0x15au, Opcode::V_SAD_U8},
+    {0x15bu, Opcode::V_SAD_HI_U8},
+    {0x15cu, Opcode::V_SAD_U16},
+    {0x171u, Opcode::V_MSAD_U8},
 };
 
 constexpr auto VOP3_OPS = Detail::MakeOpcodeTable<0x400>(VOP3_OPCODE_LIST);
@@ -1405,6 +1409,20 @@ const char* UnsupportedVop3pDotModifiers(Opcode opcode, uint32_t op_sel, uint32_
 	}
 }
 
+// gta6-prep: shader-alu. Packed 16-bit integer opcodes whose CLAMP saturates each half.
+bool IsPackedIntegerClampVop3p(Opcode opcode) {
+	switch (opcode) {
+		case Opcode::V_PK_ADD_I16:
+		case Opcode::V_PK_SUB_I16:
+		case Opcode::V_PK_ADD_U16:
+		case Opcode::V_PK_SUB_U16:
+		case Opcode::V_PK_MAD_I16:
+		case Opcode::V_PK_MAD_U16:
+		case Opcode::V_PK_MUL_LO_U16: return true;
+		default: return false;
+	}
+}
+
 bool IsMadMixF16(Opcode opcode) {
 	return opcode == Opcode::V_MAD_MIXLO_F16 || opcode == Opcode::V_MAD_MIXHI_F16;
 }
@@ -2084,6 +2102,8 @@ void DecodeVop3p(uint32_t pc, std::span<const uint32_t> code, uint32_t word_inde
 	} else if (IsMadMixF16(inst.opcode)) {
 		inst.dst.clamp = clamp != 0u;
 	} else if (IsPackedVop3p(inst.opcode)) {
+		inst.dst.clamp = clamp != 0u;
+	} else if (IsPackedIntegerClampVop3p(inst.opcode)) {
 		inst.dst.clamp = clamp != 0u;
 	} else if (IsVop3pDot(inst.opcode)) {
 		// gta6-prep: shader-alu. CLAMP saturates the sum (to [0, 1] for V_DOT2_F32_F16).

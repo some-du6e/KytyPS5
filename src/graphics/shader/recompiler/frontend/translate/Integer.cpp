@@ -52,23 +52,41 @@ void Translator::PackedInteger16Shift(const Decoder::Instruction& inst, IR::Valu
 
 void Translator::PackedInteger16Binary(const Decoder::Instruction& inst, IR::ValueOpcode opcode,
                                        bool sign) {
+	// gta6-prep: shader-alu. CLAMP (V_PK_ADD/SUB_I16/U16, V_PK_MUL_LO_U16) saturates each half.
+	auto       destination = DestinationOperand(inst);
+	const bool clamp       = destination.clamp;
+	destination.clamp      = false;
 	const auto translate_lane = [&](bool high) {
-		const auto lhs = ReadU16LaneAsU32(inst.src0, high, sign);
-		const auto rhs = ReadU16LaneAsU32(inst.src1, high, sign);
-		return IR::U32(ir.Emit(opcode, {lhs, rhs}));
+		const auto lhs    = ReadU16LaneAsU32(inst.src0, high, sign);
+		const auto rhs    = ReadU16LaneAsU32(inst.src1, high, sign);
+		const auto result = IR::U32(ir.Emit(opcode, {lhs, rhs}));
+		return clamp ? SaturatePacked16(result, sign, opcode == IR::ValueOpcode::ISub32) : result;
 	};
-	WriteOperand(DestinationOperand(inst),
-	             PackU16Lanes(translate_lane(false), translate_lane(true)));
+	WriteOperand(destination, PackU16Lanes(translate_lane(false), translate_lane(true)));
 }
 
 void Translator::PackedInteger16Mad(const Decoder::Instruction& inst, bool sign) {
+	auto       destination = DestinationOperand(inst);
+	const bool clamp       = destination.clamp;
+	destination.clamp      = false;
 	const auto translate_lane = [&](bool high) {
-		const auto lhs = ReadU16LaneAsU32(inst.src0, high, false);
-		const auto rhs = ReadU16LaneAsU32(inst.src1, high, false);
-		return ir.IAdd(ir.IMul(lhs, rhs), ReadU16LaneAsU32(inst.src2, high, sign));
+		// The low 16 bits of the product do not depend on the extension; its CLAMP does.
+		const auto lhs    = ReadU16LaneAsU32(inst.src0, high, clamp && sign);
+		const auto rhs    = ReadU16LaneAsU32(inst.src1, high, clamp && sign);
+		const auto result = ir.IAdd(ir.IMul(lhs, rhs), ReadU16LaneAsU32(inst.src2, high, sign));
+		return clamp ? SaturatePacked16(result, sign, false) : result;
 	};
-	WriteOperand(DestinationOperand(inst),
-	             PackU16Lanes(translate_lane(false), translate_lane(true)));
+	WriteOperand(destination, PackU16Lanes(translate_lane(false), translate_lane(true)));
+}
+
+// gta6-prep: shader-alu. A 32-bit lane result of 16-bit operands saturated to the 16-bit range;
+// an unsigned difference can be negative.
+IR::U32 Translator::SaturatePacked16(IR::U32 value, bool sign, bool subtract) {
+	if (sign || !subtract) {
+		return Saturate16(value, sign);
+	}
+	const auto low = ir.Emit(IR::ValueOpcode::SMax32, {value, IR::Value(0u)});
+	return IR::U32(ir.Emit(IR::ValueOpcode::SMin32, {low, IR::Value(0xffffu)}));
 }
 
 IR::U1 Translator::U64MaskBinary(const Decoder::Instruction& inst, IR::ValueOpcode opcode,
@@ -729,6 +747,31 @@ void Translator::V_ADD_SUB_NC_I32(const Decoder::Instruction& inst, bool subtrac
 	const auto sum = ir.Emit(subtract ? IR::ValueOpcode::ISub64 : IR::ValueOpcode::IAdd64,
 	                         {wide(lhs), wide(rhs)});
 	WriteOperand(destination, SaturateWide(sum, true));
+}
+
+// D.u32 = sum over the bytes (16-bit halves) of |S0.field - S1.field| + S2.u32; V_SAD_HI_U8
+// shifts the sum left by 16 before the add, V_MSAD_U8 skips the bytes where S1 is zero.
+void Translator::V_SAD(const Decoder::Instruction& inst, uint32_t bits, bool high, bool masked) {
+	const auto lhs = ReadU32(inst.src0);
+	const auto rhs = ReadU32(inst.src1);
+	IR::U32    sum(IR::Value(0u));
+	for (uint32_t offset = 0; offset < 32u; offset += bits) {
+		const auto a = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+		                               {lhs, IR::Value(offset), IR::Value(bits)}));
+		const auto b = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+		                               {rhs, IR::Value(offset), IR::Value(bits)}));
+		auto difference = ir.ISub(IR::U32(ir.Emit(IR::ValueOpcode::UMax32, {a, b})),
+		                          IR::U32(ir.Emit(IR::ValueOpcode::UMin32, {a, b})));
+		if (masked) {
+			difference = ir.Select(ir.IEqual(b, IR::U32(IR::Value(0u))), IR::U32(IR::Value(0u)),
+			                       difference);
+		}
+		sum = ir.IAdd(sum, difference);
+	}
+	if (high) {
+		sum = ir.ShiftLeftLogical(sum, IR::U32(IR::Value(16u)));
+	}
+	WriteOperand(DestinationOperand(inst), ir.IAdd(sum, ReadU32(inst.src2)));
 }
 
 // D.u16 = {sat_u8(S0.i16[1]), sat_u8(S0.i16[0])}.
