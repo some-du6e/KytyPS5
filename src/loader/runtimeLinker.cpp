@@ -1561,11 +1561,12 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 		const LibraryId* l = FindLibrary(*program, ids.at(1));
 		const ModuleId*  m = FindModule(*program, ids.at(2));
 
-		auto resolve_by_nid = [this, type](const std::string& nid, SymbolRecord* out) -> bool {
+		auto resolve_by_nid_as = [this](const std::string& nid, SymbolType as,
+		                                SymbolRecord* out) -> bool {
 			EXIT_IF(out == nullptr);
 
 			if (m_symbols != nullptr) {
-				if (const auto* rec = m_symbols->FindByNid(nid, type); rec != nullptr) {
+				if (const auto* rec = m_symbols->FindByNid(nid, as); rec != nullptr) {
 					*out = *rec;
 					return true;
 				}
@@ -1573,13 +1574,32 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 
 			for (auto* p: m_programs) {
 				if (p != nullptr && p->export_symbols != nullptr) {
-					if (const auto* rec = p->export_symbols->FindByNid(nid, type); rec != nullptr) {
+					if (const auto* rec = p->export_symbols->FindByNid(nid, as); rec != nullptr) {
 						*out = *rec;
 						return true;
 					}
 				}
 			}
 
+			return false;
+		};
+		auto resolve_by_nid = [&](const std::string& nid, SymbolRecord* out) -> bool {
+			return resolve_by_nid_as(nid, type, out);
+		};
+		// Every HLE function is registered as Func, so an STT_NOTYPE import of one never matches
+		// by type. Try Func, then Object, like sceKernelDlsym (kernel_find_export_symbol).
+		auto resolve_notype_by_nid = [&](const std::string& nid, const std::string& from,
+		                                 SymbolRecord* out) -> bool {
+			if (type != SymbolType::NoType) {
+				return false;
+			}
+			for (const auto as: {SymbolType::Func, SymbolType::Object}) {
+				if (resolve_by_nid_as(nid, as, out)) {
+					Log::WriteToConsoleAndLog(
+					    fmt::format("PS5 NID fallback: {} -> {} (type)\n", from, out->name));
+					return true;
+				}
+			}
 			return false;
 		};
 
@@ -1623,6 +1643,9 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 					LOGF("PS5 NID fallback: %s -> %s\n", sr.name.c_str(), out_info->name.c_str());
 					return;
 				}
+				if (resolve_notype_by_nid(sr.name, SymbolDatabase::GenerateName(sr), out_info)) {
+					return;
+				}
 			}
 
 			if (rec != nullptr) {
@@ -1636,6 +1659,9 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 			if (resolve_by_nid(ids.at(0), out_info)) {
 				LOGF("PS5 NID fallback: %s -> %s (missing lib/module metadata)\n",
 				     ids.at(0).c_str(), out_info->name.c_str());
+				return;
+			}
+			if (resolve_notype_by_nid(ids.at(0), ids.at(0), out_info)) {
 				return;
 			}
 
