@@ -30,7 +30,7 @@ std::array<uint8_t, 20> Sha1Digest(const uint8_t* data, size_t size) {
 		uint32_t w[80] = {};
 		for (int i = 0; i < 16; i++) {
 			const auto j = offset + static_cast<size_t>(i) * 4u;
-			w[i] = (static_cast<uint32_t>(msg[j + 0]) << 24u) |
+			w[i]         = (static_cast<uint32_t>(msg[j + 0]) << 24u) |
 			       (static_cast<uint32_t>(msg[j + 1]) << 16u) |
 			       (static_cast<uint32_t>(msg[j + 2]) << 8u) | static_cast<uint32_t>(msg[j + 3]);
 		}
@@ -118,9 +118,10 @@ size_t NameTable::AddNames(std::string_view text) {
 	while (!text.empty()) {
 		const auto end  = text.find('\n');
 		auto       line = text.substr(0, end);
-		text            = (end == std::string_view::npos ? std::string_view {} : text.substr(end + 1));
+		text = (end == std::string_view::npos ? std::string_view {} : text.substr(end + 1));
 
-		while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) {
+		while (!line.empty() &&
+		       (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) {
 			line.remove_suffix(1);
 		}
 		while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) {
@@ -140,7 +141,8 @@ bool NameTable::LoadFile(const std::filesystem::path& path, size_t* added) {
 	if (!file) {
 		return false;
 	}
-	const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	const std::string text((std::istreambuf_iterator<char>(file)),
+	                       std::istreambuf_iterator<char>());
 	const auto        count = AddNames(text);
 	if (added != nullptr) {
 		*added = count;

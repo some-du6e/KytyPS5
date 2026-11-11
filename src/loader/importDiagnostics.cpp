@@ -125,9 +125,9 @@ std::string FormatSummary(uint32_t functions, uint32_t objects,
 	std::sort(by_library.begin(), by_library.end(), [](const auto& a, const auto& b) {
 		return a.second != b.second ? a.second > b.second : a.first < b.first;
 	});
-	std::string text = Printf("Unresolved imports: %" PRIu32 " functions, %" PRIu32
-	                          " objects; by library: ",
-	                          functions, objects);
+	std::string text = Printf(
+	    "Unresolved imports: %" PRIu32 " functions, %" PRIu32 " objects; by library: ", functions,
+	    objects);
 	if (by_library.empty()) {
 		text += "none";
 	}

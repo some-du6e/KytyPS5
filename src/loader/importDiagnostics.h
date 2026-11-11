@@ -71,7 +71,7 @@ struct ImportReportEntry {
 	std::string importer; // file name of the importing program
 	std::string library;  // library as the importer names it, without "libSce"
 	std::string nid;
-	std::string type;     // Func, Object or NoType
+	std::string type; // Func, Object or NoType
 	ImportState state = ImportState::Unresolved;
 	// HLE: the emulator function; LLE: the file name of the exporting PRX; unresolved: the symbol
 	// name from --nid-names, or empty.

@@ -17,7 +17,7 @@ namespace Common::SoftFail {
 enum class ParamSize { Exact, Larger, Smaller };
 
 constexpr ParamSize CheckParamSize(uint64_t actual, uint64_t expected) {
-	return actual == expected ? ParamSize::Exact
+	return actual == expected  ? ParamSize::Exact
 	       : actual > expected ? ParamSize::Larger
 	                           : ParamSize::Smaller;
 }
