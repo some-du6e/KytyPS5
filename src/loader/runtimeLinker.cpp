@@ -156,7 +156,13 @@ static KYTY_SYSV_ABI uint64_t UnresolvedImportStub(uint64_t record_ptr);
 static bool PatchGuestMemory64(uint64_t vaddr, uint64_t value) {
 	auto* ptr     = reinterpret_cast<uint64_t*>(vaddr);
 	bool  changed = (*ptr != value);
-	std::memcpy(ptr, &value, sizeof(value));
+	if ((vaddr & (alignof(uint64_t) - 1)) == 0) {
+		// A GOT slot can be re-bound while other threads call through it (sceKernelLoadStartModule
+		// relocates every program): one aligned 8-byte store, so they see the old or the new target.
+		std::atomic_ref<uint64_t>(*ptr).store(value, std::memory_order_release);
+	} else {
+		std::memcpy(ptr, &value, sizeof(value));
+	}
 	return changed;
 }
 
@@ -1063,12 +1069,35 @@ static RelocationInfo GetRelocationInfo(Elf64_Rela* r, Program* program) {
 	return ret;
 }
 
+// The stub record of a GOT slot that currently holds the stub thunk or the invalid page.
+static const std::string* StubbedSlotName(uint64_t slot) {
+	if (auto it = g_stubbed_imports_by_slot.find(slot); it != g_stubbed_imports_by_slot.end()) {
+		return &it->second->name;
+	}
+	if (auto it = g_unresolved_objects_by_slot.find(slot); it != g_unresolved_objects_by_slot.end()) {
+		return &it->second.name;
+	}
+	return nullptr;
+}
+
 static bool RelocateRecord(uint32_t index, Elf64_Rela* r, Program* program, bool jmprela_table) {
 	KYTY_PROFILER_FUNCTION();
+
+	// Unresolved slots are retried on every RelocateAll (their rela bit stays clear), which is what
+	// re-binds them once a module loaded later exports the symbol. --no-rebind-imports keeps them.
+	const auto* stubbed_name = StubbedSlotName(program->base_vaddr + r->r_offset);
+	if (stubbed_name != nullptr && !Config::RebindImportsEnabled()) {
+		return false;
+	}
 
 	const auto ri      = GetRelocationInfo(r, program);
 	auto       value   = ri.value;
 	bool       stubbed = false;
+	if (ri.resolved && stubbed_name != nullptr &&
+	    *reinterpret_cast<const uint64_t*>(ri.vaddr) != value) {
+		Log::WriteToConsoleAndLog(ImportDiagnostics::FormatRebind(
+		    *stubbed_name, ri.name, Common::PathToString(program->file_name.filename())));
+	}
 	if (!ri.resolved) {
 		const bool weak = ri.bind == BindType::Weak || !program->fail_if_global_not_resolved;
 		if (!weak) {

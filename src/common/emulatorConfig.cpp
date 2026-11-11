@@ -376,4 +376,8 @@ bool UnresolvedReturnZero() {
 	return g_config != nullptr && g_config->unresolved_return_zero;
 }
 
+bool RebindImportsEnabled() {
+	return g_config == nullptr || g_config->rebind_imports;
+}
+
 } // namespace Config

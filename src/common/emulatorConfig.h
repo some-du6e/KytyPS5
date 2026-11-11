@@ -142,6 +142,8 @@ struct ConfigOptions {
 	bool                  strict_imports         = false;
 	// --unresolved-return-zero: unresolved functions return 0 in every library (no offline policy).
 	bool                  unresolved_return_zero = false;
+	// --no-rebind-imports: imports stubbed at load stay stubbed when a later module exports them.
+	bool                  rebind_imports         = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -261,6 +263,7 @@ const std::vector<std::string>& GetGuestArguments();
 const std::filesystem::path& GetNidNamesFile();
 bool StrictImportsEnabled();
 bool UnresolvedReturnZero();
+bool RebindImportsEnabled();
 
 } // namespace Config
 

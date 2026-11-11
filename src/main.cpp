@@ -178,6 +178,8 @@ static void PrintUsage() {
 	::printf("  --strict-imports                     Stop at the first call of an unresolved import.\n");
 	::printf("  --unresolved-return-zero             Unresolved Np/Net/Http/Ssl functions return 0\n"
 	         "                                       instead of an offline error.\n");
+	::printf("  --no-rebind-imports                  Keep imports stubbed at boot stubbed when a module\n"
+	         "                                       loaded later exports them.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -315,6 +317,7 @@ static constexpr Flag FLAGS[] = {
     // gta6-prep: hle
     {"--strict-imports", &ConfigOptions::strict_imports},
     {"--unresolved-return-zero", &ConfigOptions::unresolved_return_zero},
+    {"--no-rebind-imports", &ConfigOptions::rebind_imports, false},
 };
 
 static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_help) {
