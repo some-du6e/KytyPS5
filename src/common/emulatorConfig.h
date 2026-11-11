@@ -168,6 +168,9 @@ struct ConfigOptions {
 	// --no-tlas-cache: without native ray tracing, CPU-written guest TLASes are not cached and
 	// pinned before their dispatches (b4bee7b8).
 	bool tlas_cache_enabled = true;
+	// --pipeline-helpers <n|auto>: helper processes that compile compute pipelines (2b5052fb);
+	// -1 (auto) keeps the built-in choice, 0 turns them off.
+	int32_t pipeline_helpers = -1;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -332,6 +335,11 @@ bool KeepSmallLayerTargets();
 // ray tracing patch recognizes get pinned cached buffers before its dispatch (b4bee7b8). With
 // native ray tracing they always do. On without a loaded configuration.
 bool TlasCacheEnabled();
+
+// --pipeline-helpers: the number of pipeline helper processes, or -1 for the built-in choice
+// (NVIDIA on Windows only; see PipelineHelperProcesses()). KYTY_PIPELINE_HELPERS still wins.
+// -1 without a loaded configuration.
+int32_t GetPipelineHelpers();
 
 } // namespace Config
 

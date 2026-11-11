@@ -411,4 +411,8 @@ bool TlasCacheEnabled() {
 	return g_config == nullptr || g_config->tlas_cache_enabled;
 }
 
+int32_t GetPipelineHelpers() {
+	return g_config != nullptr ? g_config->pipeline_helpers : -1;
+}
+
 } // namespace Config

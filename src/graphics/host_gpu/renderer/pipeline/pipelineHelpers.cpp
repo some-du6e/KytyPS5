@@ -732,6 +732,10 @@ uint32_t PipelineHelperProcesses(const GraphicContext& graphics) {
 		const auto parsed = std::from_chars(value, end, count);
 		return parsed.ec == std::errc {} && parsed.ptr == end ? count : 0u;
 	}
+	// gta6-prep: config: --pipeline-helpers <n> fixes the count as the variable does.
+	if (const auto configured = Config::GetPipelineHelpers(); configured >= 0) {
+		return static_cast<uint32_t>(configured);
+	}
 	// Measured with NVIDIA's driver only.
 	constexpr uint32_t NvidiaVendor = 0x10deu;
 	if (graphics.GetPhysicalDeviceProperties().vendorID != NvidiaVendor) {
@@ -749,7 +753,7 @@ uint32_t PipelineHelperProcesses(const GraphicContext& graphics) {
 }
 
 uint32_t PipelineHelperProcessesAlone(uint32_t processes) {
-	if (std::getenv("KYTY_PIPELINE_HELPERS") != nullptr) {
+	if (std::getenv("KYTY_PIPELINE_HELPERS") != nullptr || Config::GetPipelineHelpers() >= 0) {
 		return processes;
 	}
 	DWORD_PTR process_mask = 0;

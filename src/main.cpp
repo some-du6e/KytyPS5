@@ -220,6 +220,9 @@ static void PrintUsage() {
 	::printf("                                       1024x1024 like other images (saves video memory).\n");
 	::printf("  --no-tlas-cache                      Without --native-raytracing, do not cache and pin\n");
 	::printf("                                       CPU-written guest TLASes before their dispatches.\n");
+	::printf("  --pipeline-helpers <n|auto>          Helper processes that compile compute pipelines\n");
+	::printf("                                       (NVIDIA, Windows): auto (default), 0 is off. The\n");
+	::printf("                                       KYTY_PIPELINE_HELPERS variable overrides it.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -460,6 +463,18 @@ static std::optional<bool> ParseGta6PrepOption(const std::string& arg, const std
 		} else {
 			config.quirks_off |= mask;
 			config.quirks_on &= ~mask;
+		}
+		return true;
+	}
+	if (arg == "--pipeline-helpers") {
+		uint32_t count = 0;
+		if (value == "auto") {
+			config.pipeline_helpers = -1;
+		} else if (ParseUint32(value, count) && count <= 64) {
+			config.pipeline_helpers = static_cast<int32_t>(count);
+		} else {
+			::printf("invalid pipeline helper count (0-64 or auto): %s\n", value.c_str());
+			return false;
 		}
 		return true;
 	}

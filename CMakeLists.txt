@@ -936,6 +936,12 @@ if(BUILD_TESTING)
 	                 --no-rt-stats --no-readback-tiled-images --no-readback-storage-images
 	                 --no-sync-raw-image-buffers --no-relaxed-shader-float --no-shader-cache
 	                 --no-perf-overlay --occlusion-queries)
+	add_test(NAME emulator_pipeline_helpers_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --pipeline-helpers 2
+	                 --pipeline-helpers 0 --pipeline-helpers auto)
+	add_test(NAME emulator_pipeline_helpers_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --pipeline-helpers some)
+	set_tests_properties(emulator_pipeline_helpers_invalid PROPERTIES WILL_FAIL TRUE)
 	set_tests_properties(emulator_preset_unknown emulator_preset_missing
 	                     emulator_title_profile_unknown emulator_quirk_invalid_state
 	                     emulator_quirk_unknown PROPERTIES WILL_FAIL TRUE)

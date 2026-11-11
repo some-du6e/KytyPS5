@@ -16,6 +16,8 @@ constexpr std::string_view SafeTokens[] = {
     "--no-lod-stats",
     "--no-keep-small-layer-targets",
     "--no-tlas-cache",
+    "--pipeline-helpers",
+    "0",
 };
 
 // Options that use less video memory. Only options that exist are listed.
