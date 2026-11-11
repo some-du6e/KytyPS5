@@ -948,6 +948,17 @@ if(BUILD_TESTING)
 	add_test(NAME emulator_gpu_thread_cpus_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --gpu-thread-cpus 2,x)
 	set_tests_properties(emulator_gpu_thread_cpus_invalid PROPERTIES WILL_FAIL TRUE)
+	add_test(NAME emulator_kill_switch_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --overlap-dispatches --defer-draw-barriers
+	                 --masked-select-elimination --spirv-forwarding --uniform-buffers --lod-stats
+	                 --keep-small-layer-targets --tlas-cache --no-overlap-dispatches
+	                 --no-defer-draw-barriers --no-masked-select-elimination --no-spirv-forwarding
+	                 --no-uniform-buffers --no-lod-stats --no-keep-small-layer-targets
+	                 --no-tlas-cache)
+	# A preset is expanded where it stands: an option after it still parses and overrides it.
+	add_test(NAME emulator_preset_override_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --preset safe --async-pipelines
+	                 --pipeline-helpers auto --gpu-thread-cpus default)
 	set_tests_properties(emulator_preset_unknown emulator_preset_missing
 	                     emulator_title_profile_unknown emulator_quirk_invalid_state
 	                     emulator_quirk_unknown PROPERTIES WILL_FAIL TRUE)
