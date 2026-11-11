@@ -635,6 +635,15 @@ add_executable(slot_vector_tests EXCLUDE_FROM_ALL
 )
 target_include_directories(slot_vector_tests PRIVATE ${inc_headers})
 
+# gta6-prep: hle. Pure helpers of the unresolved-import and soft-fail handling; no guest, no GPU.
+add_executable(hle_softfail_tests EXCLUDE_FROM_ALL
+	"${KYTY_TESTS_DIR}/HleSoftFailTests.cpp"
+	"${KYTY_SOURCE_DIR}/loader/importDiagnostics.cpp"
+	"${KYTY_SOURCE_DIR}/loader/nid.cpp"
+)
+target_link_libraries(hle_softfail_tests common)
+target_include_directories(hle_softfail_tests PRIVATE ${inc_headers})
+
 add_executable(common_tests EXCLUDE_FROM_ALL "${KYTY_TESTS_DIR}/CommonTests.cpp")
 target_link_libraries(common_tests common kyty_test_gtest)
 
@@ -909,6 +918,7 @@ if(BUILD_TESTING)
 	add_test(NAME avplayer_file COMMAND $<TARGET_FILE:avplayer_file_tests>)
 	add_test(NAME vdecsw COMMAND $<TARGET_FILE:vdecsw_tests>)
 	add_test(NAME bit_array COMMAND $<TARGET_FILE:bit_array_tests>)
+	add_test(NAME hle_softfail COMMAND $<TARGET_FILE:hle_softfail_tests>)
 	add_test(NAME lru_cache COMMAND $<TARGET_FILE:lru_cache_tests>)
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)
