@@ -57,6 +57,9 @@ struct GraphicContext {
 	uint32_t                           max_subgroup_size                     = 0;
 	uint32_t                           max_push_descriptors                  = 0;
 	uint32_t                           device_clock_period_ps                = 0;
+	// gta6-prep: vram: maxMemoryAllocationSize and maxBufferSize (Vulkan 1.3); 0 unknown.
+	uint64_t                           max_memory_allocation_size            = 0;
+	uint64_t                           max_buffer_size                       = 0;
 	vk::DescriptorSetLayout            image_heap_layout                     = nullptr;
 	Common::Mutex                      queue_mutex;
 	uint32_t                           queue_family = static_cast<uint32_t>(-1);

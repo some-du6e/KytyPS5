@@ -20,9 +20,11 @@
 #include "kernel/memory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <cinttypes>
 #include <cstring>
+#include <fmt/format.h>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -746,7 +748,8 @@ void BufferCache::CacheFaultedMemory(uint64_t vaddr, uint64_t size) {
 	}
 }
 
-BufferCache::OverlapResult BufferCache::ResolveOverlaps(uint64_t vaddr, uint64_t size) {
+BufferCache::OverlapResult BufferCache::ResolveOverlaps(uint64_t vaddr, uint64_t size,
+                                                        bool stream_leap) {
 	static constexpr int      StreamLeapThreshold = 16;
 	static constexpr uint64_t StreamLeapSize      = CACHING_PAGESIZE * 128;
 
@@ -775,7 +778,8 @@ BufferCache::OverlapResult BufferCache::ResolveOverlaps(uint64_t vaddr, uint64_t
 		const bool  expands_right = buffer_end > end;
 		begin                     = std::min(begin, buffer_begin);
 		end                       = std::max(end, buffer_end);
-		if (!has_stream_leap && (stream_score += buffer.StreamScore()) > StreamLeapThreshold) {
+		if (stream_leap && !has_stream_leap &&
+		    (stream_score += buffer.StreamScore()) > StreamLeapThreshold) {
 			has_stream_leap = true;
 			// Reserve space in the incoming stream's direction of growth.
 			// The old buffer extending left of the request predicts growth to the right, and vice versa.
@@ -815,8 +819,35 @@ void BufferCache::JoinOverlap(BufferId new_id, BufferId overlap_id, bool accumul
 BufferId BufferCache::CreateBuffer(uint64_t vaddr, uint64_t size) {
 	const auto end = Common::AlignUp(vaddr + size, CACHING_PAGESIZE);
 	vaddr = Common::AlignDown(vaddr, CACHING_PAGESIZE);
-	size               = end - vaddr;
-	const auto overlap = ResolveOverlaps(vaddr, size);
+	size         = end - vaddr;
+	auto overlap = ResolveOverlaps(vaddr, size);
+	// gta6-prep: vram: a merge past the device limits gets a message before VMA fails opaquely,
+	// and loses its stream reserve when that is what passes them.
+	if (MemoryPolicy::FitMergedBuffer(overlap.end - overlap.begin,
+	                                  m_graphics.max_memory_allocation_size,
+	                                  m_graphics.max_buffer_size) != MemoryPolicy::MergedBufferFit::Fits) {
+		const auto plain = overlap.has_stream_leap ? ResolveOverlaps(vaddr, size, false) : overlap;
+		const auto plan  = MemoryPolicy::PlanMergedBuffer(
+		    overlap.end - overlap.begin, plain.end - plain.begin,
+		    m_graphics.max_memory_allocation_size, m_graphics.max_buffer_size);
+		if (plan.drop_stream_leap) {
+			overlap = plain;
+		}
+		if (plan.fit != MemoryPolicy::MergedBufferFit::Fits) {
+			static std::atomic<uint32_t> reported {0};
+			if (reported.fetch_add(1, std::memory_order_relaxed) < 8) {
+				const bool buffer_limit = plan.fit == MemoryPolicy::MergedBufferFit::OverBufferSize;
+				Log::WriteToConsoleAndLog(fmt::format(
+				    "BufferCache: merged guest buffer 0x{:016x}-0x{:016x} ({} MiB) exceeds {} ({} "
+				    "MiB); its allocation may fail\n",
+				    overlap.begin, overlap.end, (overlap.end - overlap.begin) >> 20u,
+				    buffer_limit ? "maxBufferSize" : "maxMemoryAllocationSize",
+				    (buffer_limit ? m_graphics.max_buffer_size
+				                  : m_graphics.max_memory_allocation_size) >>
+				        20u));
+			}
+		}
+	}
 
 	const auto id = m_slot_buffers.insert(
 	    m_graphics, m_scheduler, MemoryUsage::DeviceLocal, overlap.begin,

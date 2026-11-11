@@ -340,6 +340,37 @@ void TestReportedOutputResolution() {
 	      "--video-out-resolution parsing");
 }
 
+// Merged guest buffers against maxMemoryAllocationSize and maxBufferSize.
+void TestMergedBufferPlan() {
+	using Policy::MergedBufferFit;
+	using Policy::MergedBufferPlan;
+	using Policy::PlanMergedBuffer;
+	constexpr uint64_t allocation = 4 * GiB;
+	constexpr uint64_t buffer     = 16 * GiB;
+	Check(PlanMergedBuffer(1 * GiB, 1 * GiB, allocation, buffer) == MergedBufferPlan {},
+	      "a buffer within the limits is changed");
+	Check(PlanMergedBuffer(8 * GiB, 8 * GiB, 0, 0) == MergedBufferPlan {},
+	      "unknown limits rejected a buffer");
+	// Only the stream reserve passes the allocation limit: drop it.
+	Check(PlanMergedBuffer(allocation + 2 * MiB, allocation, allocation, buffer) ==
+	          MergedBufferPlan {.drop_stream_leap = true, .fit = MergedBufferFit::Fits},
+	      "a reserve past maxMemoryAllocationSize is kept");
+	// Past the allocation limit without a reserve: kept, reported.
+	Check(PlanMergedBuffer(5 * GiB, 5 * GiB, allocation, buffer) ==
+	          MergedBufferPlan {.drop_stream_leap = false, .fit = MergedBufferFit::OverAllocationSize},
+	      "a buffer past maxMemoryAllocationSize is not reported");
+	// Past both even without the reserve: the reserve is still dropped, the rest is reported.
+	Check(PlanMergedBuffer(20 * GiB, 18 * GiB, allocation, buffer) ==
+	          MergedBufferPlan {.drop_stream_leap = true, .fit = MergedBufferFit::OverBufferSize},
+	      "a buffer past maxBufferSize is not reported");
+	Check(PlanMergedBuffer(17 * GiB, 15 * GiB, allocation, buffer) ==
+	          MergedBufferPlan {.drop_stream_leap = true, .fit = MergedBufferFit::OverAllocationSize},
+	      "dropping the reserve below maxBufferSize is not taken");
+	Check(Policy::FitMergedBuffer(buffer, allocation, buffer) == MergedBufferFit::OverAllocationSize &&
+	          Policy::FitMergedBuffer(allocation, allocation, buffer) == MergedBufferFit::Fits,
+	      "the limits are not inclusive");
+}
+
 } // namespace
 
 int main() {
@@ -352,6 +383,7 @@ int main() {
 	TestProfileBudgets();
 	TestBreakdownLine();
 	TestReportedOutputResolution();
+	TestMergedBufferPlan();
 	std::printf("VramPolicyTests: ok\n");
 	return 0;
 }

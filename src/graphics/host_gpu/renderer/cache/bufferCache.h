@@ -275,7 +275,9 @@ private:
 	static_assert(CACHING_PAGESIZE == (uint64_t {1} << PageTable::kPageBits));
 	void WriteDataBuffer(Buffer& buffer, uint64_t address, const void* source, uint64_t size);
 	void TouchBuffer(const Buffer& buffer);
-	[[nodiscard]] OverlapResult ResolveOverlaps(uint64_t vaddr, uint64_t size);
+	// `stream_leap`: a streaming buffer grows by a reserve in its direction (gta6-prep: vram turns
+	// it off where it would pass a device limit).
+	[[nodiscard]] OverlapResult ResolveOverlaps(uint64_t vaddr, uint64_t size, bool stream_leap = true);
 	void JoinOverlap(BufferId new_id, BufferId overlap_id, bool accumulate_stream_score);
 	[[nodiscard]] BufferId CreateBuffer(uint64_t vaddr, uint64_t size);
 	void                   Register(BufferId id);
