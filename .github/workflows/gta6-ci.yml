@@ -86,7 +86,8 @@ jobs:
         id: targets
         shell: bash
         run: |
-          targets=$(grep -o 'TARGET_FILE:[a-z0-9_]*' CMakeLists.txt | cut -d: -f2 | sort -u | tr '\n' ' ')
+          known=$(ninja -C _Build/linux -t targets all | cut -d: -f1 | sort -u)
+          targets=$(grep -o 'TARGET_FILE:[a-z0-9_]*' CMakeLists.txt | cut -d: -f2 | sort -u | grep -Fxf <(echo "$known") | tr '\n' ' ')
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
           echo "$targets"
 
@@ -190,7 +191,8 @@ jobs:
         id: targets
         shell: bash
         run: |
-          targets=$(grep -o 'TARGET_FILE:[a-z0-9_]*' CMakeLists.txt | cut -d: -f2 | sort -u | tr '\n' ' ')
+          known=$(ninja -C _Build/windows -t targets all | cut -d: -f1 | sort -u)
+          targets=$(grep -o 'TARGET_FILE:[a-z0-9_]*' CMakeLists.txt | cut -d: -f2 | sort -u | grep -Fxf <(echo "$known") | tr '\n' ' ')
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
       - name: Build
