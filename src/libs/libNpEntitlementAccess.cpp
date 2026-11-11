@@ -1,4 +1,6 @@
 #include "common/abi.h"
+#include "common/emulatorConfig.h"
+#include "common/hackNotice.h"
 #include "common/logging/log.h"
 #include "libs/libs.h"
 #include "loader/additionalContent.h"
@@ -14,6 +16,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <span>
 
 namespace Libs {
 
@@ -166,6 +169,18 @@ static constexpr NpEntitlementAccessAddcontEntitlementInfo NP_ENTITLEMENT_ACCESS
     {{{"5d5c48"}, {}}, 3, 4}, // GTA V hash 0x961c34b0
     {{{"_mtqu6"}, {}}, 3, 4}, // GTA V hash 0x9cd1bcad
 };
+
+// gta6-prep: config
+// GTA V's labels are reported only with Quirk::RockstarLegacyEntitlements (the gta5 title profile,
+// or --quirk rockstar-legacy-entitlements=on).
+static std::span<const NpEntitlementAccessAddcontEntitlementInfo> LegacyAddons(const char* site) {
+	if (!Config::QuirkEnabled(Common::Quirk::RockstarLegacyEntitlements)) {
+		return {};
+	}
+	Common::HackNotice::Report("GTA V legacy entitlement labels reported", site, 0, 0,
+	                           "quirk rockstar-legacy-entitlements");
+	return NP_ENTITLEMENT_ACCESS_ADDON_LIST;
+}
 
 static NpEntitlementAccessAddcontEntitlementInfo
 MakeAddcontInfo(const Loader::AddContentEntry& entry) {
@@ -422,17 +437,17 @@ static int KYTY_SYSV_ABI NpEntitlementAccessGetAddcontEntitlementInfoList(
 		return NP_ENTITLEMENT_ACCESS_ERROR_PARAMETER;
 	}
 
-	constexpr auto legacy_count = std::size(NP_ENTITLEMENT_ACCESS_ADDON_LIST);
-	const auto&    entries      = Loader::AddContentGetAll();
-	*hit_num                    = static_cast<uint32_t>(legacy_count + entries.size());
+	const auto  legacy       = LegacyAddons("NpEntitlementAccessGetAddcontEntitlementInfoList");
+	const auto  legacy_count = legacy.size();
+	const auto& entries      = Loader::AddContentGetAll();
+	*hit_num                 = static_cast<uint32_t>(legacy_count + entries.size());
 
 	if (list != nullptr && list_num != 0) {
 		memset(list, 0, sizeof(*list) * list_num);
 
 		const auto copy_num = std::min(list_num, *hit_num);
 		for (uint32_t i = 0; i < copy_num; i++) {
-			list[i] = i < legacy_count ? NP_ENTITLEMENT_ACCESS_ADDON_LIST[i]
-			                          : MakeAddcontInfo(entries[i - legacy_count]);
+			list[i] = i < legacy_count ? legacy[i] : MakeAddcontInfo(entries[i - legacy_count]);
 		}
 	}
 
@@ -455,7 +470,7 @@ static int KYTY_SYSV_ABI NpEntitlementAccessGetAddcontEntitlementInfo(
 
 	memset(info, 0, sizeof(*info));
 
-	for (const auto& entitlement: NP_ENTITLEMENT_ACCESS_ADDON_LIST) {
+	for (const auto& entitlement: LegacyAddons("NpEntitlementAccessGetAddcontEntitlementInfo")) {
 		if (strncmp(entitlement_label->data, entitlement.entitlement_label.data,
 		            sizeof(entitlement_label->data)) == 0) {
 			*info = entitlement;
