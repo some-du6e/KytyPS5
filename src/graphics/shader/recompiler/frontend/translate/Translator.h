@@ -6,6 +6,7 @@
 #include "graphics/shader/recompiler/ir/IREmitter.h"
 
 #include <array>
+#include <span>
 #include <utility>
 
 namespace Libs::Graphics::ShaderRecompiler::Frontend {
@@ -287,6 +288,10 @@ private:
 	void S_BFE_I64(const Decoder::Instruction& inst);
 	void V_PERM_B32(const Decoder::Instruction& inst);
 	void V_SWAP_B32(const Decoder::Instruction& inst);
+	IR::U32 IntegerSum(std::span<const IR::U32> terms, bool sign, bool saturate);
+	void    V_DOT2_F32_F16(const Decoder::Instruction& inst);
+	void    V_DOT_INTEGER(const Decoder::Instruction& inst, uint32_t bits, bool sign,
+	                      bool accumulate_destination);
 
 	void EmitScalar(const Decoder::Instruction& inst);
 	void EmitVector(const Decoder::Instruction& inst);

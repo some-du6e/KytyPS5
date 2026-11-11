@@ -380,6 +380,22 @@ void Translator::V_DOT2C_F32_F16(const Decoder::Instruction& inst) {
 	WriteOperand(DestinationOperand(inst), ir.Emit(IR::ValueOpcode::FPFma32, {a_hi, b_hi, lo}));
 }
 
+// gta6-prep: shader-alu. D.f32 = S0.f16[0] * S1.f16[0] + S0.f16[1] * S1.f16[1] + S2.f32, the
+// halves picked by OP_SEL / OP_SEL_HI and negated by NEG / NEG_HI; CLAMP saturates the result.
+void Translator::V_DOT2_F32_F16(const Decoder::Instruction& inst) {
+	const auto a_lo     = ReadF16LaneAsF32(inst.src0, false);
+	const auto a_hi     = ReadF16LaneAsF32(inst.src0, true);
+	const auto b_lo     = ReadF16LaneAsF32(inst.src1, false);
+	const auto b_hi     = ReadF16LaneAsF32(inst.src1, true);
+	auto accumulator    = inst.src2;
+	accumulator.op_sel    = false;
+	accumulator.op_sel_hi = false;
+	accumulator.negate_hi = false;
+	const auto acc = IR::F32(ReadOperand(accumulator, IR::Type::F32));
+	const auto lo  = IR::F32(ir.Emit(IR::ValueOpcode::FPFma32, {a_lo, b_lo, acc}));
+	WriteOperand(DestinationOperand(inst), ir.Emit(IR::ValueOpcode::FPFma32, {a_hi, b_hi, lo}));
+}
+
 void Translator::V_CUBEID_F32(const Decoder::Instruction& inst) {
 	return FloatCube(inst, 0u);
 }

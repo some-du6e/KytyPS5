@@ -617,6 +617,14 @@ void Translator::EmitVector(const Decoder::Instruction& inst) {
 		// gta6-prep: shader-alu
 		case O::V_PERM_B32: return V_PERM_B32(inst);
 		case O::V_SWAP_B32: return V_SWAP_B32(inst);
+		case O::V_DOT2_F32_F16: return V_DOT2_F32_F16(inst);
+		case O::V_DOT2_I32_I16: return V_DOT_INTEGER(inst, 16u, true, false);
+		case O::V_DOT2_U32_U16: return V_DOT_INTEGER(inst, 16u, false, false);
+		case O::V_DOT4_I32_I8: return V_DOT_INTEGER(inst, 8u, true, false);
+		case O::V_DOT4_U32_U8: return V_DOT_INTEGER(inst, 8u, false, false);
+		case O::V_DOT8_I32_I4: return V_DOT_INTEGER(inst, 4u, true, false);
+		case O::V_DOT8_U32_U4: return V_DOT_INTEGER(inst, 4u, false, false);
+		case O::V_DOT4C_I32_I8: return V_DOT_INTEGER(inst, 8u, true, true);
 		default: return FailMissingTranslation(inst);
 	}
 }

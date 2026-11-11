@@ -78,6 +78,8 @@ constexpr Vop2OpcodeInfo VOP2_OPCODE_LIST[] = {
     {0x39u, Opcode::V_MAX_F16, Vop2SdwaProfile::Float16},
     {0x3au, Opcode::V_MIN_F16, Vop2SdwaProfile::Float16},
     {0x3cu, Opcode::V_PK_FMAC_F16},
+    // gta6-prep: shader-alu
+    {0x0du, Opcode::V_DOT4C_I32_I8},
 };
 
 constexpr auto VOP2_OPS = Detail::MakeOpcodeTable<0x40>(VOP2_OPCODE_LIST);
@@ -358,6 +360,11 @@ constexpr OpcodeMap VOP3P_OPCODE_LIST[] = {
     {0x10u, Opcode::V_PK_MUL_F16},     {0x11u, Opcode::V_PK_MIN_F16},
     {0x12u, Opcode::V_PK_MAX_F16},     {0x20u, Opcode::V_FMA_F32},
     {0x21u, Opcode::V_MAD_MIXLO_F16},  {0x22u, Opcode::V_MAD_MIXHI_F16},
+    // gta6-prep: shader-alu
+    {0x13u, Opcode::V_DOT2_F32_F16},   {0x14u, Opcode::V_DOT2_I32_I16},
+    {0x15u, Opcode::V_DOT2_U32_U16},   {0x16u, Opcode::V_DOT4_I32_I8},
+    {0x17u, Opcode::V_DOT4_U32_U8},    {0x18u, Opcode::V_DOT8_I32_I4},
+    {0x19u, Opcode::V_DOT8_U32_U4},
 };
 
 constexpr auto VOP3P_OPS = Detail::MakeOpcodeTable<0x80>(VOP3P_OPCODE_LIST);
@@ -1291,6 +1298,40 @@ bool IsPackedVop3p(Opcode opcode) {
 	}
 }
 
+// gta6-prep: shader-alu
+bool IsVop3pDot(Opcode opcode) {
+	switch (opcode) {
+		case Opcode::V_DOT2_F32_F16:
+		case Opcode::V_DOT2_I32_I16:
+		case Opcode::V_DOT2_U32_U16:
+		case Opcode::V_DOT4_I32_I8:
+		case Opcode::V_DOT4_U32_U8:
+		case Opcode::V_DOT8_I32_I4:
+		case Opcode::V_DOT8_U32_U4: return true;
+		default: return false;
+	}
+}
+
+// Why the source modifiers of a dot product are not implemented, or null. OP_SEL / OP_SEL_HI
+// pick the halves of the 16-bit dot products; NEG / NEG_HI negate the F16 halves of
+// V_DOT2_F32_F16 and NEG its F32 accumulator.
+const char* UnsupportedVop3pDotModifiers(Opcode opcode, uint32_t op_sel, uint32_t neg,
+                                         uint32_t neg_hi) {
+	switch (opcode) {
+		case Opcode::V_DOT2_F32_F16:
+			return (neg_hi & 0x4u) != 0u ? "V_DOT2_F32_F16 NEG_HI on the accumulator is not implemented"
+			                             : nullptr;
+		case Opcode::V_DOT2_I32_I16:
+		case Opcode::V_DOT2_U32_U16:
+			return neg != 0u || neg_hi != 0u ? "VOP3P integer dot product NEG is not implemented"
+			                                 : nullptr;
+		default:
+			return op_sel != 0u || neg != 0u || neg_hi != 0u
+			           ? "VOP3P packed-byte dot product OP_SEL/NEG is not implemented"
+			           : nullptr;
+	}
+}
+
 bool IsMadMixF16(Opcode opcode) {
 	return opcode == Opcode::V_MAD_MIXLO_F16 || opcode == Opcode::V_MAD_MIXHI_F16;
 }
@@ -1909,6 +1950,13 @@ void DecodeVop3p(uint32_t pc, std::span<const uint32_t> code, uint32_t word_inde
 	} else if (IsMadMixF16(inst.opcode)) {
 		inst.dst.clamp = clamp != 0u;
 	} else if (IsPackedVop3p(inst.opcode)) {
+		inst.dst.clamp = clamp != 0u;
+	} else if (IsVop3pDot(inst.opcode)) {
+		// gta6-prep: shader-alu. CLAMP saturates the sum (to [0, 1] for V_DOT2_F32_F16).
+		if (const auto* reason = UnsupportedVop3pDotModifiers(inst.opcode, op_sel, neg, neg_hi)) {
+			SetUnsupported(inst, Family::VOP3P, opcode, reason);
+			return;
+		}
 		inst.dst.clamp = clamp != 0u;
 	} else if (clamp != 0u) {
 		SetUnsupported(inst, Family::VOP3P, opcode, "VOP3P integer clamp is not implemented");

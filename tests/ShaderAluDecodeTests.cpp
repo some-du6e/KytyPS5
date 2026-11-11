@@ -549,6 +549,70 @@ void TestVop3F16Modifiers() {
 	CompileToValidSpirv(code, "VOP3 F16 modifiers");
 }
 
+// ---- VOP3P dot products and V_DOT4C_I32_I8 ----
+
+void TestDotProducts() {
+	CheckEncodings({
+	    {"v_dot2_f32_f16 v0, v1, v2, v3", {0xcc134000u, 0x1c0e0501u}, Opcode::V_DOT2_F32_F16},
+	    {"v_dot2_f32_f16 v0, v1, v2, v3 neg_lo:[1,1,1] neg_hi:[1,0,0]", {0xcc134100u, 0xfc0e0501u}, Opcode::V_DOT2_F32_F16},
+	    {"v_dot2_f32_f16 v0, v1, v2, v3 clamp", {0xcc13c000u, 0x1c0e0501u}, Opcode::V_DOT2_F32_F16},
+	    {"v_dot2_i32_i16 v0, v1, v2, v3", {0xcc144000u, 0x1c0e0501u}, Opcode::V_DOT2_I32_I16},
+	    {"v_dot2_i32_i16 v0, v1, v2, v3 op_sel:[1,0,0] op_sel_hi:[0,1,1]", {0xcc144800u, 0x140e0501u}, Opcode::V_DOT2_I32_I16},
+	    {"v_dot2_u32_u16 v0, v1, v2, v3", {0xcc154000u, 0x1c0e0501u}, Opcode::V_DOT2_U32_U16},
+	    {"v_dot4_i32_i8 v0, v1, v2, v3", {0xcc164000u, 0x1c0e0501u}, Opcode::V_DOT4_I32_I8},
+	    {"v_dot4_i32_i8 v0, v1, v2, v3 clamp", {0xcc16c000u, 0x1c0e0501u}, Opcode::V_DOT4_I32_I8},
+	    {"v_dot4_u32_u8 v0, v1, v2, v3", {0xcc174000u, 0x1c0e0501u}, Opcode::V_DOT4_U32_U8},
+	    {"v_dot8_i32_i4 v0, v1, v2, v3", {0xcc184000u, 0x1c0e0501u}, Opcode::V_DOT8_I32_I4},
+	    {"v_dot8_u32_u4 v0, v1, v2, 0x12345", {0xcc194000u, 0x1bfe0501u, 0x00012345u}, Opcode::V_DOT8_U32_U4},
+	    {"v_dot4c_i32_i8 v0, v1, v2", {0x1a000501u}, Opcode::V_DOT4C_I32_I8},
+	    {"v_dot4c_i32_i8 v0, 0x1020304, v2", {0x1a0004ffu, 0x01020304u}, Opcode::V_DOT4C_I32_I8},
+	});
+	const uint32_t f16[] = {0xcc13c105u, 0xfc120501u}; // neg_lo:[1,1,1] neg_hi:[1,0,0] clamp
+	auto           inst  = DecodeOne(f16);
+	Check(inst.src0.negate && inst.src0.negate_hi && inst.src1.negate && !inst.src1.negate_hi &&
+	          inst.src2.negate && inst.dst.clamp && inst.src_count == 3u,
+	      "V_DOT2_F32_F16 lost its NEG/NEG_HI or CLAMP");
+	const uint32_t halves[] = {0xcc144806u, 0x14020701u}; // op_sel:[1,0,0] op_sel_hi:[0,1,1]
+	inst                    = DecodeOne(halves);
+	Check(inst.src0.op_sel && !inst.src0.op_sel_hi && !inst.src1.op_sel && inst.src1.op_sel_hi,
+	      "V_DOT2_I32_I16 lost its OP_SEL / OP_SEL_HI");
+	// Unimplemented modifiers stay unsupported: NEG_HI on the F32 accumulator, NEG on integer
+	// dots, OP_SEL on the packed-byte dots.
+	for (const auto& words: {std::array<uint32_t, 2> {0xcc134400u, 0x1c0e0501u},
+	                         std::array<uint32_t, 2> {0xcc144000u, 0x3c0e0501u},
+	                         std::array<uint32_t, 2> {0xcc164800u, 0x1c0e0501u},
+	                         std::array<uint32_t, 2> {0xcc164000u, 0x3c0e0501u}}) {
+		Check(DecodeOne(words).opcode == Opcode::UNSUPPORTED,
+		      "a dot product accepted a modifier it does not implement");
+	}
+
+	const uint32_t code[] = {
+	    0x7e0202ffu, 0x3c00bc00u, // v_mov_b32 v1, 0x3c00bc00
+	    0x7e0402ffu, 0x4200c400u, // v_mov_b32 v2, 0x4200c400
+	    0x7e0602ffu, 0x80ff017fu, // v_mov_b32 v3, 0x80ff017f
+	    0xcc134004u, 0x1bca0501u, // v_dot2_f32_f16 v4, v1, v2, 1.0
+	    0xcc13c105u, 0xfc120501u, // v_dot2_f32_f16 v5, v1, v2, v4 neg_lo:[1,1,1] neg_hi:[1,0,0] clamp
+	    0xcc144806u, 0x14020701u, // v_dot2_i32_i16 v6, v1, v3, v0 op_sel:[1,0,0] op_sel_hi:[0,1,1]
+	    0xcc15c007u, 0x1c020701u, // v_dot2_u32_u16 v7, v1, v3, v0 clamp
+	    0xcc16c008u, 0x1c020303u, // v_dot4_i32_i8 v8, v3, v1, v0 clamp
+	    0xcc17c009u, 0x1b060303u, // v_dot4_u32_u8 v9, v3, v1, -1 clamp
+	    0xcc18400au, 0x1c020503u, // v_dot8_i32_i4 v10, v3, v2, v0
+	    0xcc19400bu, 0x1bfe0503u, 0x00012345u, // v_dot8_u32_u4 v11, v3, v2, 0x12345
+	    0x1a100503u, // v_dot4c_i32_i8 v8, v3, v2
+	    0x7e3e0280u, // v_mov_b32 v31, 0
+	    0xe0701000u, 0x8000041fu, // buffer_store_dword v4, v31, s[0:3], 0 offen
+	    0xe0701004u, 0x8000051fu, // buffer_store_dword v5, v31, s[0:3], 0 offen offset:4
+	    0xe0701008u, 0x8000061fu, // buffer_store_dword v6, v31, s[0:3], 0 offen offset:8
+	    0xe070100cu, 0x8000071fu, // buffer_store_dword v7, v31, s[0:3], 0 offen offset:12
+	    0xe0701010u, 0x8000081fu, // buffer_store_dword v8, v31, s[0:3], 0 offen offset:16
+	    0xe0701014u, 0x8000091fu, // buffer_store_dword v9, v31, s[0:3], 0 offen offset:20
+	    0xe0701018u, 0x80000a1fu, // buffer_store_dword v10, v31, s[0:3], 0 offen offset:24
+	    0xe070101cu, 0x80000b1fu, // buffer_store_dword v11, v31, s[0:3], 0 offen offset:28
+	    0xbf810000u, // s_endpgm
+	};
+	CompileToValidSpirv(code, "dot products");
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -562,6 +626,7 @@ int main() {
 	TestMovesPermSwap();
 	TestSaveexecFamily();
 	TestVop3F16Modifiers();
+	TestDotProducts();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

@@ -612,4 +612,64 @@ void Translator::V_SWAP_B32(const Decoder::Instruction& inst) {
 	WriteOperand(PlainOperand(inst.src0), destination);
 }
 
+// The sum of 32-bit terms: wrapped, or saturated to the signed / unsigned 32-bit range (the CLAMP
+// of the integer dot products), evaluated in 64 bits.
+IR::U32 Translator::IntegerSum(std::span<const IR::U32> terms, bool sign, bool saturate) {
+	EXIT_IF(terms.empty());
+	if (!saturate) {
+		auto sum = terms[0];
+		for (size_t i = 1; i < terms.size(); i++) {
+			sum = ir.IAdd(sum, terms[i]);
+		}
+		return sum;
+	}
+	IR::Value wide;
+	for (size_t i = 0; i < terms.size(); i++) {
+		const auto high = sign ? ir.ShiftRightArithmetic(terms[i], IR::U32(IR::Value(31u)))
+		                       : IR::U32(IR::Value(0u));
+		const auto term = IR::Value(ir.ConstructU64(terms[i], high));
+		wide            = i == 0 ? term : ir.Emit(IR::ValueOpcode::IAdd64, {wide, term});
+	}
+	const auto low = ir.CompositeExtract(wide, 0);
+	if (sign) {
+		const auto below = IR::U1(ir.Emit(IR::ValueOpcode::SLessThan64,
+		                                  {wide, IR::Value(uint64_t {0xffffffff80000000ull})}));
+		const auto above = IR::U1(ir.Emit(IR::ValueOpcode::SLessThan64,
+		                                  {IR::Value(uint64_t {0x7fffffffull}), wide}));
+		return ir.Select(below, IR::U32(IR::Value(0x80000000u)),
+		                 ir.Select(above, IR::U32(IR::Value(0x7fffffffu)), low));
+	}
+	const auto above = IR::U1(
+	    ir.Emit(IR::ValueOpcode::ULessThan64, {IR::Value(uint64_t {0xffffffffull}), wide}));
+	return ir.Select(above, IR::U32(IR::Value(0xffffffffu)), low);
+}
+
+// D = sum over i of ext(S0.field[i]) * ext(S1.field[i]) + S2 (V_DOT4C_I32_I8: + D), with
+// `bits`-wide fields (16: the halves OP_SEL / OP_SEL_HI select), sign or zero extended.
+void Translator::V_DOT_INTEGER(const Decoder::Instruction& inst, uint32_t bits, bool sign,
+                               bool accumulate_destination) {
+	std::array<IR::U32, 9> terms;
+	uint32_t               count = 0;
+	if (bits == 16u) {
+		for (const bool high: {false, true}) {
+			terms[count++] = ir.IMul(ReadU16LaneAsU32(inst.src0, high, sign),
+			                         ReadU16LaneAsU32(inst.src1, high, sign));
+		}
+	} else {
+		const auto lhs     = ReadU32(inst.src0);
+		const auto rhs     = ReadU32(inst.src1);
+		const auto extract = sign ? IR::ValueOpcode::BitFieldSExtract : IR::ValueOpcode::BitFieldUExtract;
+		for (uint32_t offset = 0; offset < 32u; offset += bits) {
+			const auto a   = IR::U32(ir.Emit(extract, {lhs, IR::Value(offset), IR::Value(bits)}));
+			const auto b   = IR::U32(ir.Emit(extract, {rhs, IR::Value(offset), IR::Value(bits)}));
+			terms[count++] = ir.IMul(a, b);
+		}
+	}
+	terms[count++] = accumulate_destination ? ReadU32(PlainOperand(inst.dst)) : ReadU32(inst.src2);
+	auto destination  = DestinationOperand(inst);
+	const bool clamp  = destination.clamp;
+	destination.clamp = false;
+	WriteOperand(destination, IntegerSum(std::span(terms).first(count), sign, clamp));
+}
+
 } // namespace Libs::Graphics::ShaderRecompiler::Frontend
