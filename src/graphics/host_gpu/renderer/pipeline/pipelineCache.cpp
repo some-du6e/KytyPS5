@@ -503,7 +503,8 @@ ShaderRecompiler::Spirv::Profile SpirvProfile(const GraphicContext& graphics) {
 	        .relaxed_float          = Config::RelaxedShaderFloatEnabled(),
 	        // gta6-prep: config
 	        .masked_select_elimination = Config::MaskedSelectEliminationEnabled(),
-	        .spirv_forwarding          = Config::SpirvForwardingEnabled()};
+	        .spirv_forwarding          = Config::SpirvForwardingEnabled(),
+	        .uniform_buffers           = Config::UniformBuffersEnabled()};
 }
 
 std::filesystem::path ShaderStorePath() {

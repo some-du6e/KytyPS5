@@ -27,6 +27,9 @@ struct Profile {
 	bool masked_select_elimination = true;
 	// Spirv::ForwardMaskedSelects() runs on large modules (3a967527, 026c34a2).
 	bool spirv_forwarding = true;
+	// Constant-only buffers are read through uniform buffer views (556973e7; with
+	// KYTY_UNIFORM_BUFFERS=0 they are not either way).
+	bool uniform_buffers = true;
 };
 
 inline constexpr Profile DefaultProfile {};

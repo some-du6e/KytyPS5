@@ -158,6 +158,8 @@ struct ConfigOptions {
 	bool masked_select_elimination_enabled = true;
 	// --no-spirv-forwarding: large SPIR-V modules are not post-optimized (3a967527, 026c34a2).
 	bool spirv_forwarding_enabled = true;
+	// --no-uniform-buffers: constant buffers are read through storage buffers (556973e7).
+	bool uniform_buffers_enabled = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -301,6 +303,11 @@ bool MaskedSelectEliminationEnabled();
 // pairs, value numbering, read-only load and pure call merging). Part of the SPIR-V profile.
 // On without a loaded configuration.
 bool SpirvForwardingEnabled();
+
+// Constant-only guest buffers also get a uniform buffer view that their constant reads use
+// (556973e7). KYTY_UNIFORM_BUFFERS=0 still turns it off as well. Part of the SPIR-V profile.
+// On without a loaded configuration.
+bool UniformBuffersEnabled();
 
 } // namespace Config
 

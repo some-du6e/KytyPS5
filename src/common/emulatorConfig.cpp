@@ -395,4 +395,8 @@ bool SpirvForwardingEnabled() {
 	return g_config == nullptr || g_config->spirv_forwarding_enabled;
 }
 
+bool UniformBuffersEnabled() {
+	return g_config == nullptr || g_config->uniform_buffers_enabled;
+}
+
 } // namespace Config

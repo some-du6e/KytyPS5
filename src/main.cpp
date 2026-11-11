@@ -212,6 +212,8 @@ static void PrintUsage() {
 	::printf("                                       recompiled shaders.\n");
 	::printf("  --no-spirv-forwarding                Do not post-optimize large SPIR-V modules (select\n");
 	::printf("                                       forwarding and value numbering).\n");
+	::printf("  --no-uniform-buffers                 Read constant buffers through storage buffers, not\n");
+	::printf("                                       uniform buffer views (as KYTY_UNIFORM_BUFFERS=0).\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -367,6 +369,8 @@ static constexpr Flag FLAGS[] = {
     {"--no-masked-select-elimination", &ConfigOptions::masked_select_elimination_enabled, false},
     {"--spirv-forwarding", &ConfigOptions::spirv_forwarding_enabled},
     {"--no-spirv-forwarding", &ConfigOptions::spirv_forwarding_enabled, false},
+    {"--uniform-buffers", &ConfigOptions::uniform_buffers_enabled},
+    {"--no-uniform-buffers", &ConfigOptions::uniform_buffers_enabled, false},
 };
 
 // gta6-prep: config

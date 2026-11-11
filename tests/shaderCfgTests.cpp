@@ -10215,6 +10215,11 @@ void TestSpirvProfileSwitches() {
   Check(bytes(forwarding_off) != bytes(defaults) &&
             bytes(forwarding_off) != bytes(masked_off),
         "the shader store header ignores --no-spirv-forwarding");
+  Check(defaults.uniform_buffers, "uniform buffer views are off by default");
+  Profile uniform_off = defaults;
+  uniform_off.uniform_buffers = false;
+  Check(bytes(uniform_off) != bytes(defaults),
+        "the shader store header ignores --no-uniform-buffers");
 }
 
 void TestLaneMaskProjection() {
