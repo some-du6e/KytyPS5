@@ -152,6 +152,8 @@ struct ConfigOptions {
 	std::vector<std::string> explicit_options;
 	// --no-overlap-dispatches: every direct dispatch records its barrier after it (39765baa).
 	bool overlap_dispatches_enabled = true;
+	// --no-defer-draw-barriers: a draw that writes memory ends its rendering instance (2e91a677).
+	bool defer_draw_barriers_enabled = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -280,6 +282,11 @@ bool QuirkEnabled(Common::Quirk quirk);
 // one is deferred and dropped when the next operation is such a dispatch. Off, each records it.
 // On without a loaded configuration.
 bool OverlapDispatchesEnabled();
+
+// The barrier after a draw whose shaders write memory waits, in the same rendering instance,
+// while draws of its queue that the guest does not order after it follow. Off, each such draw
+// ends rendering and records its barrier. On without a loaded configuration.
+bool DeferDrawBarriersEnabled();
 
 } // namespace Config
 

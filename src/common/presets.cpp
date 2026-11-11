@@ -9,6 +9,7 @@ namespace {
 constexpr std::string_view SafeTokens[] = {
     "--no-async-pipelines",
     "--no-overlap-dispatches",
+    "--no-defer-draw-barriers",
 };
 
 // Options that use less video memory. Only options that exist are listed.

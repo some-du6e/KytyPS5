@@ -206,6 +206,8 @@ static void PrintUsage() {
 	         "                                       of --no-occlusion-queries).\n");
 	::printf("  --no-overlap-dispatches              Record a barrier after every direct dispatch\n");
 	::printf("                                       instead of letting unordered ones overlap.\n");
+	::printf("  --no-defer-draw-barriers             End rendering and record a barrier after every\n");
+	::printf("                                       draw that writes memory.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -355,6 +357,8 @@ static constexpr Flag FLAGS[] = {
     {"--occlusion-queries", &ConfigOptions::occlusion_queries_enabled},
     {"--overlap-dispatches", &ConfigOptions::overlap_dispatches_enabled},
     {"--no-overlap-dispatches", &ConfigOptions::overlap_dispatches_enabled, false},
+    {"--defer-draw-barriers", &ConfigOptions::defer_draw_barriers_enabled},
+    {"--no-defer-draw-barriers", &ConfigOptions::defer_draw_barriers_enabled, false},
 };
 
 // gta6-prep: config

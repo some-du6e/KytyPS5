@@ -383,4 +383,8 @@ bool OverlapDispatchesEnabled() {
 	return g_config == nullptr || g_config->overlap_dispatches_enabled;
 }
 
+bool DeferDrawBarriersEnabled() {
+	return g_config == nullptr || g_config->defer_draw_barriers_enabled;
+}
+
 } // namespace Config
