@@ -210,6 +210,8 @@ static void PrintUsage() {
 	::printf("                                       draw that writes memory.\n");
 	::printf("  --no-masked-select-elimination       Keep the masked selects of guest vector writes in\n");
 	::printf("                                       recompiled shaders.\n");
+	::printf("  --no-spirv-forwarding                Do not post-optimize large SPIR-V modules (select\n");
+	::printf("                                       forwarding and value numbering).\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -363,6 +365,8 @@ static constexpr Flag FLAGS[] = {
     {"--no-defer-draw-barriers", &ConfigOptions::defer_draw_barriers_enabled, false},
     {"--masked-select-elimination", &ConfigOptions::masked_select_elimination_enabled},
     {"--no-masked-select-elimination", &ConfigOptions::masked_select_elimination_enabled, false},
+    {"--spirv-forwarding", &ConfigOptions::spirv_forwarding_enabled},
+    {"--no-spirv-forwarding", &ConfigOptions::spirv_forwarding_enabled, false},
 };
 
 // gta6-prep: config

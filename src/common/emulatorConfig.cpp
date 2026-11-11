@@ -391,4 +391,8 @@ bool MaskedSelectEliminationEnabled() {
 	return g_config == nullptr || g_config->masked_select_elimination_enabled;
 }
 
+bool SpirvForwardingEnabled() {
+	return g_config == nullptr || g_config->spirv_forwarding_enabled;
+}
+
 } // namespace Config

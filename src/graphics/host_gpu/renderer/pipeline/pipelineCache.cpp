@@ -502,7 +502,8 @@ ShaderRecompiler::Spirv::Profile SpirvProfile(const GraphicContext& graphics) {
 	        .r8g8_srgb_views        = graphics.r8g8_srgb_views,
 	        .relaxed_float          = Config::RelaxedShaderFloatEnabled(),
 	        // gta6-prep: config
-	        .masked_select_elimination = Config::MaskedSelectEliminationEnabled()};
+	        .masked_select_elimination = Config::MaskedSelectEliminationEnabled(),
+	        .spirv_forwarding          = Config::SpirvForwardingEnabled()};
 }
 
 std::filesystem::path ShaderStorePath() {

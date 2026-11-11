@@ -10209,6 +10209,12 @@ void TestSpirvProfileSwitches() {
   masked_off.masked_select_elimination = false;
   Check(bytes(masked_off) != bytes(defaults),
         "the shader store header ignores --no-masked-select-elimination");
+  Check(defaults.spirv_forwarding, "SPIR-V forwarding is off by default");
+  Profile forwarding_off = defaults;
+  forwarding_off.spirv_forwarding = false;
+  Check(bytes(forwarding_off) != bytes(defaults) &&
+            bytes(forwarding_off) != bytes(masked_off),
+        "the shader store header ignores --no-spirv-forwarding");
 }
 
 void TestLaneMaskProjection() {

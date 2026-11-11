@@ -11,6 +11,7 @@ constexpr std::string_view SafeTokens[] = {
     "--no-overlap-dispatches",
     "--no-defer-draw-barriers",
     "--no-masked-select-elimination",
+    "--no-spirv-forwarding",
 };
 
 // Options that use less video memory. Only options that exist are listed.

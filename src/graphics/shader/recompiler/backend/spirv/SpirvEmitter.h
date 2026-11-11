@@ -25,6 +25,8 @@ struct Profile {
 	// gta6-prep: config: switches of the fork's shader optimizations (--no-<name> turns them off).
 	// IR::EliminateMaskedSelects() runs (d50d233e).
 	bool masked_select_elimination = true;
+	// Spirv::ForwardMaskedSelects() runs on large modules (3a967527, 026c34a2).
+	bool spirv_forwarding = true;
 };
 
 inline constexpr Profile DefaultProfile {};

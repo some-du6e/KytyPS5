@@ -156,6 +156,8 @@ struct ConfigOptions {
 	bool defer_draw_barriers_enabled = true;
 	// --no-masked-select-elimination: the recompiler keeps masked selects (d50d233e).
 	bool masked_select_elimination_enabled = true;
+	// --no-spirv-forwarding: large SPIR-V modules are not post-optimized (3a967527, 026c34a2).
+	bool spirv_forwarding_enabled = true;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -294,6 +296,11 @@ bool DeferDrawBarriersEnabled();
 // by the same condition again (IR::EliminateMaskedSelects). Part of the SPIR-V profile, so the
 // shader store does not mix programs compiled with and without it. On without a configuration.
 bool MaskedSelectEliminationEnabled();
+
+// Large SPIR-V modules go through Spirv::ForwardMaskedSelects() (select forwarding, bitcast
+// pairs, value numbering, read-only load and pure call merging). Part of the SPIR-V profile.
+// On without a loaded configuration.
+bool SpirvForwardingEnabled();
 
 } // namespace Config
 
