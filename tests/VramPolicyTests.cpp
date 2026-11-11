@@ -154,12 +154,25 @@ void TestHeapSizeLimits() {
 	Check(!Policy::BuildHeapSizeLimits(small, 512 * MiB).any, "a 1 GiB heap was limited");
 }
 
+// "VRAM spill:" lines: the first spill of a kind, then counts 2, 4, 8, ...
+void TestSpillLogCadence() {
+	uint32_t logged = 0;
+	for (uint64_t count = 1; count <= 1024; count++) {
+		logged += Policy::LogSpillAt(count) ? 1u : 0u;
+	}
+	Check(logged == 11, "spill lines are not logged at 1, 2, 4, ..., 1024");
+	Check(Policy::LogSpillAt(1) && Policy::LogSpillAt(2) && !Policy::LogSpillAt(3) &&
+	          Policy::LogSpillAt(4) && !Policy::LogSpillAt(6) && !Policy::LogSpillAt(0),
+	      "spill log cadence is not the first and every power of two");
+}
+
 } // namespace
 
 int main() {
 	TestLegacyThresholdsPinned();
 	TestProportionalThresholds();
 	TestHeapSizeLimits();
+	TestSpillLogCadence();
 	std::printf("VramPolicyTests: ok\n");
 	return 0;
 }

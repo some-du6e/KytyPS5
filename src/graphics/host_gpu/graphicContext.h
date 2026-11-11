@@ -9,6 +9,7 @@
 #include <map>
 #include <mutex>
 #include <span>
+#include <string_view>
 #include <tuple>
 #include <vector>
 #include <vk_mem_alloc.h>
@@ -130,6 +131,14 @@ struct GraphicContext {
 	[[nodiscard]] uint32_t GetHeapUsage(std::span<HeapUsage, VK_MAX_MEMORY_HEAPS> heaps) const;
 	[[nodiscard]] bool     CreateImage(const vk::ImageCreateInfo& info, VulkanImage& image);
 	void                   DeleteImage(VulkanImage& image);
+
+	// gta6-prep: vram
+	// An allocation of a discrete GPU that VMA placed outside device-local memory (past the
+	// budget it falls back to host memory, read over PCIe).
+	[[nodiscard]] bool SpilledOutOfDeviceMemory(VmaAllocation allocation) const;
+	// Counts a spilled image or buffer of `bytes` and logs the "VRAM spill:" line on the first and
+	// every power-of-two count of its kind. `what` describes the first one.
+	void               NoteSpill(bool image, uint64_t bytes, std::string_view what);
 
 	uint32_t screen_width  = 0;
 	uint32_t screen_height = 0;

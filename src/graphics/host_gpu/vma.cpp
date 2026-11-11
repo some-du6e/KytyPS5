@@ -23,11 +23,13 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cinttypes>
 #include <condition_variable>
 #include <fmt/format.h>
 #include <mutex>
 #include <span>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -143,6 +145,17 @@ ImageGraveyard& Graveyard() {
 	static ImageGraveyard graveyard;
 	return graveyard;
 }
+
+// gta6-prep: vram: allocations that landed outside device-local memory (see NoteSpill()).
+struct SpillStats {
+	std::atomic<uint64_t> count {0};
+	std::atomic<uint64_t> bytes {0};
+	std::mutex            first_mutex;
+	std::string           first;
+};
+
+SpillStats g_image_spills;
+SpillStats g_buffer_spills;
 
 void DestroyRecycledImages(VmaAllocator allocator) {
 	Graveyard().Flush();
@@ -354,6 +367,16 @@ bool GraphicContext::CreateImage(const vk::ImageCreateInfo& image_info, VulkanIm
 			LogMemoryBudget();
 			return false;
 		}
+		// gta6-prep: vram: spill telemetry (recycled images were counted when created).
+		if (SpilledOutOfDeviceMemory(image.allocation)) {
+			VmaAllocationInfo allocation_info {};
+			vmaGetAllocationInfo(allocator, image.allocation, &allocation_info);
+			NoteSpill(true, allocation_info.size,
+			          fmt::format("image {}x{}x{} {} layers={} mips={}", image_info.extent.width,
+			                      image_info.extent.height, image_info.extent.depth,
+			                      vk::to_string(image_info.format), image_info.arrayLayers,
+			                      image_info.mipLevels));
+		}
 	}
 	image.image = native_image;
 
@@ -406,6 +429,38 @@ void GraphicContext::DeleteImage(VulkanImage& image) {
 	}
 	image.image      = nullptr;
 	image.allocation = nullptr;
+}
+
+// gta6-prep: vram
+bool GraphicContext::SpilledOutOfDeviceMemory(VmaAllocation allocation) const {
+	if (allocation == nullptr || allocator == nullptr ||
+	    physical_device_properties.deviceType != vk::PhysicalDeviceType::eDiscreteGpu) {
+		return false;
+	}
+	VkMemoryPropertyFlags properties = 0;
+	vmaGetAllocationMemoryProperties(allocator, allocation, &properties);
+	return (properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0;
+}
+
+void GraphicContext::NoteSpill(bool image, uint64_t bytes, std::string_view what) {
+	auto&      stats = image ? g_image_spills : g_buffer_spills;
+	const auto total = stats.bytes.fetch_add(bytes, std::memory_order_relaxed) + bytes;
+	const auto count = stats.count.fetch_add(1, std::memory_order_relaxed) + 1;
+	if (!MemoryPolicy::LogSpillAt(count)) {
+		return;
+	}
+	std::string first;
+	{
+		std::lock_guard lock(stats.first_mutex);
+		if (stats.first.empty()) {
+			stats.first = what;
+		}
+		first = stats.first;
+	}
+	Log::WriteToConsoleAndLog(
+	    fmt::format("VRAM spill: {} allocated outside device-local memory: count={} bytes={} MiB "
+	                "(first: {})\n",
+	                image ? "images" : "buffers", count, total >> 20u, first));
 }
 
 } // namespace Libs::Graphics

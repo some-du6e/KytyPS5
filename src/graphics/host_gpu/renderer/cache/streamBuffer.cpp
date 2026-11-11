@@ -7,6 +7,7 @@
 #include "graphics/host_gpu/renderer/commandScheduler.h"
 
 #include <cstring>
+#include <fmt/format.h>
 #include <numeric>
 #include <vk_mem_alloc.h>
 
@@ -96,6 +97,11 @@ Buffer::Buffer(GraphicContext& graphics, CommandScheduler& scheduler, MemoryUsag
 	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess);
 
 	m_buffer = native_buffer;
+	// gta6-prep: vram: spill telemetry for the buffers that should live in video memory.
+	if (usage == MemoryUsage::DeviceLocal && graphics.SpilledOutOfDeviceMemory(m_allocation)) {
+		graphics.NoteSpill(false, allocation_result.size,
+		                   fmt::format("buffer guest=0x{:x} size=0x{:x}", cpu_address, size));
+	}
 	if (with_bda) {
 		vk::BufferDeviceAddressInfo address_info {};
 		address_info.buffer = m_buffer;
