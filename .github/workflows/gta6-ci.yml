@@ -1,0 +1,223 @@
+name: gta6-prep CI
+
+# Builds and tests the gta6-prep branch and its work branches. The upstream
+# build.yml only runs on main/master pushes and pull requests, so branch work
+# in this fork would otherwise never be built.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ gta6-prep, 'gta6/**' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SCCACHE_GHA_ENABLED: "true"
+  KYTY_BUILD_ORIGIN: Fork
+  KYTY_BUILD_REPOSITORY: ${{ github.repository }}
+
+jobs:
+  tools:
+    name: Triage tools (Python)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run triage tool tests
+        shell: bash
+        run: |
+          if [ -d tools/triage ]; then
+            python -m unittest discover -s tools/triage/tests -t tools/triage -v
+          else
+            echo "tools/triage not present yet"
+          fi
+
+  linux:
+    name: Build and test (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes \
+            clang glslang-tools libasound2-dev libdbus-1-dev libgl1-mesa-dev \
+            libpulse-dev libudev-dev libwayland-dev libx11-dev libxcursor-dev \
+            libxext-dev libxfixes-dev libxi-dev libxkbcommon-dev libxrandr-dev \
+            libxss-dev libxtst-dev lld pkg-config wayland-protocols \
+            mesa-vulkan-drivers vulkan-tools
+
+      - name: Install Qt 6.10.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.10.3"
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          cache: true
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B _Build/linux -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
+            -DKYTY_BUILD_ORIGIN="$KYTY_BUILD_ORIGIN" \
+            -DKYTY_BUILD_REPOSITORY="$KYTY_BUILD_REPOSITORY" \
+            -DKYTY_RELEASE_TAG="gta6-prep-${GITHUB_SHA::7}" \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+
+      # The test list is every target an add_test() runs, so new tests are
+      # built and run without editing this file.
+      - name: Collect test targets
+        id: targets
+        shell: bash
+        run: |
+          targets=$(grep -o 'TARGET_FILE:[a-z0-9_]*' CMakeLists.txt | cut -d: -f2 | sort -u | tr '\n' ' ')
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "$targets"
+
+      - name: Build
+        shell: bash
+        run: |
+          cmake --build _Build/linux --target launcher ${{ steps.targets.outputs.targets }} --parallel
+
+      - name: Vulkan devices on the runner
+        shell: bash
+        run: vulkaninfo --summary || true
+
+      - name: Test
+        shell: bash
+        run: |
+          ctest --test-dir _Build/linux --output-on-failure --timeout 600 2>&1 | tee _Build/ctest.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-linux
+          path: _Build/ctest.log
+          if-no-files-found: ignore
+
+      - name: Install
+        shell: bash
+        run: cmake --install _Build/linux --prefix _Build/linux/install
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: KytyPS5-gta6-prep-Linux-x86_64
+          path: _Build/linux/install/**
+          if-no-files-found: error
+
+  windows:
+    name: Build and test (Windows)
+    runs-on: windows-2025
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Visual Studio environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Locate vcpkg
+        id: vcpkg
+        shell: pwsh
+        run: |
+          $vcpkgRoot = Split-Path (Get-Command vcpkg).Source
+          $portHash = (Get-FileHash "$vcpkgRoot\ports\glslang\vcpkg.json" -Algorithm SHA256).Hash
+          "root=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "port_hash=$($portHash.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache glslang
+        id: glslang_cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.vcpkg.outputs.root }}\installed\x64-windows
+          key: glslang-${{ runner.os }}-${{ runner.arch }}-${{ steps.vcpkg.outputs.port_hash }}-tools-opt
+
+      - name: Install glslang
+        shell: pwsh
+        run: |
+          $vcpkgRoot = "${{ steps.vcpkg.outputs.root }}"
+          if ("${{ steps.glslang_cache.outputs.cache-hit }}" -ne "true") {
+            vcpkg install glslang[tools,opt]:x64-windows
+          }
+          "$vcpkgRoot\installed\x64-windows\tools\glslang" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install Qt 6.10.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.10.3"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Configure
+        shell: cmd
+        run: |
+          cmake -S . -B _Build/windows -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON ^
+            -DKYTY_BUILD_ORIGIN=%KYTY_BUILD_ORIGIN% ^
+            -DKYTY_BUILD_REPOSITORY=%KYTY_BUILD_REPOSITORY% ^
+            -DKYTY_RELEASE_TAG=gta6-prep ^
+            -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl ^
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
+            -DCMAKE_PREFIX_PATH="%Qt6_DIR%"
+
+      - name: Collect test targets
+        id: targets
+        shell: bash
+        run: |
+          targets=$(grep -o 'TARGET_FILE:[a-z0-9_]*' CMakeLists.txt | cut -d: -f2 | sort -u | tr '\n' ' ')
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        shell: cmd
+        run: cmake --build _Build/windows --target launcher ${{ steps.targets.outputs.targets }} --parallel
+
+      - name: Test
+        shell: bash
+        run: |
+          ctest --test-dir _Build/windows --output-on-failure --timeout 600 2>&1 | tee _Build/ctest.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-windows
+          path: _Build/ctest.log
+          if-no-files-found: ignore
+
+      - name: Install
+        shell: cmd
+        run: cmake --install _Build/windows --prefix _Build/windows/install
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: KytyPS5-gta6-prep-Windows-x64
+          path: _Build/windows/install/**
+          if-no-files-found: error
