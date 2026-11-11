@@ -180,6 +180,10 @@ static void PrintUsage() {
 #endif
 	::printf("  --keymap <Control=Input>             DualSense mapping; may be repeated.\n");
 	::printf("  --rd                                 Enable RenderDoc capture.\n");
+	// gta6-prep: shader-alu
+	::printf("  --strict-shaders                     Stop at a shader instruction the recompiler does\n"
+	         "                                       not support instead of skipping the draws and\n"
+	         "                                       dispatches of its program.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -316,6 +320,8 @@ static constexpr Flag FLAGS[] = {
     {"--redzone", &ConfigOptions::red_zone_protection_enabled},
     {"--no-redzone", &ConfigOptions::red_zone_protection_enabled, false},
 #endif
+    // gta6-prep: shader-alu
+    {"--strict-shaders", &ConfigOptions::strict_shaders},
 };
 
 static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_help) {

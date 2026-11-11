@@ -42,6 +42,8 @@ public:
 	void TranslateInstruction(const Decoder::Instruction& inst);
 	// The runtime word an expanded instruction's literal stands for (Decoder::RuntimeLiteral).
 	std::optional<uint32_t> runtime_word;
+	// gta6-prep: shader-alu. See TranslateOptions::failure; null: a missing translation is fatal.
+	TranslationFailure* failure = nullptr;
 	void TranslateEmbeddedFetch(const Decoder::Instruction& inst, uint32_t attribute,
 	                            uint32_t component_count, const ShaderBufferResource& resource);
 	void AddBranchCondition(const CFG::Graph& graph, const CFG::BasicBlock& source,
@@ -282,7 +284,10 @@ private:
 	void EmitInterpolation(const Decoder::Instruction& inst);
 	void EmitMemory(const Decoder::Instruction& inst);
 	void EmitRayTracing(const Decoder::Instruction& inst);
-	static void FailMissingTranslation(const Decoder::Instruction& inst);
+	void FailMissingTranslation(const Decoder::Instruction& inst);
+	// gta6-prep: shader-alu. Records `inst` as the program's translation failure, or exits with
+	// `fatal` when the translator has no failure sink.
+	void FailTranslation(const Decoder::Instruction& inst, const std::string& fatal);
 
 	IR::Program&      program;
 	IR::IREmitter     ir;

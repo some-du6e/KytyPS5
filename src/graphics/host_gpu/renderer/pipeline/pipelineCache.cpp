@@ -464,6 +464,14 @@ void SkipCallExpansionFailure(uint64_t hash, const ShaderRecompiler::ShaderSourc
 	                           "PipelineCache::GetProgram", hash, 0, source.refresh_failure);
 }
 
+// gta6-prep: shader-alu. A program with an instruction the recompiler does not support (or does
+// not translate) is skipped: its draws and dispatches are not run, and what they compute is
+// missing, instead of closing the emulator. --strict-shaders restores the fatal error.
+void SkipUnsupportedProgram(uint64_t hash, uint32_t pc, const std::string& text) {
+	Common::HackNotice::Report("skip unsupported shader instruction", "PipelineCache::GetProgram",
+	                           hash, pc, text);
+}
+
 } // namespace
 
 void AppendNativeRayTracingKey(ShaderType stage, std::vector<uint32_t>& key, bool native) {
@@ -1173,11 +1181,17 @@ const ShaderModule* PipelineCache::GetProgram(const ShaderParams& params, InputI
 	options.emit_debug_info = Config::GraphicsDebugDumpEnabled();
 	options.native_ray_tracing = NativeRayTracing::PatchShaders() && !m_guest_traversal;
 	options.ray_stats          = options.native_ray_tracing && Config::RayTracingStatsEnabled();
+	options.skip_unsupported_instructions = !Config::StrictShadersEnabled();
 	ShaderRecompiler::ShaderSource source;
 	if (entry == m_program_cache.end()) {
 		DumpShader(params.code, fmt::format("original/{}_{:016x}.bin",
 		                                    ShaderRecompiler::StageName(options.stage), params.hash));
 		source = ShaderRecompiler::PrepareShaderSource(params.code, options);
+		if (source.unsupported_pc != UINT32_MAX && options.skip_unsupported_instructions) {
+			SkipUnsupportedProgram(params.hash, source.unsupported_pc, source.unsupported_text);
+			m_program_cache.emplace(m_lookup_key, Program {.skip_dispatch = true});
+			return nullptr;
+		}
 		if (source.unsupported_call_pc != UINT32_MAX && !source.expand_calls) {
 			PipelineCacheLog("!!! TEMPORARY COMPUTE DISPATCH SKIP !!! shader=0x{:016x} pc=0x{:08x} "
 			                 "reason=unsupported GPU-selected callable target; rendering is incomplete",
@@ -1206,6 +1220,15 @@ const ShaderModule* PipelineCache::GetProgram(const ShaderParams& params, InputI
 		}
 	} else {
 		translated = ShaderRecompiler::TranslateProgram(params.code, options);
+	}
+	if (translated.failure_pc != UINT32_MAX) {
+		SkipUnsupportedProgram(params.hash, translated.failure_pc, translated.failure);
+		if (entry == m_program_cache.end()) {
+			m_program_cache.emplace(m_lookup_key, Program {.skip_dispatch = true});
+		} else {
+			entry->second.skip_dispatch = true;
+		}
+		return nullptr;
 	}
 	if (entry == m_program_cache.end()) {
 		auto retained = source.HasCalls()
@@ -2008,13 +2031,19 @@ void PipelineCache::RunCompileJob(CompileJob& job, InputInfo& input_info) {
 		options.emit_debug_info = Config::GraphicsDebugDumpEnabled();
 		options.native_ray_tracing = NativeRayTracing::PatchShaders();
 		options.ray_stats          = options.native_ray_tracing && Config::RayTracingStatsEnabled();
+		options.skip_unsupported_instructions = !Config::StrictShadersEnabled();
 		// SWAPPC programs link the functions they call from guest memory: the execution thread
-		// compiles them.
+		// compiles them. So does it the programs it skips (and reports) for an unsupported
+		// instruction.
 		auto source = ShaderRecompiler::PrepareShaderSource(job.params.code, options);
-		if (!source.calls.empty() || source.unsupported_call_pc != UINT32_MAX) {
+		if (!source.calls.empty() || source.unsupported_call_pc != UINT32_MAX ||
+		    (source.unsupported_pc != UINT32_MAX && options.skip_unsupported_instructions)) {
 			return;
 		}
 		auto translated = ShaderRecompiler::TranslateProgram(source.decoded, options);
+		if (translated.failure_pc != UINT32_MAX) {
+			return;
+		}
 		plan            = ShaderRecompiler::IR::ExtractResourcePlan(translated.program);
 		auto specialization = job.specialization;
 		if (!specialization) {

@@ -366,4 +366,9 @@ const std::vector<std::string>& GetGuestArguments() {
 	return g_config->guest_arguments;
 }
 
+// gta6-prep: shader-alu
+bool StrictShadersEnabled() {
+	return g_config != nullptr && g_config->strict_shaders;
+}
+
 } // namespace Config

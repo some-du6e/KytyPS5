@@ -967,6 +967,9 @@ Program DecodeFrontProgram(std::span<const uint32_t> front);
 // long_branches (ascending pc) give the targets of the branches an expansion could not encode.
 void DecodeProgram(std::span<const uint32_t> code, Program& program,
                    std::span<const LongBranch> long_branches = {});
+// gta6-prep: shader-alu. The first instruction of the program the decoder does not support, or
+// null.
+const Instruction* FindUnsupportedInstruction(const Program& program);
 bool IsConditionalBranch(Opcode opcode);
 bool IsDirectBranch(Opcode opcode);
 bool IsDsWriteOpcode(Opcode opcode);

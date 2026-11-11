@@ -1,5 +1,7 @@
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 
+#include <fmt/format.h>
+
 namespace Libs::Graphics::ShaderRecompiler::Frontend {
 
 void Translator::EmitScalar(const Decoder::Instruction& inst) {
@@ -19,9 +21,12 @@ void Translator::EmitScalar(const Decoder::Instruction& inst) {
 		case O::S_CSELECT_B64: ScalarSelect64(inst, inst.src1); return;
 		case O::S_CMOV_B64: ScalarSelect64(inst, inst.dst); return;
 		case O::S_GETREG_B32:
-			if (!graphics_compute || (inst.src0.value != 0x1818u && inst.src0.value != 0x0a18u))
-				EXIT("unsupported S_GETREG_B32 at pc 0x%08x: selector=0x%04x graphics_compute=%u",
-				     inst.pc, inst.src0.value, static_cast<unsigned>(graphics_compute));
+			if (!graphics_compute || (inst.src0.value != 0x1818u && inst.src0.value != 0x0a18u)) {
+				return FailTranslation(
+				    inst, fmt::format("unsupported S_GETREG_B32 at pc 0x{:08x}: selector=0x{:04x} "
+				                      "graphics_compute={}",
+				                      inst.pc, inst.src0.value, static_cast<unsigned>(graphics_compute)));
+			}
 			// HW_ID2 identifies graphics compute as QUEUE=6, ME=0.
 			WriteOperand(inst.dst, IR::Value(inst.src0.value == 0x1818u ? 6u : 0u));
 			return;

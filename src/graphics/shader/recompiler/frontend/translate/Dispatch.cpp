@@ -1,11 +1,23 @@
 #include "common/assert.h"
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 
+#include <fmt/format.h>
+
 namespace Libs::Graphics::ShaderRecompiler::Frontend {
 
+void Translator::FailTranslation(const Decoder::Instruction& inst, const std::string& fatal) {
+	if (failure == nullptr) {
+		EXIT("%s", fatal.c_str());
+	}
+	if (failure->pc == UINT32_MAX) {
+		failure->pc   = inst.pc;
+		failure->text = Decoder::InstructionToString(inst);
+	}
+}
+
 void Translator::FailMissingTranslation(const Decoder::Instruction& inst) {
-	EXIT("opcode %s at pc 0x%08x has no IR translation",
-	     Decoder::InstructionToString(inst).c_str(), inst.pc);
+	FailTranslation(inst, fmt::format("opcode {} at pc 0x{:08x} has no IR translation",
+	                                  Decoder::InstructionToString(inst), inst.pc));
 }
 
 void Translator::TranslateInstruction(const Decoder::Instruction& inst) {
@@ -17,7 +29,8 @@ void Translator::TranslateInstruction(const Decoder::Instruction& inst) {
 		case Decoder::Opcode::COUNT:
 			EXIT("decoded opcode has no IR translation at pc 0x%08x", inst.pc);
 		case Decoder::Opcode::UNSUPPORTED:
-			EXIT("unsupported decoded instruction: %s", Decoder::InstructionToString(inst).c_str());
+			return FailTranslation(inst, "unsupported decoded instruction: " +
+			                                 Decoder::InstructionToString(inst));
 		case Decoder::Opcode::RT_INIT:
 		case Decoder::Opcode::RT_SELECT:
 		case Decoder::Opcode::RT_REUSE:

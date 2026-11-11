@@ -443,6 +443,11 @@ Decoder::Program DecodeFusedProgram(std::span<const uint32_t> front, std::span<c
                                     std::vector<uint32_t>& joined_code) {
 	EXIT_IF(back.empty());
 	auto       result      = Decoder::DecodeFrontProgram(front);
+	if (result.instructions.back().opcode == Decoder::Opcode::UNSUPPORTED) {
+		// gta6-prep: shader-alu. The front decode stopped there: the program is skipped, or the
+		// CFG rejects it.
+		return result;
+	}
 	const auto front_words = static_cast<uint32_t>(result.code.size());
 	joined_code.assign(result.code.begin(), result.code.end());
 	joined_code.insert(joined_code.end(), back.begin(), back.end());
@@ -515,16 +520,39 @@ RayTracingPrograms GetRayTracingPrograms() {
 ShaderSource PrepareShaderSource(std::span<const uint32_t> code, const CompileOptions& options) {
 	EXIT_IF(code.empty());
 	ShaderSource source;
+	// gta6-prep: shader-alu. Records the first unsupported instruction; true when the source is
+	// then left as it is, to be skipped.
+	const auto skip_unsupported = [&source, &options] {
+		const auto* inst = Decoder::FindUnsupportedInstruction(source.decoded);
+		if (inst == nullptr) {
+			return false;
+		}
+		source.unsupported_pc   = inst->pc;
+		source.unsupported_text = Decoder::InstructionToString(*inst);
+		return options.skip_unsupported_instructions;
+	};
 	if (!options.back_code.empty()) {
 		source.decoded = DecodeFusedProgram(code, options.back_code, source.code);
+		if (skip_unsupported()) {
+			return source;
+		}
 	} else if (options.stage == ShaderType::Local) {
 		source.decoded = Decoder::DecodeFrontProgram(code);
+		if (skip_unsupported()) {
+			return source;
+		}
 		auto& handoff = source.decoded.instructions.back();
-		handoff.opcode = Decoder::Opcode::S_ENDPGM;
-		handoff.src_count = 0;
+		// An unsupported last instruction stays for the CFG to reject (--strict-shaders).
+		if (handoff.opcode == Decoder::Opcode::S_SETPC_B64) {
+			handoff.opcode    = Decoder::Opcode::S_ENDPGM;
+			handoff.src_count = 0;
+		}
 	} else {
 		Decoder::DecodeProgram(code, source.decoded);
 		source.native_ray_tracing = options.native_ray_tracing;
+		if (skip_unsupported()) {
+			return source;
+		}
 		// A program with calls is patched once they are inlined (RefreshShaderSource).
 		if (options.native_ray_tracing && !source.decoded.has_swap_pc) {
 			Decoder::RayTracingPatch patch;
@@ -595,6 +623,16 @@ TranslateResult TranslateProgram(const Decoder::Program& decoded, const CompileO
 		decoded_dump = Decoder::ProgramToString(decoded);
 		LOGF("ShaderRecompiler %s decoded RDNA2:\n%s", stage, decoded_dump.c_str());
 	}
+	// gta6-prep: shader-alu. A program with an unsupported instruction (an expanded call body
+	// can bring one) is reported instead of failing the CFG build.
+	if (options.skip_unsupported_instructions) {
+		if (const auto* inst = Decoder::FindUnsupportedInstruction(decoded); inst != nullptr) {
+			TranslateResult result;
+			result.failure_pc = inst->pc;
+			result.failure    = Decoder::InstructionToString(*inst);
+			return result;
+		}
+	}
 
 	LOGF("ShaderRecompiler %s phase begin: hash=0x%016" PRIx64 " CFG BuildGraph\n", stage,
 	     options.shader_hash);
@@ -643,6 +681,7 @@ TranslateResult TranslateProgram(const Decoder::Program& decoded, const CompileO
 			     static_cast<uint64_t>(embedded_fetch.loads.size()));
 		}
 	}
+	Frontend::TranslationFailure translation_failure;
 	Frontend::TranslateOptions translate_options {
 	    .stage            = options.stage,
 	    .wave_size        = options.wave_size,
@@ -651,10 +690,20 @@ TranslateResult TranslateProgram(const Decoder::Program& decoded, const CompileO
 	    .user_data_count  = static_cast<uint32_t>(options.user_data.size()),
 	    .input_info       = options.input_info,
 	    .embedded_fetch   = embedded_fetch.loads.empty() ? nullptr : &embedded_fetch,
+	    .failure          = options.skip_unsupported_instructions ? &translation_failure : nullptr,
 	};
 	LOGF("ShaderRecompiler %s phase begin: hash=0x%016" PRIx64 " IR TranslateProgram\n", stage,
 	     options.shader_hash);
 	auto ir = Frontend::TranslateProgram(decoded, cfg, translate_options);
+	if (translation_failure.pc != UINT32_MAX) {
+		// gta6-prep: shader-alu. The caller skips the program.
+		LOGF("ShaderRecompiler %s hash=0x%016" PRIx64 " has no translation for %s\n", stage,
+		     options.shader_hash, translation_failure.text.c_str());
+		TranslateResult result;
+		result.failure_pc = translation_failure.pc;
+		result.failure    = std::move(translation_failure.text);
+		return result;
+	}
 	for (const auto& body: decoded.call_bodies)
 		ir.inlined_call_entries.push_back(body.begin);
 	// The TLAS of the native ray tracing patch (see NativeRayTracing::FindTlasSource()).

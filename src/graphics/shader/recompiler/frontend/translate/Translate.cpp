@@ -1469,6 +1469,7 @@ IR::Program TranslateProgram(const Decoder::Program& decoded, const CFG::Graph& 
 		auto*      block = blocks_by_id.at(cfg_block.id);
 		Translator translator(result, block, vector_limit, lane_spills, flush_f32_inputs,
 		    options.stage == ShaderType::Compute && !options.input_info.compute->async_compute);
+		translator.failure = options.failure;
 		for (uint32_t index = cfg_block.inst_begin; index < cfg_block.inst_end; index++) {
 			const auto& instruction = decoded.instructions[index];
 			if (IsCodeTableLoad(cfg, instruction.pc)) {
@@ -1496,6 +1497,10 @@ IR::Program TranslateProgram(const Decoder::Program& decoded, const CFG::Graph& 
 				translator.runtime_word = literal->word;
 			}
 			translator.TranslateInstruction(instruction);
+			if (options.failure != nullptr && options.failure->pc != UINT32_MAX) {
+				// gta6-prep: shader-alu. The program is incomplete and is not used.
+				return result;
+			}
 		}
 		translator.runtime_word.reset();
 		translator.AddBranchCondition(cfg, cfg_block, *block);
