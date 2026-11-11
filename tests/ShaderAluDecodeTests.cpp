@@ -176,8 +176,12 @@ void CheckSpirvValidates(const std::vector<uint32_t>& binary, const char* name) 
 }
 
 // Translates and compiles a compute program; it must not be skipped.
-void CompileToValidSpirv(std::span<const uint32_t> code, const char* name, uint32_t wave_size = 64) {
+void CompileToValidSpirv(std::span<const uint32_t> code, const char* name, uint32_t wave_size = 64,
+                         const ShaderRecompiler::Spirv::Profile* profile = nullptr) {
 	auto options                 = ComputeOptions(true);
+	if (profile != nullptr) {
+		options.profile = profile;
+	}
 	ShaderComputeInputInfo compute = *options.input_info.compute;
 	compute.wave_size            = wave_size;
 	options.input_info.compute   = &compute;
@@ -661,6 +665,36 @@ void TestScalarModeAndHintNops() {
 	CompileToValidSpirv(code, "scalar no-ops");
 }
 
+// ---- SMEM clock, cache and translation probes ----
+
+void TestScalarMemoryNops() {
+	CheckEncodings({
+	    {"s_memtime s[0:1]", {0xf4900000u, 0x00000000u}, Opcode::S_MEMREALTIME},
+	    {"s_gl1_inv", {0xf47c0000u, 0x00000000u}, Opcode::BUFFER_GL1_INV},
+	    {"s_atc_probe 7, s[0:1], 0x0", {0xf49801c0u, 0xfa000000u}, Opcode::S_DCACHE_INV},
+	    {"s_atc_probe_buffer 7, s[0:3], 0x0", {0xf49c01c0u, 0xfa000000u}, Opcode::S_DCACHE_INV},
+	});
+	const uint32_t memtime[] = {0xf4900100u, 0x00000000u}; // s_memtime s[4:5]
+	const auto     inst      = DecodeOne(memtime);
+	Check(inst.dst.kind == Decoder::OperandKind::Sgpr && inst.dst.reg == 4u && inst.data_dwords == 2u,
+	      "S_MEMTIME lost its SGPR pair destination");
+
+	const uint32_t code[] = {
+	    0xf4900100u, 0x00000000u, // s_memtime s[4:5]
+	    0xf47c0000u, 0x00000000u, // s_gl1_inv
+	    0xf49801c0u, 0xfa000000u, // s_atc_probe 7, s[0:1], 0x0
+	    0xf49c01c0u, 0xfa000000u, // s_atc_probe_buffer 7, s[0:3], 0x0
+	    0xbf8cc07fu, // s_waitcnt lgkmcnt(0)
+	    0x7e020204u, // v_mov_b32 v1, s4
+	    0x7e3e0280u, // v_mov_b32 v31, 0
+	    0xe0701000u, 0x8000011fu, // buffer_store_dword v1, v31, s[0:3], 0 offen
+	    0xbf810000u, // s_endpgm
+	};
+	// The clock needs shaderDeviceClock (1 GHz here).
+	static constexpr ShaderRecompiler::Spirv::Profile clock {.device_clock_period_ps = 1000u};
+	CompileToValidSpirv(code, "scalar memory no-ops", 64, &clock);
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -676,6 +710,7 @@ int main() {
 	TestVop3F16Modifiers();
 	TestDotProducts();
 	TestScalarModeAndHintNops();
+	TestScalarMemoryNops();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }
