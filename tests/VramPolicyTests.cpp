@@ -2,6 +2,7 @@
 // The video memory arithmetic of the renderer and the options behind it, without a GPU.
 #include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -118,11 +119,47 @@ void TestProportionalThresholds() {
 	      "Permille rounds or overflows");
 }
 
+// --vram-limit-mb on a 24 GB card without resizable BAR: heap 0 (VRAM) is limited, the 256 MiB BAR
+// window and the host heap stay whole; 0 limits nothing.
+void TestHeapSizeLimits() {
+	using Policy::HeapInfo;
+	using Policy::NoHeapLimit;
+	constexpr HeapInfo rtx3090[] = {
+	    {.size = 24 * GiB, .device_local = true},
+	    {.size = 32 * GiB, .device_local = false},
+	    {.size = 256 * MiB, .device_local = true},
+	};
+	const auto off = Policy::BuildHeapSizeLimits(rtx3090, 0);
+	Check(!off.any, "a zero limit limited a heap");
+	for (const auto limit: off.limits) {
+		Check(limit == NoHeapLimit, "a zero limit left a heap limit");
+	}
+	const auto limited = Policy::BuildHeapSizeLimits(rtx3090, 8192 * MiB);
+	Check(limited.any, "an 8 GiB limit limited nothing");
+	Check(limited.limits[0] == 8 * GiB, "the VRAM heap is not limited to 8 GiB");
+	Check(limited.limits[1] == NoHeapLimit, "the host heap was limited");
+	Check(limited.limits[2] == NoHeapLimit, "the BAR heap was limited");
+	for (size_t i = 3; i < limited.limits.size(); i++) {
+		Check(limited.limits[i] == NoHeapLimit, "a heap past the count was limited");
+	}
+	// A limit at or above the heap's size emulates nothing.
+	Check(!Policy::BuildHeapSizeLimits(rtx3090, 24 * GiB).any,
+	      "a limit equal to the heap size limited it");
+	// A UMA device's single device-local heap is limited like VRAM.
+	constexpr HeapInfo uma[] = {{.size = 16 * GiB, .device_local = true}};
+	Check(Policy::BuildHeapSizeLimits(uma, 4 * GiB).limits[0] == 4 * GiB,
+	      "the UMA heap was not limited");
+	// A heap of exactly 1 GiB counts as a BAR-sized heap.
+	constexpr HeapInfo small[] = {{.size = 1 * GiB, .device_local = true}};
+	Check(!Policy::BuildHeapSizeLimits(small, 512 * MiB).any, "a 1 GiB heap was limited");
+}
+
 } // namespace
 
 int main() {
 	TestLegacyThresholdsPinned();
 	TestProportionalThresholds();
+	TestHeapSizeLimits();
 	std::printf("VramPolicyTests: ok\n");
 	return 0;
 }

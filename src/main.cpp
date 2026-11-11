@@ -72,6 +72,8 @@ static void PrintVramUsage() {
 	::printf("  --vram-gc <legacy|proportional>      Texture and buffer collection thresholds: the\n"
 	         "                                       built-in formulas (legacy, default) or fixed\n"
 	         "                                       shares of the memory budget.\n");
+	::printf("  --vram-limit-mb <MiB>                Limit the GPU's video memory heaps to <MiB>, as a\n"
+	         "                                       smaller card would have; 0 is off (default).\n");
 }
 
 static void PrintUsage() {
@@ -328,6 +330,13 @@ static std::optional<bool> ParseVramOption(const std::string& arg, const std::st
 			return false;
 		}
 		config.vram_gc = *policy;
+		return true;
+	}
+	if (arg == "--vram-limit-mb") {
+		if (!ParseUint32(value, config.vram_limit_mb)) {
+			::printf("invalid VRAM limit in MiB: %s\n", value.c_str());
+			return false;
+		}
 		return true;
 	}
 	return std::nullopt;

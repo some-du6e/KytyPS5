@@ -140,6 +140,8 @@ struct ConfigOptions {
 	// gta6-prep: vram
 	// --vram-gc legacy|proportional; unset: the profile's (legacy without one).
 	std::optional<VramGcPolicy> vram_gc;
+	// --vram-limit-mb: device-local heaps above 1 GiB are limited to this many MiB; 0 is off.
+	uint32_t                    vram_limit_mb = 0;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -258,6 +260,8 @@ const std::vector<std::string>& GetGuestArguments();
 // The video memory settings in effect (ResolveVramSettings() of the loaded options). The Auto
 // profile's built-in values without a loaded configuration.
 const VramSettings& GetVramSettings();
+// --vram-limit-mb, 0 (off) without a loaded configuration.
+uint32_t GetVramLimitMb();
 
 } // namespace Config
 

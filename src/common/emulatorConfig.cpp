@@ -377,4 +377,8 @@ const VramSettings& GetVramSettings() {
 	return g_vram_settings;
 }
 
+uint32_t GetVramLimitMb() {
+	return g_config != nullptr ? g_config->vram_limit_mb : 0;
+}
+
 } // namespace Config

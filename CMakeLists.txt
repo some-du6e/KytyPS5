@@ -1024,11 +1024,17 @@ if(BUILD_TESTING)
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --buffer-cache-range-only)
 
 	# gta6-prep: vram
+	add_test(NAME vram_heap_limit
+		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --vram-limit-only)
 	add_test(NAME emulator_vram_cli
-	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc proportional --vram-gc legacy)
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc proportional --vram-gc legacy
+	                 --vram-limit-mb 8192 --vram-limit-mb 0)
 	add_test(NAME emulator_vram_gc_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc aggressive)
-	set_tests_properties(emulator_vram_gc_invalid PROPERTIES WILL_FAIL TRUE)
+	add_test(NAME emulator_vram_limit_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-limit-mb 8G)
+	set_tests_properties(emulator_vram_gc_invalid emulator_vram_limit_invalid
+	                     PROPERTIES WILL_FAIL TRUE)
 
 	add_custom_target(kyty_tests DEPENDS
 		ime_dialog_tests

@@ -15,14 +15,19 @@
 #endif
 
 #include "common/assert.h"
+#include "common/emulatorConfig.h"
 #include "common/logging/log.h"
 #include "common/profiler.h"
 #include "graphics/host_gpu/graphicContext.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 
 #include <algorithm>
+#include <array>
 #include <cinttypes>
 #include <condition_variable>
+#include <fmt/format.h>
 #include <mutex>
+#include <span>
 #include <thread>
 #include <vector>
 
@@ -171,10 +176,47 @@ bool GraphicContext::CreateAllocator() {
 		info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 	}
 
+	// gta6-prep: vram: --vram-limit-mb makes VMA see smaller device-local heaps, as a smaller
+	// card would have: allocations past the limit spill to host memory, then fail.
+	auto& memory = physical_device_memory_properties;
+	std::array<MemoryPolicy::HeapInfo, MemoryPolicy::MaxMemoryHeaps> heaps {};
+	for (uint32_t heap = 0; heap < memory.memoryHeapCount && heap < heaps.size(); heap++) {
+		heaps[heap] = {.size         = memory.memoryHeaps[heap].size,
+		               .device_local = static_cast<bool>(memory.memoryHeaps[heap].flags &
+		                                                 vk::MemoryHeapFlagBits::eDeviceLocal)};
+	}
+	const auto limits = MemoryPolicy::BuildHeapSizeLimits(
+	    std::span(heaps.data(), std::min<size_t>(memory.memoryHeapCount, heaps.size())),
+	    uint64_t {Config::GetVramLimitMb()} * MemoryPolicy::MiB);
+	static_assert(MemoryPolicy::NoHeapLimit == VK_WHOLE_SIZE &&
+	              MemoryPolicy::MaxMemoryHeaps == VK_MAX_MEMORY_HEAPS);
+	std::array<VkDeviceSize, VK_MAX_MEMORY_HEAPS> heap_size_limits {};
+	if (limits.any) {
+		std::copy(limits.limits.begin(), limits.limits.end(), heap_size_limits.begin());
+		info.pHeapSizeLimit = heap_size_limits.data();
+	}
+
 	const auto result = static_cast<vk::Result>(vmaCreateAllocator(&info, &allocator));
 	if (result != vk::Result::eSuccess) {
 		LOGF("vmaCreateAllocator failed: %s\n", vk::to_string(result).c_str());
 		return false;
+	}
+	if (limits.any) {
+		// The budget, the cache thresholds and the BLAS arena follow the limited heaps.
+		for (uint32_t heap = 0; heap < memory.memoryHeapCount; heap++) {
+			if (limits.limits[heap] == MemoryPolicy::NoHeapLimit) {
+				continue;
+			}
+			Log::WriteToConsoleAndLog(fmt::format(
+			    "VRAM limit: heap {} limited to {} MiB of {} MiB (--vram-limit-mb)\n", heap,
+			    limits.limits[heap] >> 20u, memory.memoryHeaps[heap].size >> 20u));
+			memory.memoryHeaps[heap].size = limits.limits[heap];
+		}
+	} else if (Config::GetVramLimitMb() != 0) {
+		Log::WriteToConsoleAndLog(fmt::format(
+		    "VRAM limit: --vram-limit-mb {} limits no heap (none is device-local, above 1 GiB and "
+		    "larger than the limit)\n",
+		    Config::GetVramLimitMb()));
 	}
 	return true;
 }
