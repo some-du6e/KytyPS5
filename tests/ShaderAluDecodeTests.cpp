@@ -785,6 +785,68 @@ void TestVopcGaps() {
 	CompileToValidSpirv(code, "VOPC gaps", 32);
 }
 
+// ---- Precise division: V_DIV_SCALE, V_DIV_FMAS, V_DIV_FIXUP ----
+
+void TestPreciseDivision() {
+	CheckEncodings({
+	    {"v_div_scale_f32 v0, vcc_lo, v1, v2, v3", {0xd56d6a00u, 0x040e0501u}, Opcode::V_DIV_SCALE_F32},
+	    {"v_div_scale_f32 v0, s4, -v1, v2, v3", {0xd56d0400u, 0x240e0501u}, Opcode::V_DIV_SCALE_F32},
+	    {"v_div_scale_f64 v[0:1], vcc_lo, v[2:3], v[4:5], v[6:7]", {0xd56e6a00u, 0x041a0902u}, Opcode::V_DIV_SCALE_F64},
+	    {"v_div_fmas_f32 v0, v1, v2, v3", {0xd56f0000u, 0x040e0501u}, Opcode::V_DIV_FMAS_F32},
+	    {"v_div_fmas_f64 v[0:1], v[2:3], v[4:5], v[6:7]", {0xd5700000u, 0x041a0902u}, Opcode::V_DIV_FMAS_F64},
+	    {"v_div_fixup_f32 v0, v1, v2, v3", {0xd55f0000u, 0x040e0501u}, Opcode::V_DIV_FIXUP_F32},
+	    {"v_div_fixup_f32 v0, v1, |v2|, -v3 clamp", {0xd55f8200u, 0x840e0501u}, Opcode::V_DIV_FIXUP_F32},
+	    {"v_div_fixup_f16 v0, v1, v2, v3", {0xd75f0000u, 0x040e0501u}, Opcode::V_DIV_FIXUP_F16},
+	    {"v_div_fixup_f16 v0, v1, v2, v3 op_sel:[1,0,0,1]", {0xd75f4800u, 0x040e0501u}, Opcode::V_DIV_FIXUP_F16},
+	    {"v_div_fixup_f64 v[0:1], v[2:3], v[4:5], v[6:7]", {0xd5600000u, 0x041a0902u}, Opcode::V_DIV_FIXUP_F64},
+	});
+	const uint32_t scale[] = {0xd56d0400u, 0x240e0501u}; // v_div_scale_f32 v0, s4, -v1, v2, v3
+	auto           inst    = DecodeOne(scale);
+	Check(inst.dst2.kind == Decoder::OperandKind::Sgpr && inst.dst2.reg == 4u && inst.src0.negate &&
+	          !inst.src1.negate && inst.src_count == 3u,
+	      "V_DIV_SCALE_F32 lost its VOP3B scalar destination or NEG");
+	const uint32_t fixup[] = {0xd55f8200u, 0x840e0501u}; // v_div_fixup_f32 v0, v1, |v2|, -v3 clamp
+	inst                   = DecodeOne(fixup);
+	Check(inst.src1.absolute && inst.src2.negate && inst.dst.clamp,
+	      "V_DIV_FIXUP_F32 lost its ABS/NEG or CLAMP");
+	const uint32_t half[] = {0xd75f4800u, 0x040e0501u}; // op_sel:[1,0,0,1]
+	inst                  = DecodeOne(half);
+	Check(inst.src0.op_sel && !inst.src1.op_sel && inst.dst.sdwa_sel == 5u,
+	      "V_DIV_FIXUP_F16 lost its OP_SEL halves");
+
+	const uint32_t code[] = {
+	    0x7e000d00u, // v_cvt_f32_u32 v0, v0
+	    0x7e0202ffu, 0x40400000u, // v_mov_b32 v1, 0x40400000
+	    0xd56d0402u, 0x04020301u, // v_div_scale_f32 v2, s4, v1, v1, v0
+	    0xd56d6a03u, 0x04020300u, // v_div_scale_f32 v3, vcc_lo, v0, v1, v0
+	    0x7e085502u, // v_rcp_f32 v4, v2
+	    0xbfa5000fu, // s_denorm_mode 15
+	    0xd54b0005u, 0x23ca0902u, // v_fma_f32 v5, -v2, v4, 1.0
+	    0x56080905u, // v_fmac_f32 v4, v5, v4
+	    0x100a0903u, // v_mul_f32 v5, v3, v4
+	    0xd54b0006u, 0x240e0b02u, // v_fma_f32 v6, -v2, v5, v3
+	    0x560a0906u, // v_fmac_f32 v5, v6, v4
+	    0xd54b0002u, 0x240e0b02u, // v_fma_f32 v2, -v2, v5, v3
+	    0xbfa5000cu, // s_denorm_mode 12
+	    0xd56f0002u, 0x04160902u, // v_div_fmas_f32 v2, v2, v4, v5
+	    0xd55f0007u, 0x04020302u, // v_div_fixup_f32 v7, v2, v1, v0
+	    0x7e102100u, // v_cvt_f64_f32 v[8:9], v0
+	    0x7e142101u, // v_cvt_f64_f32 v[10:11], v1
+	    0xd56e6a0cu, 0x04221508u, // v_div_scale_f64 v[12:13], vcc_lo, v[8:9], v[10:11], v[8:9]
+	    0xd570000cu, 0x0422150cu, // v_div_fmas_f64 v[12:13], v[12:13], v[10:11], v[8:9]
+	    0xd560000cu, 0x0422150cu, // v_div_fixup_f64 v[12:13], v[12:13], v[10:11], v[8:9]
+	    0x7e1c1500u, // v_cvt_f16_f32 v14, v0
+	    0xd75f480eu, 0x043a1d0eu, // v_div_fixup_f16 v14, v14, v14, v14 op_sel:[1,0,0,1]
+	    0x7e3e0280u, // v_mov_b32 v31, 0
+	    0xe0701000u, 0x8000071fu, // buffer_store_dword v7, v31, s[0:3], 0 offen
+	    0xe0701004u, 0x80000c1fu, // buffer_store_dword v12, v31, s[0:3], 0 offen offset:4
+	    0xe0701008u, 0x80000d1fu, // buffer_store_dword v13, v31, s[0:3], 0 offen offset:8
+	    0xe070100cu, 0x80000e1fu, // buffer_store_dword v14, v31, s[0:3], 0 offen offset:12
+	    0xbf810000u, // s_endpgm
+	};
+	CompileToValidSpirv(code, "precise division", 32);
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -802,6 +864,7 @@ int main() {
 	TestScalarModeAndHintNops();
 	TestScalarMemoryNops();
 	TestVopcGaps();
+	TestPreciseDivision();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

@@ -293,6 +293,9 @@ private:
 	void    V_DOT_INTEGER(const Decoder::Instruction& inst, uint32_t bits, bool sign,
 	                      bool accumulate_destination);
 	void    V_CMP_CLASS_F64(const Decoder::Instruction& inst);
+	void    V_DIV_SCALE(const Decoder::Instruction& inst, bool f64);
+	void    V_DIV_FMAS(const Decoder::Instruction& inst, bool f64);
+	void    V_DIV_FIXUP(const Decoder::Instruction& inst, IR::Type type);
 
 	void EmitScalar(const Decoder::Instruction& inst);
 	void EmitVector(const Decoder::Instruction& inst);

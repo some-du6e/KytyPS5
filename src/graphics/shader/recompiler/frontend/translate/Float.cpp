@@ -1,6 +1,9 @@
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 
+#include "common/hackNotice.h"
+
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cstdlib>
 #include <utility>
@@ -394,6 +397,121 @@ void Translator::V_DOT2_F32_F16(const Decoder::Instruction& inst) {
 	const auto acc = IR::F32(ReadOperand(accumulator, IR::Type::F32));
 	const auto lo  = IR::F32(ir.Emit(IR::ValueOpcode::FPFma32, {a_lo, b_lo, acc}));
 	WriteOperand(DestinationOperand(inst), ir.Emit(IR::ValueOpcode::FPFma32, {a_hi, b_hi, lo}));
+}
+
+// gta6-prep: shader-alu. The precise division expansion: S0' = V_DIV_SCALE(S0, den, num), the
+// Newton iterations on S0', V_DIV_FMAS for the last step, V_DIV_FIXUP(quotient, den, num).
+
+// D = S0 scaled by 2^+-64 (2^+-128 for F64) when the exponents of the denominator S1 and the
+// numerator S2 are far apart, VCC = whether it scaled. [HACK] D = S0 unscaled and VCC = 0: exact
+// for operands whose quotient and reciprocals stay in the normal range; the special cases are
+// V_DIV_FIXUP's.
+void Translator::V_DIV_SCALE(const Decoder::Instruction& inst, bool f64) {
+	static std::atomic<bool> reported {false};
+	if (!reported.exchange(true, std::memory_order_relaxed)) {
+		Common::HackNotice::Report("v_div_scale returns its operand unscaled", "Translator::V_DIV_SCALE",
+		                           program.shader_hash, inst.pc, Decoder::InstructionToString(inst));
+	}
+	WriteOperand(DestinationOperand(inst), ReadOperand(inst.src0, f64 ? IR::Type::F64 : IR::Type::F32));
+	if (inst.dst2.kind != Decoder::OperandKind::Null &&
+	    inst.dst2.kind != Decoder::OperandKind::Unknown) {
+		WriteVectorMask(inst.dst2, IR::U1(IR::Value(false)));
+	}
+}
+
+// D = fma(S0, S1, S2), times 2^64 (F64: 2^128) in the lanes VCC sets.
+void Translator::V_DIV_FMAS(const Decoder::Instruction& inst, bool f64) {
+	const auto type  = f64 ? IR::Type::F64 : IR::Type::F32;
+	const auto a     = ReadOperand(inst.src0, type);
+	const auto b     = ReadOperand(inst.src1, type);
+	const auto c     = ReadOperand(inst.src2, type);
+	const auto scale = ReadMask(ConditionOperand(Decoder::OperandKind::VccLo));
+	if (f64) {
+		const auto fma    = ir.Emit(IR::ValueOpcode::FPFma64, {a, b, c});
+		const auto factor = ir.Emit(IR::ValueOpcode::BitCastF64U64,
+		                            {IR::Value(uint64_t {0x47f0000000000000ull})});
+		const auto scaled = ir.Emit(IR::ValueOpcode::FPMul64, {fma, factor});
+		WriteOperand(DestinationOperand(inst), ir.Emit(IR::ValueOpcode::SelectF64, {scale, scaled, fma}));
+		return;
+	}
+	const auto fma    = IR::F32(ir.Emit(IR::ValueOpcode::FPFma32, {a, b, c}));
+	const auto scaled = IR::F32(ir.Emit(IR::ValueOpcode::FPMul32,
+	                                    {fma, IR::Value::F32(std::bit_cast<float>(0x5f800000u))}));
+	WriteOperand(DestinationOperand(inst), SelectF32(scale, scaled, fma));
+}
+
+// S0 = quotient, S1 = denominator, S2 = numerator. In priority order: a NaN numerator, then a NaN
+// denominator, is returned quieted; 0/0 and inf/inf are NaN; x/0 and inf/x are infinite; x/inf and
+// 0/x are zero; otherwise D = |S0|. The sign of the result is sign(S1) ^ sign(S2).
+void Translator::V_DIV_FIXUP(const Decoder::Instruction& inst, IR::Type type) {
+	const auto u32 = [](uint32_t value) { return IR::U32(IR::Value(value)); };
+	if (type == IR::Type::F64) {
+		const auto words = [&](const Decoder::Operand& operand) {
+			const auto bits = ir.Emit(IR::ValueOpcode::BitCastU64F64, {ReadOperand(operand, IR::Type::F64)});
+			return ExtractU64(IR::U64(bits));
+		};
+		const auto q         = words(inst.src0);
+		const auto d         = words(inst.src1);
+		const auto n         = words(inst.src2);
+		const auto magnitude = [&](const std::array<IR::U32, 2>& x) {
+			return ir.BitwiseAnd(x[1], u32(0x7fffffffu));
+		};
+		const auto low_zero = [&](const std::array<IR::U32, 2>& x) { return ir.IEqual(x[0], u32(0u)); };
+		const auto is_inf   = [&](const std::array<IR::U32, 2>& x) {
+			return ir.LogicalAnd(ir.IEqual(magnitude(x), u32(0x7ff00000u)), low_zero(x));
+		};
+		const auto is_nan = [&](const std::array<IR::U32, 2>& x) {
+			return ir.LogicalOr(ir.UGreaterThan(magnitude(x), u32(0x7ff00000u)),
+			                    ir.LogicalAnd(ir.IEqual(magnitude(x), u32(0x7ff00000u)),
+			                                  ir.LogicalNot(low_zero(x))));
+		};
+		const auto is_zero = [&](const std::array<IR::U32, 2>& x) {
+			return ir.LogicalAnd(ir.IEqual(magnitude(x), u32(0u)), low_zero(x));
+		};
+		const auto sign = ir.BitwiseAnd(ir.BitwiseXor(d[1], n[1]), u32(0x80000000u));
+		auto       hi   = ir.BitwiseOr(magnitude(q), sign);
+		auto       lo   = q[0];
+		const auto set  = [&](IR::U1 condition, IR::U32 high, IR::U32 low) {
+			hi = ir.Select(condition, high, hi);
+			lo = ir.Select(condition, low, lo);
+		};
+		set(ir.LogicalOr(is_inf(d), is_zero(n)), sign, u32(0u));
+		set(ir.LogicalOr(is_zero(d), is_inf(n)), ir.BitwiseOr(sign, u32(0x7ff00000u)), u32(0u));
+		const auto invalid = ir.LogicalOr(ir.LogicalAnd(is_inf(d), is_inf(n)),
+		                                  ir.LogicalAnd(is_zero(d), is_zero(n)));
+		set(invalid, u32(0xfff80000u), u32(0u));
+		set(is_nan(d), ir.BitwiseOr(d[1], u32(0x00080000u)), d[0]);
+		set(is_nan(n), ir.BitwiseOr(n[1], u32(0x00080000u)), n[0]);
+		WriteU32Pair(DestinationOperand(inst), {lo, hi});
+		return;
+	}
+	// F16 is evaluated on its exact F32 conversion: zeros, infinities and NaNs keep their class.
+	const bool half = type == IR::Type::F16;
+	const auto bits = [&](const Decoder::Operand& operand) {
+		return ir.BitCastU32(half ? ReadF16AsF32(operand) : IR::F32(ReadOperand(operand, IR::Type::F32)));
+	};
+	const auto q         = bits(inst.src0);
+	const auto d         = bits(inst.src1);
+	const auto n         = bits(inst.src2);
+	const auto magnitude = [&](IR::U32 x) { return ir.BitwiseAnd(x, u32(0x7fffffffu)); };
+	const auto is_inf    = [&](IR::U32 x) { return ir.IEqual(magnitude(x), u32(0x7f800000u)); };
+	const auto is_nan    = [&](IR::U32 x) { return ir.UGreaterThan(magnitude(x), u32(0x7f800000u)); };
+	const auto is_zero   = [&](IR::U32 x) { return ir.IEqual(magnitude(x), u32(0u)); };
+	const auto sign      = ir.BitwiseAnd(ir.BitwiseXor(d, n), u32(0x80000000u));
+	auto       result    = ir.BitwiseOr(magnitude(q), sign);
+	result = ir.Select(ir.LogicalOr(is_inf(d), is_zero(n)), sign, result);
+	result = ir.Select(ir.LogicalOr(is_zero(d), is_inf(n)), ir.BitwiseOr(sign, u32(0x7f800000u)), result);
+	const auto invalid = ir.LogicalOr(ir.LogicalAnd(is_inf(d), is_inf(n)),
+	                                  ir.LogicalAnd(is_zero(d), is_zero(n)));
+	result = ir.Select(invalid, u32(0xffc00000u), result);
+	result = ir.Select(is_nan(d), ir.BitwiseOr(d, u32(0x00400000u)), result);
+	result = ir.Select(is_nan(n), ir.BitwiseOr(n, u32(0x00400000u)), result);
+	const auto value = ir.BitCastF32(result);
+	if (half) {
+		WriteF16(DestinationOperand(inst), value);
+	} else {
+		WriteOperand(DestinationOperand(inst), value);
+	}
 }
 
 void Translator::V_CUBEID_F32(const Decoder::Instruction& inst) {

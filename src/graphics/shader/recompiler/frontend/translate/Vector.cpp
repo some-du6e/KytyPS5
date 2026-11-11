@@ -651,6 +651,13 @@ void Translator::EmitVector(const Decoder::Instruction& inst) {
 			return EmitInteger16Compare(inst, IR::ValueOpcode::UGreaterThanEqual32, false);
 		case O::V_CMP_CLASS_F64:
 		case O::V_CMPX_CLASS_F64: return V_CMP_CLASS_F64(inst);
+		case O::V_DIV_SCALE_F32: return V_DIV_SCALE(inst, false);
+		case O::V_DIV_SCALE_F64: return V_DIV_SCALE(inst, true);
+		case O::V_DIV_FMAS_F32: return V_DIV_FMAS(inst, false);
+		case O::V_DIV_FMAS_F64: return V_DIV_FMAS(inst, true);
+		case O::V_DIV_FIXUP_F32: return V_DIV_FIXUP(inst, IR::Type::F32);
+		case O::V_DIV_FIXUP_F16: return V_DIV_FIXUP(inst, IR::Type::F16);
+		case O::V_DIV_FIXUP_F64: return V_DIV_FIXUP(inst, IR::Type::F64);
 		default: return FailMissingTranslation(inst);
 	}
 }
