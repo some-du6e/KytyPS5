@@ -11,6 +11,7 @@
 #include "graphics/host_gpu/renderer/render.h"
 #include "graphics/host_gpu/renderer/renderContext.h"
 #include "graphics/host_gpu/vulkanCommon.h"
+#include "graphics/host_gpu/vulkanDiag.h"
 #include "graphics/presentation/openxrHeadset.h"
 #include "graphics/presentation/presenter.h"
 #include "graphics/presentation/systemOverlay.h"
@@ -489,6 +490,30 @@ static vk::Device VulkanCreateDevice(GraphicContext&          graphics,
 	graphics.max_push_descriptors       = push_descriptor.maxPushDescriptors;
 	graphics.mesh_shader_properties     = mesh_properties;
 	LOGF("Select device: %s\n", graphics.physical_device_properties.deviceName.data());
+	{
+		// The GPU of a crash log (log contract), also in the session log.
+		const auto& device_properties = graphics.physical_device_properties;
+		vk::StructureChain<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>
+		    driver_query;
+		physical_device.getProperties2(&driver_query.get());
+		const auto& driver    = driver_query.get<vk::PhysicalDeviceDriverProperties>();
+		const bool  has_id    = device_properties.apiVersion >= VK_API_VERSION_1_2;
+		const auto  driver_id = has_id ? vk::to_string(driver.driverID) : std::string("?");
+		const auto  name      = std::string(device_properties.deviceName.data());
+		Log::WriteToConsoleAndLog(GpuIdentityLine(
+		    {.name           = name,
+		     .vendor_id      = device_properties.vendorID,
+		     .device_id      = device_properties.deviceID,
+		     .driver_version = device_properties.driverVersion,
+		     .api_version    = device_properties.apiVersion,
+		     .driver_id      = driver_id,
+		     .memory         = SummarizeGpuMemory(physical_device.getMemoryProperties())}));
+		if (has_id) {
+			Log::WriteToConsoleAndLog(fmt::format(
+			    "GPU driver: name=\"{}\" info=\"{}\"\n", std::string(driver.driverName.data()),
+			    std::string(driver.driverInfo.data())));
+		}
+	}
 
 	const auto subgroup_stages = subgroup_control.requiredSubgroupSizeStages;
 	graphics.subgroup_size     = properties11.subgroupSize;

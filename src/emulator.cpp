@@ -53,6 +53,10 @@ static void PrintSystemInfo() {
 	     "  threads: %u\n\n",
 	     KYTY_BUILD_LABEL, platform_name, info.ProcessorName.c_str(),
 	     std::thread::hardware_concurrency());
+	// For crash logs: also in the session log (log contract).
+	Log::WriteToConsoleAndLog(fmt::format("Host: cpu={} threads={} ram={} MiB os={}\n",
+	                                      info.ProcessorName, std::thread::hardware_concurrency(),
+	                                      info.TotalMemoryBytes / (1024u * 1024u), info.OsName));
 }
 
 static void KytyClose() {
