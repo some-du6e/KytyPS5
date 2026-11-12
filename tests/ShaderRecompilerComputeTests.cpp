@@ -1964,8 +1964,12 @@ CompiledShader CompileCase(const TestCase &test, u32 host_subgroup_size = 64) {
       MakeNativeUserData(test.has_user_data ? &test.user_data : nullptr);
   const auto uses_image =
       std::any_of(test.opcodes.begin(), test.opcodes.end(), [](auto op) {
-        return op >= ShaderOpcode::IMAGE_GET_RESINFO &&
-               op <= ShaderOpcode::IMAGE_GATHER4;
+        // gta6-prep: shader-mem: the image opcodes appended after RT_ALPHA.
+        return (op >= ShaderOpcode::IMAGE_GET_RESINFO &&
+                op <= ShaderOpcode::IMAGE_GATHER4) ||
+               (op >= ShaderOpcode::IMAGE_ATOMIC_SUB &&
+                op <= ShaderOpcode::IMAGE_ATOMIC_FCMPSWAP) ||
+               op == ShaderOpcode::IMAGE_MSAA_LOAD;
       });
   if (uses_image && ((user_data[3] >> 28u) & 0xfu) == 0) {
     user_data[3] = static_cast<uint32_t>(Prospero::ImageType::kColor2D) << 28u;
