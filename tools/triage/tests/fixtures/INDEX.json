@@ -467,6 +467,13 @@
   "bytes": 678
  },
  {
+  "case": "synthetic-diag-fault-context",
+  "file": "synthetic-diag-fault-context.txt",
+  "synthetic": true,
+  "description": "guest write fault into eboot.bin .data in gta6/diag's exact fault-report format (guest pc, guest address, 32-word stack, 24 rsp hits, 16-frame guest stack trace)",
+  "bytes": 4109
+ },
+ {
   "case": "synthetic-fatal-catalogue",
   "file": "synthetic-fatal-catalogue.txt",
   "synthetic": true,

@@ -362,6 +362,10 @@ R_HOST_EXC = re.compile(r"Unhandled host exception: type=(?P<type>\d+) code=(?P<
 R_SHADER_CTX = re.compile(r"^while compiling shader: stage=(?P<stage>\S+) hash=0x(?P<hash>[0-9a-f]{16})")
 R_FAULT_PC = re.compile(r"^pc: (?P<pc>[0-9a-f]{16}) \((?P<mod>[^+()]+)\+0x(?P<off>[0-9a-f]+)\)")
 R_GUEST_PC = re.compile(r"^guest pc: (?P<mod>[^+\s]+)\+0x(?P<off>[0-9a-f]+)")
+# gta6/diag also prints the faulting data address when it is inside a guest module, and the
+# guest frame chain: "guest stack trace:" then " #<n> <16 hex> (<module>+0x<off> or ?)".
+R_GUEST_ADDR = re.compile(r"^guest address: (?P<mod>[^+\s]+)\+0x(?P<off>[0-9a-f]+)")
+R_GUEST_FRAME = re.compile(r"^#(?P<n>\d+) (?P<v>[0-9a-f]{16}) \((?:(?P<mod>[^+()]+)\+0x(?P<off>[0-9a-f]+)|\?)\)\s*$")
 R_RSP = re.compile(r"^\s*\[rsp\+0x(?P<o>[0-9a-f]+)\] (?P<v>[0-9a-f]{16}) \((?P<mod>[^+()]+)\+0x(?P<off>[0-9a-f]+)\)")
 R_REG = re.compile(r"\b(r[a-z0-9]{1,2})\s*=([0-9a-f]{16})")
 R_DRIVER_PIPE = re.compile(r"^pipeline being created by the driver:(?P<stages>(?: \w+ 0x[0-9a-f]{16})+)")
@@ -1032,7 +1036,8 @@ class Scanner:
     def h_fault_context(self, line):
         self._close_block()
         ctx = {"source": self.src, "line": self.lineno, "end": self.lineno, "thread": None, "host_pc": None, "guest_pc": None,
-               "driver_pipeline": None, "regs": {}, "stack_hits": [], "lines": [line]}
+               "guest_address": None, "driver_pipeline": None, "regs": {}, "stack_hits": [], "guest_frames": [],
+               "lines": [line]}
         self.r.fault_contexts.append(ctx)
         self.fault = ctx
         self.fault_state = None
@@ -1051,6 +1056,16 @@ class Scanner:
         elif R_GUEST_PC.match(st):
             m = R_GUEST_PC.match(st)
             ctx["guest_pc"] = {"module": m.group("mod"), "offset": "0x" + m.group("off")}
+        elif R_GUEST_ADDR.match(st):
+            m = R_GUEST_ADDR.match(st)
+            ctx["guest_address"] = {"module": m.group("mod"), "offset": "0x" + m.group("off")}
+        elif st == "guest stack trace:":
+            self.fault_state = "gstk"
+        elif self.fault_state == "gstk" and R_GUEST_FRAME.match(st):
+            m = R_GUEST_FRAME.match(st)
+            if len(ctx["guest_frames"]) < 32:
+                ctx["guest_frames"].append({"value": "0x" + m.group("v"), "module": m.group("mod"),
+                                            "offset": "0x" + m.group("off") if m.group("off") else None})
         elif R_DRIVER_PIPE.match(st):
             self.h_driver_pipeline(st)
             ctx["driver_pipeline"] = st.split(":", 1)[1].strip()
@@ -1598,6 +1613,10 @@ def classify_host_exception(m, results, block):
         d["thread"] = ctx.get("thread")
         d["driver_pipeline"] = ctx.get("driver_pipeline")
         d["stack_modules"] = ["%s+%s" % (h["module"], h["offset"]) for h in ctx["stack_hits"][:12]]
+        ga = ctx.get("guest_address")
+        d["guest_address"] = "%s+%s" % (ga["module"], ga["offset"]) if ga else None
+        d["guest_frames"] = ["%s+%s" % (g["module"], g["offset"]) if g["module"] else g["value"]
+                             for g in ctx.get("guest_frames", [])[:16]]
     # class
     if pc is not None and (pc < 0x10000 or (d["access"] == 3 and pc == addr)):
         cls = "host-fault-bad-jump"
@@ -2290,6 +2309,10 @@ def render_markdown(rep, top=10):
                 out.append("- pipeline being created by the driver: %s" % exc["driver_pipeline"])
             if exc.get("stack_modules"):
                 out.append("- stack hits: %s" % ", ".join(exc["stack_modules"][:8]))
+            if exc.get("guest_address"):
+                out.append("- address = `%s` (guest address line)" % exc["guest_address"])
+            if exc.get("guest_frames"):
+                out.append("- guest stack trace: %s" % ", ".join(exc["guest_frames"][:8]))
             out.append("- class: `%s`" % exc["class"])
         if f.get("stack"):
             out.append("")
@@ -2501,6 +2524,10 @@ def render_agent_prompt(rep, top=6):
         lines.append("Host exception: %s %s, pc %s = %s+%s (%s), address %s, class %s." % (
             exc["type_name"], exc["access_name"], exc["pc"], exc.get("pc_module"), exc.get("pc_offset"),
             exc.get("pc_basis"), exc["address"], exc["class"]))
+        if exc.get("guest_address"):
+            lines.append("The faulting address is inside a guest module: %s." % exc["guest_address"])
+        if exc.get("guest_frames"):
+            lines.append("Guest stack trace: %s." % ", ".join(exc["guest_frames"][:8]))
     lines.append("")
     lines.append("Evidence (verbatim log lines, file:line):")
     seen = set()

@@ -117,6 +117,26 @@ class ContractOtherTests(unittest.TestCase):
         # the named device-lost report and the vkQueueSubmit line are one fix area
         self.assertEqual(sum(1 for a in rep["fix_areas"] if a["category"] == "DEVICE_LOST"), 1)
 
+    def test_diag_fault_context_with_guest_address_and_guest_stack(self):
+        # gta6/diag's report: "guest address:" after "guest pc:", a full stack dump and a
+        # "guest stack trace:" block; the EXIT is more than 40 lines after "guest address:".
+        rep = u.report("synthetic-diag-fault-context.txt")
+        exc = rep["primary"]["host_exception"]
+        self.assertTrue(exc["fault_context"])
+        self.assertEqual((exc["pc_module"], exc["pc_offset"], exc["pc_basis"]), ("eboot.bin", "0x1c2d3e4", "guest pc line"))
+        self.assertEqual(exc["access_name"], "write")
+        self.assertEqual(exc["thread"], "[GAME] Render Thread")
+        self.assertEqual(exc["guest_address"], "eboot.bin+0x28ab5f0")
+        self.assertEqual(len(exc["guest_frames"]), 16)
+        self.assertEqual(exc["guest_frames"][0], "eboot.bin+0x1b00000")
+        self.assertEqual(exc["guest_frames"][15], "0x00000007eff00000")
+        ctx = rep["fault_contexts"][0]
+        self.assertEqual(len(ctx["regs"]), 16)
+        self.assertEqual(len(ctx["stack_hits"]), 24)
+        self.assertEqual(ctx["guest_address"], {"module": "eboot.bin", "offset": "0x28ab5f0"})
+        md = u.kt.render_markdown(rep)
+        self.assertIn("- address = `eboot.bin+0x28ab5f0` (guest address line)", md)
+
     def test_strict_imports(self):
         rep = u.report("synthetic-contract-strict-imports.txt")
         self.assertEqual(rep["primary"]["rule_id"], "strict-import-exit")

@@ -53,8 +53,9 @@ Formats it knows (the emitters are listed in the survey catalogue and `notes/log
   guest stack trace, and `while compiling shader:` after a report. The first report is the
   primary one. Later reports (another thread noticing the same device loss) are listed after it.
   The same report in a session log and a printf log of one run is counted once.
-- `--- Guest fault context ---` with `thread:`, `pc:`, `guest pc:`, registers, stack hits and
-  `pipeline being created by the driver:`. The pc of `Unhandled host exception` is resolved to
+- `--- Guest fault context ---` with `thread:`, `pc:`, `guest pc:`, `guest address:`, registers,
+  code and stack dumps, stack hits, the `guest stack trace:` frames (` #<n> <16 hex> (<where>)`,
+  gta6/diag) and `pipeline being created by the driver:`. The pc of `Unhandled host exception` is resolved to
   `module+offset` from the `guest pc:` line, else the `Loading:`/`base_vaddr`/`mapped_size` module
   map of the printf log, else the host module, else the GTA V-style eboot base `0x900000000`.
   The fault is then classed as guest code, a jump to a bad address, the GPU driver, the

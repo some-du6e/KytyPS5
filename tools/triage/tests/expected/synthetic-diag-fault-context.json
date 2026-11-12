@@ -1,0 +1,22 @@
+{
+ "_source": "synthetic",
+ "_note": "diag's guest address / guest stack trace lines do not end the fault context",
+ "outcome": "crash",
+ "primary_category": "HOST_FAULT_GUEST",
+ "primary_rule": "host-fault-guest",
+ "crash_site": "runtimeLinker.cpp:857",
+ "top_rule": "host-fault-guest",
+ "top_fix_area": "src/loader/runtimeLinker.cpp",
+ "fatal_count": 1,
+ "title_id": "PPSA00002",
+ "build_label": "Fork build some-du6e/KytyPS5 5678def",
+ "gpu": "NVIDIA GeForce RTX 3050",
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": [],
+ "truncated": false,
+ "guest_pc": "eboot.bin+0x1c2d3e4",
+ "fault_class": "host-fault-guest"
+}
