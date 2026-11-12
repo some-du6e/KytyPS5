@@ -17,6 +17,7 @@
 #include <map>
 #include <mutex>
 #include <span>
+#include <string>
 
 namespace Libs {
 
@@ -482,6 +483,25 @@ static int KYTY_SYSV_ABI NpEntitlementAccessGetAddcontEntitlementInfo(
 	        Loader::AddContentFind(entitlement_label->data, sizeof(entitlement_label->data))) {
 		*info = MakeAddcontInfo(*entry);
 		return 0;
+	}
+
+	// gta6-prep: config: a GTA V SKU that matched no title profile asks for its legacy labels.
+	if (!Config::QuirkEnabled(Common::Quirk::RockstarLegacyEntitlements)) {
+		for (const auto& entitlement: NP_ENTITLEMENT_ACCESS_ADDON_LIST) {
+			if (strncmp(entitlement_label->data, entitlement.entitlement_label.data,
+			            sizeof(entitlement_label->data)) != 0) {
+				continue;
+			}
+			static std::atomic_bool reported {false};
+			if (!reported.exchange(true, std::memory_order_relaxed)) {
+				std::string text = "NpEntitlementAccess: GTA V legacy label ";
+				text += entitlement.entitlement_label.data;
+				text += " requested; run with --title-profile gta5 or --quirk "
+				        "rockstar-legacy-entitlements=on\n";
+				Log::WriteToConsoleAndLog(text);
+			}
+			break;
+		}
 	}
 
 	return NP_ENTITLEMENT_ACCESS_ERROR_NO_ENTITLEMENT;

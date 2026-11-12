@@ -146,6 +146,29 @@ void TestMatchByName() {
         "an empty title matched");
 }
 
+// A SKU whose default language is not English: TITLE is the Japanese titleName, the en-US one is
+// among the localized names.
+void TestMatchByLocalizedName() {
+  auto japanese = Title("PPSA99999", "ã°ã©ã³ã");
+  japanese.localized_names = {japanese.name, "Grand Theft Auto V"};
+  Check(MatchedKey(japanese) == "gta5" &&
+            MatchTitle(japanese, {}).reason == TitleMatchReason::Name,
+        "a localized GTA V titleName did not select gta5");
+  Check(!Common::NeedsTitleProfileHint(japanese, MatchTitle(japanese, {})),
+        "a title matched by a localized name gave a hint");
+  // The default-language name comes first.
+  auto both = Title("PPSA99999", "Grand Theft Auto VI");
+  both.localized_names = {"Grand Theft Auto V", both.name};
+  Check(MatchedKey(both) == "gta6",
+        "a localized name won over the default-language name");
+  // Exact only for the localized names as well.
+  auto edition = Title("PPSA99999", "ã°");
+  edition.localized_names = {"Grand Theft Auto V: Premium Edition"};
+  Check(MatchedKey(edition) == "none", "a localized name matched by prefix");
+  Check(Common::NeedsTitleProfileHint(edition, MatchTitle(edition, {})),
+        "an unmatched localized GTA name gave no hint");
+}
+
 void TestTitleProfileHint() {
   const auto hint = [](const TitleInfo &title, std::string_view forced = {}) {
     return Common::NeedsTitleProfileHint(title, MatchTitle(title, forced));
@@ -500,6 +523,7 @@ int main() {
   TestMakeTitleInfo();
   TestMatchById();
   TestMatchByName();
+  TestMatchByLocalizedName();
   TestTitleProfileHint();
   TestForcedAndEnvironment();
   TestQuirks();

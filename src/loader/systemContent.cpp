@@ -37,6 +37,8 @@ public:
 	bool     GetParamString(const char* name, std::string* value);
 	bool     GetParamString(const char* name, char* value, size_t value_size);
 	MemoryParams GetMemoryParams();
+	// gta6-prep: config. Every localizedParameters titleName of a param.json, in file order.
+	std::vector<std::string> GetLocalizedTitles();
 
 	void DbgPrint();
 
@@ -63,6 +65,7 @@ private:
 	bool               m_opened = false;
 	std::vector<Param> m_params;
 	MemoryParams       m_memory_params;
+	std::vector<std::string> m_localized_titles;
 };
 
 class PlayGo {
@@ -230,6 +233,7 @@ void Psf::OpenJson(const std::filesystem::path& file_name) {
 	if (title.empty() && !localized_titles.empty()) {
 		title = localized_titles[0];
 	}
+	m_localized_titles = localized_titles;
 	if (!title.empty()) {
 		AddParamString("TITLE", title);
 	}
@@ -243,6 +247,7 @@ void Psf::Close() {
 
 	m_params.clear();
 	m_memory_params = {};
+	m_localized_titles.clear();
 	m_opened        = false;
 }
 
@@ -358,6 +363,12 @@ MemoryParams Psf::GetMemoryParams() {
 	Common::LockGuard lock(m_mutex);
 
 	return m_memory_params;
+}
+
+std::vector<std::string> Psf::GetLocalizedTitles() {
+	Common::LockGuard lock(m_mutex);
+
+	return m_localized_titles;
 }
 
 PlayGo::~PlayGo() {
@@ -618,6 +629,7 @@ void SystemContentLoadParamSfo(const std::filesystem::path& file_name) {
 		sc->psf.GetParamString("TITLE", &title);
 		sc->psf.GetParamString("APP_VER", &version);
 		sc->title = Common::MakeTitleInfo(title_id, content_id, title, version);
+		sc->title.localized_names = sc->psf.GetLocalizedTitles();
 	}
 	int32_t attribute3 = 0;
 	const bool title_supports_trinity = sc->psf.GetParamInt("ATTRIBUTE3", &attribute3) &&

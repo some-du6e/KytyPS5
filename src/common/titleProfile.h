@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Per-title profiles: which known title is running, the title-specific workarounds ("quirks") it
 // needs and the preset of options it defaults to. Pure data and string logic, so that it can be
@@ -16,6 +17,9 @@ namespace Common {
 struct TitleInfo {
 	std::string id;         // TITLE_ID, else the title segment of CONTENT_ID (see MakeTitleInfo())
 	std::string name;       // TITLE: the localized titleName
+	// gta6-prep: config. Every localizedParameters titleName of the param.json, in file order;
+	// `name` is the default language's (else en-US's, else the first). Profiles match any of them.
+	std::vector<std::string> localized_names;
 	std::string version;    // APP_VER
 	std::string content_id; // CONTENT_ID
 	// The param.json has no TITLE_ID: `id` comes from CONTENT_ID.
@@ -92,13 +96,15 @@ struct TitleMatch {
 // profile with that key (none when there is no such profile). `gta6_ids`: the value of
 // KYTY_GTA6_TITLE_IDS, title IDs separated by commas, semicolons or whitespace that select the
 // gta6 profile (its title ID is not known yet). Otherwise an exact ID match comes before an exact
-// normalized name match. IDs compare without regard to ASCII case.
+// normalized name match, which tries `name` first and then each of `localized_names` (a SKU whose
+// default language is not English still has its en-US titleName). IDs compare without regard to
+// ASCII case.
 [[nodiscard]] TitleMatch MatchTitle(const TitleInfo& title, std::string_view forced_key,
                                     std::string_view gta6_ids = {});
 
-// Whether a title that matched no profile by itself (not --title-profile none) has a name that
-// starts with "grand theft auto": another SKU or a localized name of GTA V or GTA 6 that the user
-// may want to run with --title-profile gta5|gta6.
+// Whether a title that matched no profile by itself (not --title-profile none) has a name (`name`
+// or one of `localized_names`) that starts with "grand theft auto": another SKU or a localized
+// name of GTA V or GTA 6 that the user may want to run with --title-profile gta5|gta6.
 [[nodiscard]] bool NeedsTitleProfileHint(const TitleInfo& title, const TitleMatch& match);
 
 // The quirks in effect: the profile's, plus `on`, minus `off`.

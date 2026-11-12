@@ -238,22 +238,47 @@ TitleMatch MatchTitle(const TitleInfo& title, std::string_view forced_key,
 			}
 		}
 	}
-	const auto name = NormalizeTitleName(title.name);
-	if (!name.empty()) {
+	const auto match_name = [](std::string_view raw) -> const TitleProfile* {
+		const auto name = NormalizeTitleName(raw);
+		if (name.empty()) {
+			return nullptr;
+		}
 		for (const auto& profile: Profiles) {
 			for (const auto profile_name: profile.names) {
 				if (profile_name == name) {
-					return {.profile = &profile, .reason = TitleMatchReason::Name};
+					return &profile;
 				}
 			}
+		}
+		return nullptr;
+	};
+	if (const auto* profile = match_name(title.name); profile != nullptr) {
+		return {.profile = profile, .reason = TitleMatchReason::Name};
+	}
+	for (const auto& localized: title.localized_names) {
+		if (const auto* profile = match_name(localized); profile != nullptr) {
+			return {.profile = profile, .reason = TitleMatchReason::Name};
 		}
 	}
 	return {};
 }
 
 bool NeedsTitleProfileHint(const TitleInfo& title, const TitleMatch& match) {
-	return match.profile == nullptr && match.reason == TitleMatchReason::None &&
-	       NormalizeTitleName(title.name).starts_with("grand theft auto");
+	if (match.profile != nullptr || match.reason != TitleMatchReason::None) {
+		return false;
+	}
+	const auto named_like_gta = [](std::string_view name) {
+		return NormalizeTitleName(name).starts_with("grand theft auto");
+	};
+	if (named_like_gta(title.name)) {
+		return true;
+	}
+	for (const auto& localized: title.localized_names) {
+		if (named_like_gta(localized)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 std::string FormatTitleProfileLine(const TitleInfo& title, const TitleProfile* profile,
