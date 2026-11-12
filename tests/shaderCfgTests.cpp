@@ -13563,17 +13563,20 @@ void TestFlatLoadShortD16HiAddressFields() {
             global_pair.src1.reg == 10,
         "GLOBAL D16 high-half load with SADDR off must use the VGPR pair");
 
-  // DLC is only a cache hint and stays visible; LDS, GLC and SLC on a load and the reserved
-  // segment are not implemented and must keep failing loudly.
+  // DLC is only a cache hint and stays visible; GLC (a coherent load) and SLC (a streaming hint)
+  // decode too (gta6-prep: shader-mem). LDS and the reserved segment are not implemented and must
+  // keep failing loudly.
   const auto dlc = decode(SegGlobal, 4, 2, DlcBit);
   Check(dlc.opcode == Decoder::Opcode::FLAT_LOAD_SHORT_D16_HI && dlc.dlc && !dlc.glc && !dlc.slc,
         "GLOBAL D16 high-half load lost its DLC hint");
   Check(decode(SegGlobal, 0, 2, LdsBit).opcode == Decoder::Opcode::UNSUPPORTED,
         "FLAT-family D16 high-half load accepted LDS=1");
-  Check(decode(SegGlobal, 0, 2, GlcBit).opcode == Decoder::Opcode::UNSUPPORTED,
-        "FLAT-family D16 high-half load accepted GLC=1");
-  Check(decode(SegGlobal, 0, 2, SlcBit).opcode == Decoder::Opcode::UNSUPPORTED,
-        "FLAT-family D16 high-half load accepted SLC=1 on a load");
+  const auto glc = decode(SegGlobal, 0, 2, GlcBit);
+  Check(glc.opcode == Decoder::Opcode::FLAT_LOAD_SHORT_D16_HI && glc.glc && !glc.slc,
+        "FLAT-family D16 high-half load lost GLC=1");
+  const auto slc = decode(SegGlobal, 0, 2, SlcBit);
+  Check(slc.opcode == Decoder::Opcode::FLAT_LOAD_SHORT_D16_HI && slc.slc && !slc.glc,
+        "FLAT-family D16 high-half load lost SLC=1 on a load");
   Check(decode(SegReserved, 0, 2).opcode == Decoder::Opcode::UNSUPPORTED,
         "FLAT-family D16 high-half load accepted the reserved segment");
 }

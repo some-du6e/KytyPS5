@@ -444,7 +444,46 @@ TestCase ShaderMemImageAtomicFCmpSwap() {
   return ShaderMemSingleThread(std::move(test));
 }
 
+// GLOBAL byte D16 loads write one half of VDST (zero- or sign-extended byte) and keep the other;
+// a GLC+SLC load returns the DWORD. Guest memory is the output buffer through a BDA mapping.
+TestCase ShaderMemGlobalByteD16Loads() {
+  using O = ShaderOpcode;
+  constexpr uint64_t GuestBase = 0x0000000110000000ull;
+  constexpr u32 Marker = 0xa5a5c3c3u;
+  constexpr u32 Data = 0x80ff7f01u; // bytes 01 7f ff 80
+  TestCase test;
+  test.name = "ShaderMemGlobalByteD16Loads";
+  auto &code = test.code;
+  test.initial = {Data};
+  test.expected = {Data};
+  AppendVMovLiteral(&code, 0, static_cast<u32>(GuestBase));
+  AppendVMovLiteral(&code, 1, static_cast<u32>(GuestBase >> 32u));
+  const auto load = [&](std::array<u32, 2> words, u32 expected) {
+    AppendVMovLiteral(&code, 3, Marker);
+    code.insert(code.end(), words.begin(), words.end());
+    AppendStoreVgpr(&code, 3, static_cast<u32>(test.expected.size()));
+    test.expected.push_back(expected);
+  };
+  load({0xdc808001u, 0x037d0000u}, (Marker & 0xffff0000u) | 0x007fu); // ubyte_d16 offset:1
+  load({0xdc848003u, 0x037d0000u}, (Marker & 0xffffu) | (0x0080u << 16u)); // ubyte_d16_hi :3
+  load({0xdc888003u, 0x037d0000u}, (Marker & 0xffff0000u) | 0xff80u); // sbyte_d16 offset:3
+  load({0xdc8c8002u, 0x037d0000u}, (Marker & 0xffffu) | (0xffffu << 16u)); // sbyte_d16_hi :2
+  load({0xdc338000u, 0x037d0000u}, Data); // global_load_dword glc slc
+  AppendEnd(&code);
+  test.bda_mappings = {{GuestBase, 0}};
+  test.opcodes = {O::V_MOV_B32,
+                  O::FLAT_LOAD_UBYTE_D16,
+                  O::FLAT_LOAD_UBYTE_D16_HI,
+                  O::FLAT_LOAD_SBYTE_D16,
+                  O::FLAT_LOAD_SBYTE_D16_HI,
+                  O::FLAT_LOAD_DWORD,
+                  O::BUFFER_STORE_DWORD,
+                  O::S_ENDPGM};
+  return ShaderMemSingleThread(std::move(test));
+}
+
 void AppendShaderMemCases(std::vector<TestCase> &cases) {
+  cases.push_back(ShaderMemGlobalByteD16Loads());
   cases.push_back(ShaderMemBufferAtomicsWrap());
   for (const auto &atomic : ShaderMemImageAtomicCases) {
     cases.push_back(ImageAtomicIntegerGlcAndExec(atomic, false));

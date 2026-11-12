@@ -184,7 +184,9 @@ Decoder::Operand MemorySourceAt(const Decoder::Instruction& decoded, uint32_t in
 		                   decoded.opcode == Decoder::Opcode::FLAT_STORE_DWORD ||
 		                   decoded.opcode == Decoder::Opcode::FLAT_STORE_DWORDX2 ||
 		                   decoded.opcode == Decoder::Opcode::FLAT_STORE_DWORDX3 ||
-		                   decoded.opcode == Decoder::Opcode::FLAT_STORE_DWORDX4;
+		                   decoded.opcode == Decoder::Opcode::FLAT_STORE_DWORDX4 ||
+		                   decoded.opcode == Decoder::Opcode::FLAT_STORE_BYTE_D16_HI ||
+		                   decoded.opcode == Decoder::Opcode::FLAT_STORE_SHORT_D16_HI;
 		if (store) {
 			return index == 0u ? decoded.dst : SourceAt(decoded, index - 1u);
 		}
@@ -1314,14 +1316,21 @@ void Translator::EmitMemory(const Decoder::Instruction& inst) {
 		case Decoder::Opcode::FLAT_LOAD_DWORD:
 		case Decoder::Opcode::FLAT_LOAD_DWORDX2:
 		case Decoder::Opcode::FLAT_LOAD_DWORDX3:
-		case Decoder::Opcode::FLAT_LOAD_DWORDX4: return FLAT_LOAD(inst);
+		case Decoder::Opcode::FLAT_LOAD_DWORDX4:
+		// gta6-prep: shader-mem
+		case Decoder::Opcode::FLAT_LOAD_UBYTE_D16:
+		case Decoder::Opcode::FLAT_LOAD_UBYTE_D16_HI:
+		case Decoder::Opcode::FLAT_LOAD_SBYTE_D16:
+		case Decoder::Opcode::FLAT_LOAD_SBYTE_D16_HI: return FLAT_LOAD(inst);
 
 		case Decoder::Opcode::FLAT_STORE_BYTE:
 		case Decoder::Opcode::FLAT_STORE_SHORT:
 		case Decoder::Opcode::FLAT_STORE_DWORD:
 		case Decoder::Opcode::FLAT_STORE_DWORDX2:
 		case Decoder::Opcode::FLAT_STORE_DWORDX3:
-		case Decoder::Opcode::FLAT_STORE_DWORDX4: return FLAT_STORE(inst);
+		case Decoder::Opcode::FLAT_STORE_DWORDX4:
+		case Decoder::Opcode::FLAT_STORE_BYTE_D16_HI:
+		case Decoder::Opcode::FLAT_STORE_SHORT_D16_HI: return FLAT_STORE(inst);
 
 		case Decoder::Opcode::IMAGE_GET_RESINFO: return IMAGE_GET_RESINFO(inst);
 		case Decoder::Opcode::IMAGE_GET_LOD: return IMAGE_GET_LOD(inst);

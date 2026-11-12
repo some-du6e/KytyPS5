@@ -174,7 +174,88 @@ void TestShaderMemIncDecAtomics() {
   Check(decoded.opcode == O::UNSUPPORTED, "IMAGE_ATOMIC_INC dmask 0x3 must stay unsupported");
 }
 
+// FLAT/GLOBAL: GLC and SLC are accepted on loads and stores; byte D16 loads fill one half of the
+// destination and the D16_HI stores take the high byte or short of DATA.
+void TestShaderMemFlatModifiersAndD16() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  namespace Decoder = ShaderRecompiler::Decoder;
+  const ShaderMemDecodeCase cases[] = {
+      {"global_load_dword v3, v[0:1], off glc", {0xdc318000u, 0x037d0000u}, O::FLAT_LOAD_DWORD, 2,
+       3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_dword v3, v1, s[2:3] offset:16 slc", {0xdc328010u, 0x03020001u},
+       O::FLAT_LOAD_DWORD, 2, 3, 1, -1, -1, 16, 1, nullptr, nullptr, false},
+      {"global_load_dwordx2 v[4:5], v[0:1], off glc slc dlc", {0xdc379000u, 0x047d0000u},
+       O::FLAT_LOAD_DWORDX2, 2, 4, 0, 1, -1, 0, 2, nullptr, nullptr, false},
+      {"flat_load_dword v3, v[0:1] glc", {0xdc310000u, 0x037d0000u}, O::FLAT_LOAD_DWORD, 2, 3, 0,
+       1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_ubyte_d16 v3, v[0:1], off", {0xdc808000u, 0x037d0000u},
+       O::FLAT_LOAD_UBYTE_D16, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_ubyte_d16_hi v3, v[0:1], off", {0xdc848000u, 0x037d0000u},
+       O::FLAT_LOAD_UBYTE_D16_HI, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_sbyte_d16 v3, v[0:1], off", {0xdc888000u, 0x037d0000u},
+       O::FLAT_LOAD_SBYTE_D16, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_sbyte_d16_hi v3, v[0:1], off offset:-4", {0xdc8c8ffcu, 0x037d0000u},
+       O::FLAT_LOAD_SBYTE_D16_HI, 2, 3, 0, 1, -1, 0xfffffffcu, 1, nullptr, nullptr, false},
+      {"global_store_byte_d16_hi v[0:1], v3, off", {0xdc648000u, 0x007d0300u},
+       O::FLAT_STORE_BYTE_D16_HI, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_store_short_d16_hi v[0:1], v3, off glc", {0xdc6d8000u, 0x007d0300u},
+       O::FLAT_STORE_SHORT_D16_HI, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_store_dword v[0:1], v3, off glc", {0xdc718000u, 0x007d0300u},
+       O::FLAT_STORE_DWORD, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+  };
+  for (const auto &test : cases) CheckShaderMemDecodeCase(test);
+
+  struct Half {
+    std::array<uint32_t, 2> words;
+    uint32_t sdwa_sel;
+    bool glc, slc, data_signed;
+  };
+  const Half halves[] = {
+      {{0xdc318000u, 0x037d0000u}, 6u, true, false, false},  // glc load
+      {{0xdc328010u, 0x03020001u}, 6u, false, true, false},  // slc load
+      {{0xdc808000u, 0x037d0000u}, 4u, false, false, false}, // ubyte_d16: low half
+      {{0xdc848000u, 0x037d0000u}, 5u, false, false, false}, // ubyte_d16_hi: high half
+      {{0xdc888000u, 0x037d0000u}, 4u, false, false, true},  // sbyte_d16
+      {{0xdc8c8ffcu, 0x037d0000u}, 5u, false, false, true},  // sbyte_d16_hi
+      {{0xdc648000u, 0x007d0300u}, 2u, false, false, false}, // store_byte_d16_hi: DATA byte 2
+      {{0xdc6d8000u, 0x007d0300u}, 5u, true, false, false},  // store_short_d16_hi: DATA word 1
+  };
+  for (const auto &half : halves) {
+    Decoder::Instruction decoded;
+    Decoder::DecodeInstruction(half.words, 0u, decoded);
+    Check(decoded.dst.sdwa_sel == half.sdwa_sel && decoded.glc == half.glc &&
+              decoded.slc == half.slc && decoded.data_signed == half.data_signed &&
+              decoded.dst.sdwa_dst_unused == 2u,
+          "FLAT GLC/SLC or D16 half selection decoded incorrectly");
+  }
+
+  // The byte D16 high-half load becomes an 8-bit address load merged into the old register.
+  // global_load_sbyte_d16_hi v16, v18, s[0:1] offset:196; buffer_store_dword v16.
+  const uint32_t shader[] = {
+      0xdc8c80c4u, 0x10000012u, EncodeMubuf0(0x1c, 0, false), EncodeMubuf1(16, 12, 0),
+      EncodeSopp(0x01),
+  };
+  auto options = MakeCompileOptions(ShaderType::Compute);
+  options.dump_ir = true;
+  const auto result = RecompileForTest(shader, options);
+  Check(result.decoded_dump.find("FLAT_LOAD_SBYTE_D16_HI") != std::string::npos &&
+            result.ir_dump.find("LoadAddressU8") != std::string::npos &&
+            result.ir_dump.find("BitFieldInsert") != std::string::npos,
+        "GLOBAL_LOAD_SBYTE_D16_HI did not become a byte load merged into the high half");
+  CheckSpirvBinaryValidates(result.spirv);
+  const uint32_t glc_shader[] = {
+      0xdc3180c4u, 0x10000012u, EncodeMubuf0(0x1c, 0, false), EncodeMubuf1(16, 12, 0),
+      EncodeSopp(0x01),
+  };
+  const auto glc_result = RecompileForTest(glc_shader, options);
+  Check(glc_result.decoded_dump.find("glc=1") != std::string::npos &&
+            glc_result.ir_dump.find("LoadAddressU32") != std::string::npos,
+        "GLOBAL_LOAD_DWORD GLC did not compile");
+  CheckSpirvBinaryValidates(glc_result.spirv);
+}
+
 void RunShaderMemDecodeTests() {
+  TestShaderMemFlatModifiersAndD16();
   TestShaderMemIncDecAtomics();
   TestShaderMemDsAtomics32();
   TestShaderMemAtomics64();

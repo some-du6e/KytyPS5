@@ -122,6 +122,13 @@ constexpr MemoryOpcodeInfo FLAT_OPCODE_LIST[] = {
     {0x1cu, Opcode::FLAT_STORE_DWORD, 1, 32},    {0x1du, Opcode::FLAT_STORE_DWORDX2, 2, 32},
     {0x1eu, Opcode::FLAT_STORE_DWORDX4, 4, 32},  {0x1fu, Opcode::FLAT_STORE_DWORDX3, 3, 32},
     {0x24u, Opcode::FLAT_LOAD_SHORT_D16, 1, 16}, {0x25u, Opcode::FLAT_LOAD_SHORT_D16_HI, 1, 16},
+    // gta6-prep: shader-mem
+    {0x19u, Opcode::FLAT_STORE_BYTE_D16_HI, 1, 8},
+    {0x1bu, Opcode::FLAT_STORE_SHORT_D16_HI, 1, 16},
+    {0x20u, Opcode::FLAT_LOAD_UBYTE_D16, 1, 8},
+    {0x21u, Opcode::FLAT_LOAD_UBYTE_D16_HI, 1, 8},
+    {0x22u, Opcode::FLAT_LOAD_SBYTE_D16, 1, 8, true},
+    {0x23u, Opcode::FLAT_LOAD_SBYTE_D16_HI, 1, 8, true},
 };
 
 constexpr MemoryOpcodeInfo DS_OPCODE_LIST[] = {
@@ -371,7 +378,9 @@ bool IsFlatStoreOpcode(Opcode opcode) {
 		case Opcode::FLAT_STORE_DWORD:
 		case Opcode::FLAT_STORE_DWORDX2:
 		case Opcode::FLAT_STORE_DWORDX3:
-		case Opcode::FLAT_STORE_DWORDX4: return true;
+		case Opcode::FLAT_STORE_DWORDX4:
+		case Opcode::FLAT_STORE_BYTE_D16_HI:
+		case Opcode::FLAT_STORE_SHORT_D16_HI: return true;
 		default: return false;
 	}
 }
@@ -529,7 +538,9 @@ void DecodeFlat(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 	ApplyMemoryInfo(inst, info);
 	SetRawWords(inst, code, word_index, 2);
 
-	if (lds != 0 || inst.glc || (inst.slc && !IsFlatStoreOpcode(inst.opcode)) || seg == 3u) {
+	// gta6-prep: shader-mem: GLC (coherent, see MemoryInfoFromDecoded) and SLC (a streaming
+	// cache hint) are valid on loads and stores alike.
+	if (lds != 0 || seg == 3u) {
 		SetUnsupported(inst, Family::FLAT, opcode, "FLAT modifiers or segment are not implemented");
 		return;
 	}
@@ -543,6 +554,17 @@ void DecodeFlat(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 	    inst.opcode == Opcode::FLAT_LOAD_SHORT_D16_HI) {
 		// D16 loads reuse partial destinations to preserve the untouched half.
 		inst.dst.sdwa_sel = inst.opcode == Opcode::FLAT_LOAD_SHORT_D16_HI ? 5u : 4u;
+	}
+	switch (inst.opcode) {
+		// gta6-prep: shader-mem: byte D16 loads fill one half (zero- or sign-extended to 16 bits);
+		// D16_HI stores take the byte or short from the high half of DATA, as MUBUF does.
+		case Opcode::FLAT_LOAD_UBYTE_D16:
+		case Opcode::FLAT_LOAD_SBYTE_D16: inst.dst.sdwa_sel = 4u; break;
+		case Opcode::FLAT_LOAD_UBYTE_D16_HI:
+		case Opcode::FLAT_LOAD_SBYTE_D16_HI:
+		case Opcode::FLAT_STORE_SHORT_D16_HI: inst.dst.sdwa_sel = 5u; break;
+		case Opcode::FLAT_STORE_BYTE_D16_HI: inst.dst.sdwa_sel = 2u; break;
+		default: break;
 	}
 	DecodeVectorGpr(addr, inst.src0);
 	inst.src_count = 1;
