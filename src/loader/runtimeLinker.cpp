@@ -25,7 +25,9 @@
 #include "loader/elf.h"
 #include "loader/gamePatch.h"
 #include "loader/guestInstructionPatcher.h"
+#include "loader/importDiagnostics.h"
 #include "loader/jit.h"
+#include "loader/nid.h"
 #include "loader/symbolDatabase.h"
 #include "loader/x64InstructionEmulator.h"
 
@@ -38,8 +40,11 @@
 #include <cstring>
 #include <fmt/format.h>
 #include <magic_enum.hpp>
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
@@ -113,32 +118,57 @@ struct RelocationInfo {
 	bool        bind_self = false;
 };
 
+// A GOT slot of an unresolved Func/NoType import, patched to a thunk of its own that calls
+// UnresolvedImportStub with the record's address. Records live until Clear(), so the stub reads
+// them without a lock while other threads load modules.
 struct StubbedImportRecord {
-	uint32_t    index       = 0;
-	uint64_t    patch_vaddr = 0;
-	uint64_t    thunk_vaddr = 0;
-	std::string name;
-	SymbolType  type = SymbolType::Unknown;
-	BindType    bind = BindType::Unknown;
-	std::string program;
+	uint32_t             index = 0;
+	std::atomic_uint64_t patch_vaddr {0};
+	uint64_t             thunk_vaddr = 0;
+	std::string          name;
+	SymbolType           type = SymbolType::Unknown;
+	BindType             bind = BindType::Unknown;
+	std::string          program;
+	std::string          program_file;
+	std::string          library;
+	// What the stub returns (see ImportDiagnostics::GetUnresolvedReturn).
+	ImportDiagnostics::UnresolvedReturn ret;
+	std::atomic_bool                    first_call_logged {false};
 };
 
-static std::vector<StubbedImportRecord> g_stubbed_imports;
+// A GOT slot of an unresolved Object import, patched to the no-access page.
+struct UnresolvedObjectRecord {
+	std::string name;
+	std::string program_file;
+	std::string library;
+};
+
+static std::vector<std::unique_ptr<StubbedImportRecord>> g_stubbed_imports;
+static std::unordered_map<uint64_t, StubbedImportRecord*> g_stubbed_imports_by_slot;
+static std::unordered_map<uint64_t, UnresolvedObjectRecord> g_unresolved_objects_by_slot;
 static std::atomic_uint32_t             g_unresolved_stub_call_log_count {0};
 static std::vector<uint64_t>            g_unresolved_stub_thunk_pages;
 static uint64_t                         g_unresolved_stub_thunk_offset = 0;
+// Imports already reported by a "PS5 NID fallback: ... (type)" line; under RuntimeLinker::m_mutex.
+static std::set<std::string>            g_notype_fallback_logged;
 static constexpr uint64_t               UNRESOLVED_STUB_PAGE_SIZE      = 4096;
 
-static KYTY_SYSV_ABI uint64_t UnresolvedImportStub(uint64_t record_id);
+static KYTY_SYSV_ABI uint64_t UnresolvedImportStub(uint64_t record_ptr);
 
 static bool PatchGuestMemory64(uint64_t vaddr, uint64_t value) {
 	auto* ptr     = reinterpret_cast<uint64_t*>(vaddr);
 	bool  changed = (*ptr != value);
-	std::memcpy(ptr, &value, sizeof(value));
+	if ((vaddr & (alignof(uint64_t) - 1)) == 0) {
+		// A GOT slot can be re-bound while other threads call through it (sceKernelLoadStartModule
+		// relocates every program): one aligned 8-byte store, so they see the old or the new target.
+		std::atomic_ref<uint64_t>(*ptr).store(value, std::memory_order_release);
+	} else {
+		std::memcpy(ptr, &value, sizeof(value));
+	}
 	return changed;
 }
 
-static uint64_t AllocateUnresolvedImportThunk(uint64_t record_id) {
+static uint64_t AllocateUnresolvedImportThunk(uint64_t record_ptr) {
 	constexpr uint64_t thunk_size = 34;
 
 	if (g_unresolved_stub_thunk_pages.empty() ||
@@ -157,7 +187,7 @@ static uint64_t AllocateUnresolvedImportThunk(uint64_t record_id) {
 
 	uint8_t bytes[thunk_size] = {
 	    0x48, 0x83, 0xec, 0x08,               // sub rsp, 8
-	    0x48, 0xbf, 0, 0, 0, 0, 0, 0, 0, 0, // mov rdi, record_id
+	    0x48, 0xbf, 0, 0, 0, 0, 0, 0, 0, 0, // mov rdi, record_ptr
 	    0x48, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, // mov rax, UnresolvedImportStub
 	    0xff, 0xd0,                           // call rax
 	    0x48, 0x83, 0xc4, 0x08,               // add rsp, 8
@@ -165,7 +195,7 @@ static uint64_t AllocateUnresolvedImportThunk(uint64_t record_id) {
 	    0xc3,                                 // ret
 	};
 	const auto target = reinterpret_cast<uint64_t>(UnresolvedImportStub);
-	std::memcpy(bytes + 6, &record_id, sizeof(record_id));
+	std::memcpy(bytes + 6, &record_ptr, sizeof(record_ptr));
 	std::memcpy(bytes + 16, &target, sizeof(target));
 	std::memcpy(code, bytes, sizeof(bytes));
 	Common::VirtualMemory::FlushInstructionCache(reinterpret_cast<uint64_t>(code), thunk_size);
@@ -174,45 +204,99 @@ static uint64_t AllocateUnresolvedImportThunk(uint64_t record_id) {
 
 static uint64_t RegisterStubbedImport(uint32_t index, const Program* program,
                                       const RelocationInfo& ri) {
-	for (const auto& record: g_stubbed_imports) {
-		if (record.patch_vaddr == ri.vaddr) {
-			return record.thunk_vaddr;
-		}
+	if (auto it = g_stubbed_imports_by_slot.find(ri.vaddr); it != g_stubbed_imports_by_slot.end()) {
+		it->second->patch_vaddr.store(ri.vaddr, std::memory_order_relaxed);
+		return it->second->thunk_vaddr;
 	}
 
-	StubbedImportRecord record {};
-	record.index       = index;
-	record.patch_vaddr = ri.vaddr;
-	record.name        = ri.name;
-	record.type        = ri.type;
-	record.bind        = ri.bind;
-	record.program     = Common::PathToString(program->file_name);
-	g_stubbed_imports.push_back(record);
-	const auto record_id                     = g_stubbed_imports.size() - 1;
-	const auto thunk                         = AllocateUnresolvedImportThunk(record_id);
-	g_stubbed_imports[record_id].thunk_vaddr = thunk;
+	auto record = std::make_unique<StubbedImportRecord>();
+	record->index = index;
+	record->patch_vaddr.store(ri.vaddr, std::memory_order_relaxed);
+	record->name         = ri.name;
+	record->type         = ri.type;
+	record->bind         = ri.bind;
+	record->program      = Common::PathToString(program->file_name);
+	record->program_file = Common::PathToString(program->file_name.filename());
+	record->library      = std::string(ImportDiagnostics::LibraryFromGeneratedName(ri.name));
+	// Opt-in: the stub cannot tell what the function returns, and a pointer or bool result that
+	// was 0 would become a non-zero error code. With PSN emulation the Np functions Kyty implements
+	// act signed in, so an offline error from the missing ones would contradict them.
+	if (Config::UnresolvedOfflineReturnsEnabled() && !Config::PsnEmulationEnabled()) {
+		record->ret = ImportDiagnostics::GetUnresolvedReturn(record->library);
+	}
+	record->thunk_vaddr  = AllocateUnresolvedImportThunk(reinterpret_cast<uint64_t>(record.get()));
+	const auto thunk     = record->thunk_vaddr;
+	g_stubbed_imports_by_slot[ri.vaddr] = record.get();
+	g_stubbed_imports.push_back(std::move(record));
 	return thunk;
 }
 
-static KYTY_SYSV_ABI uint64_t UnresolvedImportStub(uint64_t record_id) {
-	Common::DebugCounters::Add(Common::DebugCounters::Counter::UnresolvedImportCalls);
-	const auto log_index = g_unresolved_stub_call_log_count.fetch_add(1);
-	if (log_index < 1024) {
-		if (record_id < g_stubbed_imports.size()) {
-			const auto& record = g_stubbed_imports[record_id];
-			printf("Unresolved import stub called: %s\n", record.name.c_str());
-			LOGF("Unresolved import stub called [%u]: patch_vaddr=0x%016" PRIx64
-			     " jmprela_index=%" PRIu32 " symbol=%s type=%s bind=%s program=%s\n",
-			     log_index, record.patch_vaddr, record.index, record.name.c_str(),
-			     magic_enum::enum_name(record.type), magic_enum::enum_name(record.bind),
-			     record.program.c_str());
-		} else {
-			printf("Unresolved import stub called: <bad-record>\n");
-			LOGF("Unresolved import stub called [%u]: record_id=%" PRIu64 " symbol=<bad-record>\n",
-			     log_index, record_id);
+static void RegisterUnresolvedObject(const Program* program, const RelocationInfo& ri,
+                                     uint64_t page) {
+	if (g_unresolved_objects_by_slot.contains(ri.vaddr)) {
+		return;
+	}
+	UnresolvedObjectRecord record {};
+	record.name         = ri.name;
+	record.program_file = Common::PathToString(program->file_name.filename());
+	record.library      = std::string(ImportDiagnostics::LibraryFromGeneratedName(ri.name));
+	Log::WriteToConsoleAndLog(
+	    ImportDiagnostics::FormatObjectImport(record.name, record.program_file, page));
+	if (const auto* symbol = Nid::FindNameForImport(record.name); symbol != nullptr) {
+		Log::WriteToConsoleAndLog(ImportDiagnostics::FormatKnownName(record.name, *symbol));
+	}
+	g_unresolved_objects_by_slot.emplace(ri.vaddr, std::move(record));
+}
+
+// The imports whose GOT slot still holds the stub thunk or the invalid page, once per generated
+// name: "Unresolved imports: <F> functions, <O> objects; by library: ...".
+static std::string UnresolvedImportSummary(uint64_t invalid_page) {
+	std::set<std::string>           functions;
+	std::set<std::string>           objects;
+	std::map<std::string, uint32_t> by_library;
+	for (const auto& record: g_stubbed_imports) {
+		const auto slot = record->patch_vaddr.load(std::memory_order_relaxed);
+		if (slot != 0 && *reinterpret_cast<const uint64_t*>(slot) == record->thunk_vaddr &&
+		    functions.insert(record->name).second) {
+			by_library[record->library]++;
 		}
 	}
-	return 0;
+	for (const auto& [slot, record]: g_unresolved_objects_by_slot) {
+		if (*reinterpret_cast<const uint64_t*>(slot) == invalid_page &&
+		    objects.insert(record.name).second) {
+			by_library[record.library]++;
+		}
+	}
+	return ImportDiagnostics::FormatSummary(static_cast<uint32_t>(functions.size()),
+	                                        static_cast<uint32_t>(objects.size()),
+	                                        {by_library.begin(), by_library.end()});
+}
+
+static KYTY_SYSV_ABI uint64_t UnresolvedImportStub(uint64_t record_ptr) {
+	Common::DebugCounters::Add(Common::DebugCounters::Counter::UnresolvedImportCalls);
+	auto&       record = *reinterpret_cast<StubbedImportRecord*>(record_ptr);
+	const auto& ret    = record.ret;
+
+	if (!record.first_call_logged.exchange(true, std::memory_order_relaxed)) {
+		// Every NID once, whatever the process-wide cap below has used up.
+		Log::WriteToConsoleAndLog(
+		    ImportDiagnostics::FormatFirstCall(record.name, record.program_file, ret));
+		if (const auto* symbol = Nid::FindNameForImport(record.name); symbol != nullptr) {
+			Log::WriteToConsoleAndLog(ImportDiagnostics::FormatKnownName(record.name, *symbol));
+		}
+		if (Config::StrictImportsEnabled()) {
+			EXIT("Unresolved import called: %s from %s\n", record.name.c_str(),
+			     record.program_file.c_str());
+		}
+	} else if (const auto log_index = g_unresolved_stub_call_log_count.fetch_add(1);
+	           log_index < 1024) {
+		LOGF("Unresolved import stub called [%u]: patch_vaddr=0x%016" PRIx64
+		     " jmprela_index=%" PRIu32 " symbol=%s type=%s bind=%s program=%s\n",
+		     log_index, record.patch_vaddr.load(std::memory_order_relaxed), record.index,
+		     record.name.c_str(), magic_enum::enum_name(record.type),
+		     magic_enum::enum_name(record.bind), record.program.c_str());
+	}
+	return ImportDiagnostics::StubReturnRegister(ret.value);
 }
 
 constexpr uint64_t SYSTEM_RESERVED  = 0x800000000u;
@@ -988,12 +1072,35 @@ static RelocationInfo GetRelocationInfo(Elf64_Rela* r, Program* program) {
 	return ret;
 }
 
+// The stub record of a GOT slot that currently holds the stub thunk or the invalid page.
+static const std::string* StubbedSlotName(uint64_t slot) {
+	if (auto it = g_stubbed_imports_by_slot.find(slot); it != g_stubbed_imports_by_slot.end()) {
+		return &it->second->name;
+	}
+	if (auto it = g_unresolved_objects_by_slot.find(slot); it != g_unresolved_objects_by_slot.end()) {
+		return &it->second.name;
+	}
+	return nullptr;
+}
+
 static bool RelocateRecord(uint32_t index, Elf64_Rela* r, Program* program, bool jmprela_table) {
 	KYTY_PROFILER_FUNCTION();
+
+	// Unresolved slots are retried on every RelocateAll (their rela bit stays clear), which is what
+	// re-binds them once a module loaded later exports the symbol. --no-rebind-imports keeps them.
+	const auto* stubbed_name = StubbedSlotName(program->base_vaddr + r->r_offset);
+	if (stubbed_name != nullptr && !Config::RebindImportsEnabled()) {
+		return false;
+	}
 
 	const auto ri      = GetRelocationInfo(r, program);
 	auto       value   = ri.value;
 	bool       stubbed = false;
+	if (ri.resolved && stubbed_name != nullptr &&
+	    *reinterpret_cast<const uint64_t*>(ri.vaddr) != value) {
+		Log::WriteToConsoleAndLog(ImportDiagnostics::FormatRebind(
+		    *stubbed_name, ri.name, Common::PathToString(program->file_name.filename())));
+	}
 	if (!ri.resolved) {
 		const bool weak = ri.bind == BindType::Weak || !program->fail_if_global_not_resolved;
 		if (!weak) {
@@ -1004,6 +1111,7 @@ static bool RelocateRecord(uint32_t index, Elf64_Rela* r, Program* program, bool
 		}
 		if (ri.type == SymbolType::Object) {
 			value = g_invalid_memory;
+			RegisterUnresolvedObject(program, ri, value);
 		} else {
 			value   = RegisterStubbedImport(index, program, ri);
 			stubbed = true;
@@ -1271,8 +1379,20 @@ void RuntimeLinker::UnloadProgram(Program* program) {
 				default: return;
 			}
 			const std::string name = info.str_table + symbol.st_name;
-			if (program->export_symbols->FindByNid(name.substr(0, name.find('#')), symbol_type,
-			                                       address) != nullptr) {
+			const auto        nid  = name.substr(0, name.find('#'));
+			// A NoType import may have been bound to a Func or Object export (the fallback in
+			// ResolveImport), so look the export up under those types too.
+			bool bound_here =
+			    program->export_symbols->FindByNid(nid, symbol_type, address) != nullptr;
+			if (!bound_here && symbol_type == SymbolType::NoType) {
+				for (const auto as: {SymbolType::Func, SymbolType::Object}) {
+					if (program->export_symbols->FindByNid(nid, as, address) != nullptr) {
+						bound_here = true;
+						break;
+					}
+				}
+			}
+			if (bound_here) {
 				bits &= ~mask;
 				if (RelocateRecord(index, r, importer, jmprela)) {
 					bits |= mask;
@@ -1384,6 +1504,10 @@ void RuntimeLinker::Execute(const std::filesystem::path& game_patch) {
 	const auto libc_path = Libs::LibKernel::FileSystem::GetRealFilename("/app0/sce_module/libc.prx");
 	auto* libc = Common::File::IsFileExisting(libc_path) ? LoadProgram(libc_path) : nullptr;
 	RelocateAll();
+	{
+		Common::LockGuard lock(m_mutex);
+		Log::WriteToConsoleAndLog(UnresolvedImportSummary(g_invalid_memory));
+	}
 
 	if (!game_patch.empty()) {
 		if (!GamePatch::Apply(game_patch, m_programs.empty() ? nullptr : m_programs.front(),
@@ -1448,7 +1572,10 @@ void RuntimeLinker::Clear() {
 	}
 	g_unresolved_stub_thunk_pages.clear();
 	g_unresolved_stub_thunk_offset = 0;
+	g_stubbed_imports_by_slot.clear();
 	g_stubbed_imports.clear();
+	g_unresolved_objects_by_slot.clear();
+	g_notype_fallback_logged.clear();
 	g_unresolved_stub_call_log_count.store(0);
 	if (g_invalid_memory != 0) {
 		EXIT_IF(!Libs::LibKernel::Memory::FreeGuestMemory(g_invalid_memory, 4096));
@@ -1463,6 +1590,13 @@ void RuntimeLinker::Clear() {
 
 void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* program,
                             SymbolRecord* out_info, bool* bind_self) {
+	if (!ResolveImport(name, type, program, out_info, bind_self)) {
+		EXIT("l == nullptr || m == nullptr");
+	}
+}
+
+bool RuntimeLinker::ResolveImport(const std::string& name, SymbolType type, Program* program,
+                                  SymbolRecord* out_info, bool* bind_self) {
 	KYTY_PROFILER_FUNCTION();
 
 	Common::LockGuard lock(m_mutex);
@@ -1479,11 +1613,12 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 		const LibraryId* l = FindLibrary(*program, ids.at(1));
 		const ModuleId*  m = FindModule(*program, ids.at(2));
 
-		auto resolve_by_nid = [this, type](const std::string& nid, SymbolRecord* out) -> bool {
+		auto resolve_by_nid_as = [this](const std::string& nid, SymbolType as,
+		                                SymbolRecord* out) -> bool {
 			EXIT_IF(out == nullptr);
 
 			if (m_symbols != nullptr) {
-				if (const auto* rec = m_symbols->FindByNid(nid, type); rec != nullptr) {
+				if (const auto* rec = m_symbols->FindByNid(nid, as); rec != nullptr) {
 					*out = *rec;
 					return true;
 				}
@@ -1491,13 +1626,35 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 
 			for (auto* p: m_programs) {
 				if (p != nullptr && p->export_symbols != nullptr) {
-					if (const auto* rec = p->export_symbols->FindByNid(nid, type); rec != nullptr) {
+					if (const auto* rec = p->export_symbols->FindByNid(nid, as); rec != nullptr) {
 						*out = *rec;
 						return true;
 					}
 				}
 			}
 
+			return false;
+		};
+		auto resolve_by_nid = [&](const std::string& nid, SymbolRecord* out) -> bool {
+			return resolve_by_nid_as(nid, type, out);
+		};
+		// Every HLE function is registered as Func, so an STT_NOTYPE import of one never matches
+		// by type. Try Func, then Object, like sceKernelDlsym (kernel_find_export_symbol). Logged
+		// once per import name: every relocation against it comes through here.
+		auto resolve_notype_by_nid = [&](const std::string& nid, const std::string& from,
+		                                 SymbolRecord* out) -> bool {
+			if (type != SymbolType::NoType) {
+				return false;
+			}
+			for (const auto as: {SymbolType::Func, SymbolType::Object}) {
+				if (resolve_by_nid_as(nid, as, out)) {
+					if (g_notype_fallback_logged.insert(from).second) {
+						Log::WriteToConsoleAndLog(
+						    fmt::format("PS5 NID fallback: {} -> {} (type)\n", from, out->name));
+					}
+					return true;
+				}
+			}
 			return false;
 		};
 
@@ -1539,7 +1696,13 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 			if (rec == nullptr) {
 				if (resolve_by_nid(sr.name, out_info)) {
 					LOGF("PS5 NID fallback: %s -> %s\n", sr.name.c_str(), out_info->name.c_str());
-					return;
+					return true;
+				}
+				// Opt-in: the import resolved to the stub before, and a partial HLE function can
+				// abort on arguments the stub ignored.
+				if (Config::NoTypeImportFallbackEnabled() &&
+				    resolve_notype_by_nid(sr.name, SymbolDatabase::GenerateName(sr), out_info)) {
+					return true;
 				}
 			}
 
@@ -1554,16 +1717,94 @@ void RuntimeLinker::Resolve(const std::string& name, SymbolType type, Program* p
 			if (resolve_by_nid(ids.at(0), out_info)) {
 				LOGF("PS5 NID fallback: %s -> %s (missing lib/module metadata)\n",
 				     ids.at(0).c_str(), out_info->name.c_str());
-				return;
+				return true;
+			}
+			// Always: without it this import aborts the load (Resolve EXITs on false).
+			if (resolve_notype_by_nid(ids.at(0), ids.at(0), out_info)) {
+				return true;
 			}
 
-			EXIT("l == nullptr || m == nullptr");
+			return false;
 		}
 	} else {
 		out_info->vaddr    = 0;
 		out_info->name     = name;
 		out_info->dbg_name = "";
 	}
+	return true;
+}
+
+std::vector<ImportDiagnostics::ImportReportEntry> RuntimeLinker::CollectImportReport() {
+	Common::LockGuard lock(m_mutex);
+
+	std::vector<ImportDiagnostics::ImportReportEntry> entries;
+	for (auto* program: m_programs) {
+		if (program->dynamic_info == nullptr || program->dynamic_info->symbol_table == nullptr ||
+		    program->dynamic_info->str_table == nullptr) {
+			continue;
+		}
+		const auto& info     = *program->dynamic_info;
+		const auto  importer = Common::PathToString(program->file_name.filename());
+		ForEachRelocation(program, [&](Elf64_Rela* r, uint32_t /*index*/, bool /*jmprela*/) {
+			const auto rela_type = r->GetType();
+			if (rela_type != R_X86_64_64 && rela_type != R_X86_64_GLOB_DAT &&
+			    rela_type != R_X86_64_JUMP_SLOT) {
+				return;
+			}
+			const auto& symbol = info.symbol_table[r->GetSymbol()];
+			if (symbol.GetBind() != STB_GLOBAL && symbol.GetBind() != STB_WEAK) {
+				return;
+			}
+			// A symbol the program defines itself is one of its exports (CreateSymbolDatabase
+			// splits on st_value the same way); a relocation against it is not an import.
+			if (symbol.st_value != 0) {
+				return;
+			}
+			SymbolType type = SymbolType::Unknown;
+			switch (symbol.GetType()) {
+				case STT_NOTYPE: type = SymbolType::NoType; break;
+				case STT_FUNC: type = SymbolType::Func; break;
+				case STT_OBJECT: type = SymbolType::Object; break;
+				default: return;
+			}
+			const std::string raw = info.str_table + symbol.st_name;
+			const auto        ids = Common::Split(raw, '#');
+
+			ImportDiagnostics::ImportReportEntry entry {};
+			entry.importer = importer;
+			entry.nid      = ids.empty() ? raw : ids.at(0);
+			entry.type     = std::string(magic_enum::enum_name(type));
+			if (ids.size() == 3) {
+				const auto* library = FindLibrary(*program, ids.at(1));
+				entry.library = library != nullptr
+				                    ? std::string(ImportDiagnostics::LibraryDisplayName(library->name))
+				                    : std::string();
+			}
+
+			SymbolRecord resolved {};
+			resolved.vaddr = 0;
+			if (ResolveImport(raw, type, program, &resolved, nullptr) && resolved.vaddr != 0) {
+				const auto it = std::find_if(m_programs.begin(), m_programs.end(), [&](auto* p) {
+					return resolved.vaddr >= p->base_vaddr &&
+					       resolved.vaddr < p->base_vaddr + p->mapped_size;
+				});
+				if (it != m_programs.end()) {
+					entry.state  = ImportDiagnostics::ImportState::Lle;
+					entry.target = Common::PathToString((*it)->file_name.filename());
+				} else {
+					entry.state  = ImportDiagnostics::ImportState::Hle;
+					entry.target = resolved.dbg_name.empty() ? resolved.name : resolved.dbg_name;
+				}
+			} else {
+				entry.state = ImportDiagnostics::ImportState::Unresolved;
+				if (const auto* name = Nid::FindNameForImport(raw); name != nullptr) {
+					entry.target = *name;
+				}
+			}
+			entries.push_back(std::move(entry));
+		});
+	}
+	return entries;
 }
 
 uint64_t RuntimeLinker::ReadFromElf(Program* program, uint64_t vaddr) {
@@ -1954,19 +2195,37 @@ void RuntimeLinker::LoadProgramToMemory(Program* program) {
 			program->proc_param_vaddr = phdr[i].p_vaddr + program->base_vaddr;
 		}
 
-		if (patch_guest_instructions && phdr[i].p_type == PT_GNU_EH_FRAME) {
+		if (phdr[i].p_type == PT_GNU_EH_FRAME) {
 			eh_frame_header_addr = phdr[i].p_vaddr + program->base_vaddr;
 			eh_frame_header_size = phdr[i].p_memsz;
 		}
 	}
 
+	std::vector<uintptr_t> function_starts;
+	const bool             have_function_starts =
+	    DecodeEhFrameFunctionStarts(eh_frame_header_addr, eh_frame_header_size, &function_starts) &&
+	    !function_starts.empty();
+	const auto module_name = Common::PathToString(program->file_name.filename());
+
+	// Before the instruction patches, which only rewrite other instructions. Log only.
+	if (have_function_starts) {
+		GuestSyscallScan syscalls {};
+		for (const auto& [segment_addr, segment_size]: executable_segments) {
+			const auto scan = CountGuestSyscallInstructions(segment_addr, segment_size, function_starts);
+			if (scan.count != 0 && (syscalls.count == 0 || scan.first < syscalls.first)) {
+				syscalls.first = scan.first;
+			}
+			syscalls.count += scan.count;
+		}
+		if (syscalls.count != 0) {
+			Log::WriteToConsoleAndLog(fmt::format(
+			    "Guest syscall: {} raw syscall instruction(s) in {} (first at +0x{:x}); raw "
+			    "syscalls are not emulated\n",
+			    syscalls.count, module_name, syscalls.first - program->base_vaddr));
+		}
+	}
+
 	if (patch_guest_instructions) {
-		std::vector<uintptr_t> function_starts;
-		const bool             have_function_starts =
-		    DecodeEhFrameFunctionStarts(eh_frame_header_addr, eh_frame_header_size,
-		                                &function_starts) &&
-		    !function_starts.empty();
-		const auto module_name = Common::PathToString(program->file_name.filename());
 		if (!have_function_starts) {
 			Log::WriteToConsoleAndLog(fmt::format(
 			    "Guest instruction patches: {} not applied (function boundaries unavailable)\n",
@@ -2041,12 +2300,18 @@ void RuntimeLinker::DeleteProgram(Program* p) {
 		g_tls_cached_main_program = nullptr;
 		g_tls_cached_main_tcb     = nullptr;
 	}
+	const auto in_program = [&](uint64_t vaddr) {
+		return vaddr >= program->base_vaddr && vaddr < program->base_vaddr + program->mapped_size;
+	};
 	for (auto& record: g_stubbed_imports) {
-		if (record.patch_vaddr >= program->base_vaddr &&
-		    record.patch_vaddr < program->base_vaddr + program->mapped_size) {
-			record.patch_vaddr = 0;
+		const auto slot = record->patch_vaddr.load(std::memory_order_relaxed);
+		if (slot != 0 && in_program(slot)) {
+			record->patch_vaddr.store(0, std::memory_order_relaxed);
+			g_stubbed_imports_by_slot.erase(slot);
 		}
 	}
+	std::erase_if(g_unresolved_objects_by_slot,
+	              [&](const auto& entry) { return in_program(entry.first); });
 
 	if (program->base_vaddr != 0 || program->mapped_size != 0) {
 		EXIT_IF(program->base_vaddr == 0 || program->mapped_size == 0);

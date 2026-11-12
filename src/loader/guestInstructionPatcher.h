@@ -65,6 +65,18 @@ GuestInstructionPatchResult PatchGuestInstructions(
     GuestInstructionHostFeatures host_features  = GetGuestInstructionHostFeatures(),
     uint64_t                     tsc_multiplier = 0);
 
+struct GuestSyscallScan {
+	uint64_t  count = 0;
+	uintptr_t first = 0; // address of the first SYSCALL found; 0 when count is 0
+};
+
+// Counts the SYSCALL instructions in the functions of [segment_addr, segment_addr + segment_size)
+// that start at `function_starts` (decoded like PatchGuestInstructions, so a 0F 05 inside another
+// instruction does not count). Only reads the code. Kyty emulates no raw syscall: guest code that
+// has one calls the host kernel with a FreeBSD syscall number.
+GuestSyscallScan CountGuestSyscallInstructions(uint64_t segment_addr, uint64_t segment_size,
+                                               std::span<const uintptr_t> function_starts);
+
 bool DecodeEhFrameFunctionStarts(uint64_t eh_frame_header_addr, uint64_t eh_frame_header_size,
                                  std::vector<uintptr_t>* function_starts);
 

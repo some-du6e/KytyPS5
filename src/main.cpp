@@ -227,6 +227,21 @@ static void PrintUsage() {
 	::printf("  --gpu-thread-cpus <list|off|default> Logical processors of the GPU stage threads, e.g.\n");
 	::printf("                                       4,6,8,10,2 (default), or off to leave them unpinned.\n");
 	::printf("                                       The KYTY_GPU_THREAD_CPUS variable overrides it.\n");
+
+	// gta6-prep: hle
+	::printf("\nImports:\n");
+	::printf("  --nid-names <file>                   Symbol names, one per line, to name the NIDs\n"
+	         "                                       of unresolved imports in the log.\n");
+	::printf("  --strict-imports                     Stop at the first call of an unresolved import.\n");
+	::printf("  --unresolved-offline-returns         Unresolved Np/Net/Http/Ssl functions return an\n"
+	         "                                       offline error instead of 0 (not with --emulate-psn).\n");
+	::printf("  --no-rebind-imports                  Keep imports stubbed at boot stubbed when a module\n"
+	         "                                       loaded later exports them.\n");
+	::printf("  --notype-import-fallback             Bind an untyped (NoType) import to a function or\n"
+	         "                                       object export of the same NID.\n");
+	::printf("  --dump-imports <file>                With --game: write which imports of eboot.bin and\n"
+	         "                                       sce_module/*.prx Kyty implements, a PRX exports or\n"
+	         "                                       nothing resolves, then exit. No GPU, no guest code.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -390,6 +405,12 @@ static constexpr Flag FLAGS[] = {
     {"--no-keep-small-layer-targets", &ConfigOptions::keep_small_layer_targets, false},
     {"--tlas-cache", &ConfigOptions::tlas_cache_enabled},
     {"--no-tlas-cache", &ConfigOptions::tlas_cache_enabled, false},
+
+    // gta6-prep: hle
+    {"--strict-imports", &ConfigOptions::strict_imports},
+    {"--unresolved-offline-returns", &ConfigOptions::unresolved_offline_returns},
+    {"--no-rebind-imports", &ConfigOptions::rebind_imports, false},
+    {"--notype-import-fallback", &ConfigOptions::notype_import_fallback},
 };
 
 // gta6-prep: config
@@ -475,6 +496,15 @@ static std::optional<bool> ParseGta6PrepOption(const std::string& arg, const std
 			         value.c_str());
 			return false;
 		}
+		return true;
+	}
+	// gta6-prep: hle
+	if (arg == "--nid-names") {
+		config.nid_names_file = Common::PathFromUtf8(value);
+		return true;
+	}
+	if (arg == "--dump-imports") {
+		config.dump_imports_file = Common::PathFromUtf8(value);
 		return true;
 	}
 	return std::nullopt;
@@ -831,6 +861,11 @@ static int Main(int argc, char* argv[]) {
 	if (show_help) {
 		PrintUsage();
 		return 0;
+	}
+
+	// gta6-prep: hle
+	if (!options.config.dump_imports_file.empty()) {
+		return DumpImports(options);
 	}
 
 	Run(options);

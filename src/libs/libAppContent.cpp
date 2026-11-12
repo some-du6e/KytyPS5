@@ -3,6 +3,7 @@
 #include "common/common.h"
 #include "common/emulatorConfig.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/stringUtils.h"
 #include "kernel/fileSystem.h"
 #include "libs/errno.h"
@@ -120,7 +121,10 @@ int KYTY_SYSV_ABI AppContentAppParamGetInt(uint32_t param_id, int32_t* value) {
 		case 2: found = Loader::SystemContentParamSfoGetInt("USER_DEFINED_PARAM_2", value); break;
 		case 3: found = Loader::SystemContentParamSfoGetInt("USER_DEFINED_PARAM_3", value); break;
 		case 4: found = Loader::SystemContentParamSfoGetInt("USER_DEFINED_PARAM_4", value); break;
-		default: EXIT("unknown param_id: %u\n", param_id);
+		default:
+			KYTY_SOFT_FAIL("sceAppContentAppParamGetInt", "unsupported param_id %u", param_id);
+			*value = 0;
+			return APP_CONTENT_ERROR_PARAMETER;
 	}
 
 	LOGF("\t value    = %d [%s]\n", *value, found ? "found" : "not found");

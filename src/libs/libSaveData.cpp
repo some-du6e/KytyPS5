@@ -4,6 +4,7 @@
 #include "common/emulatorConfig.h"
 #include "common/file.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/stringUtils.h"
 #include "common/threads.h"
 #include "kernel/fileSystem.h"
@@ -725,7 +726,8 @@ int KYTY_SYSV_ABI SaveDataMount3(const SaveDataMount3* mount, SaveDataMountResul
 	}
 
 	if (!create && !create2 && !open) {
-		EXIT("unknown mount mode: %u", mount->mount_mode);
+		KYTY_SOFT_FAIL("sceSaveDataMount3", "unsupported mount mode %u", mount->mount_mode);
+		return SAVE_DATA_ERROR_PARAMETER;
 	}
 
 	const bool exists = Common::File::IsDirectoryExisting(mount_dir);

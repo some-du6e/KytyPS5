@@ -3,6 +3,7 @@
 #include "common/common.h"
 #include "common/emulatorConfig.h"
 #include "common/logging/log.h"
+#include "common/softFail.h"
 #include "common/stringUtils.h"
 #include "emulator.h"
 #include "graphics/presentation/systemOverlay.h"
@@ -148,7 +149,10 @@ static int KYTY_SYSV_ABI SystemServiceParamGetString(int param_id, char* buf, si
 	const char* value = nullptr;
 	switch (param_id) {
 		case PARAM_ID_SYSTEM_NAME: value = "Kyty"; break;
-		default: EXIT("unknown string param_id: %d\n", param_id);
+		default:
+			KYTY_SOFT_FAIL("sceSystemServiceParamGetString", "unsupported param_id %d", param_id);
+			buf[0] = '\0';
+			return SYSTEM_SERVICE_ERROR_PARAMETER;
 	}
 
 	const auto len = std::strlen(value);

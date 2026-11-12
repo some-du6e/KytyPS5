@@ -5736,6 +5736,32 @@ void TestCpuExtensionPatches() {
 	std::printf("[host]    %-48s ok\n", test);
 }
 
+// gta6-prep: hle. The load-time raw syscall scan counts decoded SYSCALL instructions only, not
+// 0F 05 bytes inside other instructions.
+void TestGuestSyscallScan() {
+	const char* test = "GuestSyscallScan";
+	alignas(16) static const uint8_t code[] = {
+	    0xb8, 0x0f, 0x05, 0x00, 0x00,                               // +0  mov eax, 0x50f
+	    0x0f, 0x05,                                                 // +5  syscall
+	    0xc3,                                                       // +7  ret
+	    0x0f, 0x05,                                                 // +8  syscall
+	    0xc3,                                                       // +10 ret
+	    0x48, 0xb8, 0x0f, 0x05, 0x0f, 0x05, 0x0f, 0x05, 0x0f, 0x05, // +11 mov rax, imm64
+	    0xc3,                                                       // +21 ret
+	};
+	const auto                   base = reinterpret_cast<uintptr_t>(code);
+	const std::vector<uintptr_t> starts {base + 11, base, base + 8, base + 8};
+	const auto scan = Loader::CountGuestSyscallInstructions(base, sizeof(code), starts);
+	Check(test, scan.count == 2, "expected two SYSCALL instructions, got " +
+	                                 std::to_string(scan.count));
+	Check(test, scan.first == base + 5, "first SYSCALL is not the one at +5");
+	const std::vector<uintptr_t> immediate_only {base + 11};
+	const auto none = Loader::CountGuestSyscallInstructions(base + 11, 11, immediate_only);
+	Check(test, none.count == 0 && none.first == 0, "0F 05 inside an immediate counted as SYSCALL");
+	Check(test, Loader::CountGuestSyscallInstructions(base, sizeof(code), {}).count == 0,
+	      "no function starts, nothing decoded");
+}
+
 // With --guest-tsc, guest RDTSC/RDTSCP read the counter sceKernelReadTsc() returns, at the rate
 // sceKernelGetTscFrequency() reports, and leave RFLAGS, the red zone and other registers alone.
 void TestTimeStampCounterPatches() {
@@ -6159,6 +6185,7 @@ int main(int argc, char** argv) {
 	RunTest(TestPackedBitFieldInsert);
 	RunTest(TestCpuExtensionPatches);
 	RunTest(TestTimeStampCounterPatches);
+	RunTest(TestGuestSyscallScan);
 #endif
 	RunTest(TestWindowsGuestRedZoneStaticPatcher);
 	RunTest(TestProsperoArgumentAndInfoSizeContracts);

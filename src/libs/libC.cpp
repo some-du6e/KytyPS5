@@ -3,6 +3,7 @@
 #include "common/common.h"
 #include "common/logging/log.h"
 #include "common/singleton.h"
+#include "common/softFail.h"
 #include "common/stringUtils.h"
 #include "graphics/host_gpu/hostMemory.h"
 #include "kernel/pthread.h"
@@ -574,7 +575,10 @@ struct Info {
 void KYTY_SYSV_ABI LibcHeapGetTraceInfo(Info* info) {
 	PRINT_NAME();
 
-	EXIT_NOT_IMPLEMENTED(info->size != 32);
+	// Newer SDKs may append fields; the two pointers sit at the same offsets.
+	if (!KYTY_ACCEPT_PARAM_SIZE("_sceLibcHeapGetTraceInfo", "info", info->size, sizeof(Info))) {
+		return;
+	}
 
 	info->mspace_atomic_id_mask = &g_mspace_atomic_id_mask;
 	info->mstate_table          = g_mstate_table;

@@ -5,6 +5,7 @@
 #include "common/common.h"
 #include "common/stringUtils.h"
 #include "common/threads.h"
+#include "loader/importDiagnostics.h"
 #include "loader/symbolDatabase.h"
 
 #include <filesystem>
@@ -174,6 +175,10 @@ public:
 	void Resolve(const std::string& name, SymbolType type, Program* program, SymbolRecord* out_info,
 	             bool* bind_self);
 
+	// --dump-imports: resolves every import of the loaded programs, without relocating anything,
+	// and says where each one would bind (HLE, a loaded program's export, or nothing).
+	std::vector<ImportDiagnostics::ImportReportEntry> CollectImportReport();
+
 	SymbolDatabase* Symbols() { return m_symbols.get(); }
 
 	static uint64_t ReadFromElf(Program* program, uint64_t vaddr);
@@ -195,6 +200,11 @@ private:
 	static void Relocate(Program* program);
 	static void DeleteProgram(Program* program);
 	static void SetupTlsHandler(Program* program);
+
+	// Resolve without its EXIT: false when the importer lacks the library/module metadata of the
+	// name and no export matches the NID alone.
+	bool ResolveImport(const std::string& name, SymbolType type, Program* program,
+	                   SymbolRecord* out_info, bool* bind_self);
 
 	static const ModuleId*  FindModule(const Program& program, const std::string& id);
 	static const LibraryId* FindLibrary(const Program& program, const std::string& id);

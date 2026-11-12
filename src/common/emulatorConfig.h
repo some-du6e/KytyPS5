@@ -174,6 +174,24 @@ struct ConfigOptions {
 	// --gpu-thread-cpus <list|off>: the logical processors of the GPU stage threads (82ca24cb);
 	// empty keeps the built-in list.
 	std::string gpu_thread_cpus = {};
+
+	// gta6-prep: hle
+	// --nid-names: symbol names, one per line, hashed to name the NIDs of unresolved imports.
+	std::filesystem::path nid_names_file;
+	// --strict-imports: the first call of an unresolved function import is fatal.
+	bool                  strict_imports             = false;
+	// --unresolved-offline-returns: unresolved Np/Net/Http/Ssl functions return an offline error
+	// instead of 0 (ignored with --emulate-psn). Off: every unresolved function returns 0.
+	bool                  unresolved_offline_returns = false;
+	// --no-rebind-imports: imports stubbed at load stay stubbed when a later module exports them.
+	bool                  rebind_imports             = true;
+	// --dump-imports <file>: write the import report of eboot.bin and sce_module/*.prx and exit,
+	// without a GPU and without running guest code. Empty: normal run.
+	std::filesystem::path dump_imports_file;
+	// --notype-import-fallback: an STT_NOTYPE import with no NoType export of its NID binds to a
+	// Func, then Object, export (HLE or loaded module). Off: it stays on the stub, as upstream.
+	// Imports without lib/module metadata always try it (they used to abort).
+	bool                  notype_import_fallback = false;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -351,6 +369,15 @@ const std::string& GetGpuThreadCpus();
 // otherwise up to five numbers separated by commas replace the first entries. False when an entry
 // is not a number.
 bool ParseGpuThreadCpus(const char* value, std::array<int, 5>& cpus);
+
+// gta6-prep: hle
+// --nid-names <file>; empty: none.
+const std::filesystem::path& GetNidNamesFile();
+bool StrictImportsEnabled();
+bool UnresolvedOfflineReturnsEnabled();
+bool RebindImportsEnabled();
+const std::filesystem::path& GetDumpImportsFile();
+bool NoTypeImportFallbackEnabled();
 
 } // namespace Config
 

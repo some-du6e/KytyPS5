@@ -432,4 +432,31 @@ bool ParseGpuThreadCpus(const char* value, std::array<int, 5>& cpus) {
 	return true;
 }
 
+// gta6-prep: hle
+const std::filesystem::path& GetNidNamesFile() {
+	static const std::filesystem::path none;
+	return g_config != nullptr ? g_config->nid_names_file : none;
+}
+
+bool StrictImportsEnabled() {
+	return g_config != nullptr && g_config->strict_imports;
+}
+
+bool UnresolvedOfflineReturnsEnabled() {
+	return g_config != nullptr && g_config->unresolved_offline_returns;
+}
+
+bool RebindImportsEnabled() {
+	return g_config == nullptr || g_config->rebind_imports;
+}
+
+const std::filesystem::path& GetDumpImportsFile() {
+	static const std::filesystem::path none;
+	return g_config != nullptr ? g_config->dump_imports_file : none;
+}
+
+bool NoTypeImportFallbackEnabled() {
+	return g_config != nullptr && g_config->notype_import_fallback;
+}
+
 } // namespace Config
