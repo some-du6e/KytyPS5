@@ -69,6 +69,8 @@ QVariantMap Configuration::GameSettings() const {
 #if defined(_WIN32)
 	KYTY_CFG_SET(red_zone_protection_enabled);
 #endif
+	// gta6-prep: diag
+	KYTY_CFG_SET(session_log_enabled);
 	KYTY_CFG_SET(elf);
 #undef KYTY_CFG_SET
 	return values;
@@ -139,7 +141,9 @@ void Configuration::ReadGameSettingsValues(const Settings& s) {
 	red_zone_protection_enabled =
 	    s.value("red_zone_protection_enabled", red_zone_protection_enabled).toBool();
 #endif
-	elf = s.value("elf", elf).toString();
+	// gta6-prep: diag
+	session_log_enabled = s.value("session_log_enabled", false).toBool();
+	elf                 = s.value("elf", elf).toString();
 #undef KYTY_CFG_GET
 }
 

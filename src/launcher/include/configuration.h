@@ -156,6 +156,10 @@ public:
 #if defined(_WIN32)
 	bool red_zone_protection_enabled = true;
 #endif
+	// gta6-prep: diag
+	// --session-log <emulator folder>/_Logs/<title>_<date>.log for every launch (see
+	// MainDialog::RunInterpreter). Off: no session log, as before.
+	bool        session_log_enabled = false;
 	QStringList host_input_mapping;
 
 	QString elf = QStringLiteral("eboot.bin");
@@ -209,7 +213,9 @@ public:
 #if defined(_WIN32)
 		red_zone_protection_enabled = other.red_zone_protection_enabled;
 #endif
-		host_input_mapping = other.host_input_mapping;
+		// gta6-prep: diag
+		session_log_enabled = other.session_log_enabled;
+		host_input_mapping  = other.host_input_mapping;
 	}
 
 	void CopyGameInfoFrom(const Configuration& other) {
