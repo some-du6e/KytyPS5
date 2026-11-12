@@ -178,6 +178,10 @@ public:
 
 	static uint64_t ReadFromElf(Program* program, uint64_t vaddr);
 	Program*        FindProgramByAddr(uint64_t vaddr);
+	// FindProgramByAddr for the host fault report, which must not block: the linker lock is held
+	// across guest code (the application heap callbacks, module fini functions). Waits at most
+	// `wait_micros` for the lock; false (and *out null) when it could not be taken.
+	bool TryFindProgramByAddr(uint64_t vaddr, uint32_t wait_micros, Program** out);
 	// The address ranges [begin, end) of the executable segments of the loaded programs.
 	std::vector<std::pair<uint64_t, uint64_t>> GetCodeRanges();
 	Program*        FindProgramById(int32_t id);

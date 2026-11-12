@@ -879,6 +879,10 @@ target_include_directories(gpu_blit_shader_tests PRIVATE ${inc_headers})
 add_executable(diag_tests EXCLUDE_FROM_ALL "${KYTY_TESTS_DIR}/DiagTests.cpp")
 target_link_libraries(diag_tests common fmt::fmt Vulkan::Headers)
 target_include_directories(diag_tests PRIVATE ${inc_headers})
+if(LINUX)
+	# TestMutexTryLock starts a thread.
+	target_link_libraries(diag_tests Threads::Threads)
+endif()
 
 # Common::SoftExitScope turns a fatal error of the current thread into a C++ exception: its
 # thrower and the renderer code that catches it need exceptions where they are off by default.

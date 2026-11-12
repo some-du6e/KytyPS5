@@ -1,6 +1,7 @@
 // Pure checks of the crash-log diagnostics text (gta6-prep log contract): no GPU, no files
 // outside a temporary folder.
 #include "common/logging/log.h"
+#include "common/threads.h"
 #include "graphics/host_gpu/vulkanDiag.h"
 
 #include <chrono>
@@ -13,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 
 namespace {
 
@@ -173,6 +175,30 @@ void TestPruneSessionLogs() {
   fs::remove_all(folder, error);
 }
 
+// The host fault report looks guest modules up with Mutex::TryLock: it must fail, not block,
+// while another thread holds the lock, and succeed for the owner (the mutex is recursive).
+void TestMutexTryLock() {
+  Common::Mutex mutex;
+  const auto try_from_other_thread = [&mutex]() {
+    bool taken = false;
+    std::thread other([&mutex, &taken]() {
+      taken = mutex.TryLock();
+      if (taken) {
+        mutex.Unlock();
+      }
+    });
+    other.join();
+    return taken;
+  };
+  Check(try_from_other_thread(), "TryLock of a free mutex failed");
+  mutex.Lock();
+  Check(!try_from_other_thread(), "TryLock took a mutex another thread holds");
+  Check(mutex.TryLock(), "TryLock by the owner failed (the mutex is recursive)");
+  mutex.Unlock();
+  mutex.Unlock();
+  Check(try_from_other_thread(), "TryLock failed after the owner released the mutex");
+}
+
 } // namespace
 
 int main() {
@@ -182,6 +208,7 @@ int main() {
   TestGpuIdentityLine();
   TestSessionLogFileName();
   TestPruneSessionLogs();
+  TestMutexTryLock();
   std::printf("DiagTests: ok\n");
   return 0;
 }
