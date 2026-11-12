@@ -1,0 +1,60 @@
+# SYNTHETIC fixture (hand-written, not from a real run): one non-fatal line per line rule of
+# rules.json (texts from the survey catalogue). 'expect-line: <rule id>' names the rule that must
+# match the next line; tests/test_rules.py checks it. No fatal report: the outcome is no-fatal.
+Official build KytyPS5-2026-11-19-abcdef1
+expect-line: vuid-mention
+The Vulkan spec states: If a VkImageView is sampled with depth comparison ... (VUID-vkCmdDrawIndexed-None-06479)
+expect-line: vk-device-lost
+vkQueueSubmit failed: ErrorDeviceLost (-4), tick=2093243 debug_op=2 debug_submit=121095 args=1792,3,0,1,0x0000000000000000
+expect-line: vk-out-of-memory
+vkAllocateMemory failed: ErrorOutOfDeviceMemory (-2)
+expect-line: vk-other-failure
+vkCreateSwapchainKHR failed: ErrorSurfaceLostKHR (-1000000000)
+expect-line: device-fault-detail
+Device fault reports: 1
+expect-line: vram-spill
+VRAM spill: buffers allocated outside device-local memory: count=4 bytes=128 MiB (first: GameBuffer 0x0000001000000000 size 32 MiB)
+expect-line: vram-pressure
+VRAM pressure: emergency eviction freed 256 MiB after allocation failure of 64 MiB (buffer 64 MiB), retry 2
+expect-line: failed-create-image
+failed to create image: extent=3840x2160x1 format=97 layers=1 levels=1
+expect-line: vma-heap
+VMA heap 0: usage=8321499136, budget=8321499136, allocation=7700000000, blocks=120
+expect-line: host-reserve-fail
+could not reserve 13824 MB for guest direct memory: The paging file is too small for this operation to complete.
+expect-line: descriptor-pool-line
+descriptor set does not fit a pool sized for it: StorageBuffer=8192 SampledImage=262144 StorageImage=1024 Sampler=1024
+expect-line: pipeline-create-failed-line
+vkCreateComputePipelines failed: ErrorUnknown, cs 0xa016c19e423c6efb
+expect-line: driver-pipeline-line
+pipeline being created by the driver: cs 0xa016c19e423c6efb
+expect-line: pipeline-helper-line
+Pipeline helpers: helper 2 returned nothing for 30 s, ended
+expect-line: spirv-validation-line
+ShaderRecompiler PS SPIR-V validation failed hash=0x0123456789abcdef:
+expect-line: spirv-fail-line
+SPIR-V emission failed: hash=0x0123456789abcdef stage=4 opcode=OpImageSampleDrefImplicitLod reason=unsupported image type
+expect-line: srt-specialization
+shader resource specialization failed: descriptor evaluation source=2
+expect-line: indirect-image-table
+indirect image table at pc 0x000001c0 has incompatible candidates
+expect-line: gpu-feature-warning
+WARNING: Your GPU is not fully supported (fragmentShaderBarycentric is unavailable).
+expect-line: storage-format-warning
+Warning: format Bc5UnormBlock does not support storage access; block-compressed textures written by the guest will not render.
+expect-line: depth-target-fatal-line
+Depth target fatal: stencil-only target with HTile compression
+expect-line: depth-feedback-line
+depth attachment feedback loop is not supported by the host; sampling a copy
+expect-line: non-gpu-cached-access
+Accessed non-GPU cached memory at 0x000000023ddf8000
+expect-line: guest-memory-line
+Memory: required direct-backing write failed, addr=0x0000001000000000
+expect-line: buffercache-sparse
+BufferCache: failed to read sparse guest buffer memory at 0x0000001000000000 size 0x10000
+expect-line: unknown-sh-reg-line
+unknown sh reg at 02e40: 0x00000001
+expect-line: indirect-draw-offset
+GPU: indirect draw ignores GE_INDX_OFFSET=0x00000010; geometry may be incorrect.
+expect-line: session-log-open-fail
+Session log: cannot open the file

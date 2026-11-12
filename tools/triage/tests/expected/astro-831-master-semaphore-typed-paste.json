@@ -1,0 +1,21 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/831",
+ "outcome": "crash",
+ "primary_category": "DEVICE_LOST",
+ "primary_rule": "device-lost-disguised",
+ "crash_site": "masterSemaphore.cpp:53",
+ "top_rule": "device-lost-disguised",
+ "top_fix_area": "src/graphics/host_gpu/renderer/commandScheduler.cpp",
+ "fatal_count": 1,
+ "title_id": null,
+ "build_label": null,
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

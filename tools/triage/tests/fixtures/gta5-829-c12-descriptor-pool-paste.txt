@@ -1,0 +1,24 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/829 c12 by TotoWood at 2026-10-09T10:55:53Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 8
+
+> 14\. [@TotoWood](https://github.com/TotoWood) since i don't have AMD GPU i have upload some change that may fix that descriptorHeap.cpp:60 crash and log some information about the memory pool needs that would be nice to see, if you can send it would be nice, you can download from https://github.com/TheCruZ/KytyPS5-GTA/actions/runs/37894748410 at bottom of the website when the build finish
+
+Perfomance: work
+
+
+Fidelity:
+Warning: format Bc5UnormBlock does not support storage access; block-compressed textures written by the guest will not render.
+--- Build ---
+Fork build TheCruZ/KytyPS5-GTA cb0adf6
+--- Error ---
+descriptor set does not fit a pool sized for it: StorageBuffer=8192 SampledImage=262144 StorageImage=1024 Sampler=1024
+ in D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\host_gpu\renderer\pipeline\descriptorHeap.cpp:125
+
+
+Perfomance RT:
+Warning: format Bc5UnormBlock does not support storage access; block-compressed textures written by the guest will not render.
+--- Build ---
+Fork build TheCruZ/KytyPS5-GTA cb0adf6
+--- Error ---
+descriptor set does not fit a pool sized for it: StorageBuffer=8192 SampledImage=262144 StorageImage=1024 Sampler=1024
+ in D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\host_gpu\renderer\pipeline\descriptorHeap.cpp:125

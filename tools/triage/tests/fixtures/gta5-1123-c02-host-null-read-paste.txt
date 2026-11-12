@@ -1,0 +1,12 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/1123 c02 by mikeb1031 at 2026-10-06T21:39:34Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 3
+
+> just pushed a fix on my fork, v7 will contain it, let us know if it works https://github.com/TheCruZ/KytyPS5-GTA i will pull request on main repo on good feedback
+
+The new build fixed the previous depth attachment feedback loop crash. I can now get past that cutscene and continue playing.
+I’m now hitting a different crash when opening the pause menu:
+Fork build TheCruZ/KytyPS5-GTA 83f5884
+Unhandled host exception: type=1 code=3221225477 pc=0x00007ff9fec0e9cd access=1 address=0x0000000000000350
+in D:\a\KytyPS5-GTA\KytyPS5-GTA\src\loader\runtimeLinker.cpp:728
+This happens when I pause the game to open the menu.
+Let me know if you want a fresh log from this build.

@@ -1,0 +1,12 @@
+# SYNTHETIC fixture (hand-written, not from a real run): --strict-imports stops at the first
+# unresolved call (log-contract HLE section).
+--- Session 2026-11-19 21:10:00 ---
+Source build 0badc0de
+Title ID: PPSA00003
+Unresolved imports: 2 functions, 0 objects; by library: NpUniversalDataSystem=2
+--- Execute: Main
+--- Build ---
+Source build 0badc0de
+--- Error ---
+Unresolved import called: FFFFFFFFFFF[NpUniversalDataSystem_v1][NpUniversalDataSystem_v1.1][Func] from eboot.bin
+ in /home/runner/work/KytyPS5/KytyPS5/src/loader/runtimeLinker.cpp:285

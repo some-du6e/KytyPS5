@@ -1,0 +1,28 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/729",
+ "_note": "eboot.bin+0x28abdd4 via the Loading:/base_vaddr module map",
+ "outcome": "crash",
+ "primary_category": "HOST_FAULT_GUEST",
+ "primary_rule": "host-fault-guest",
+ "crash_site": "runtimeLinker.cpp:843",
+ "top_rule": "host-fault-guest",
+ "top_fix_area": "src/loader/runtimeLinker.cpp",
+ "fatal_count": 1,
+ "title_id": "PPSA04264",
+ "build_label": "Official build KytyPS5-2026-09-19-8cecaf4",
+ "gpu": "NVIDIA GeForce RTX 3060",
+ "guest_pc": "eboot.bin+0x28abdd4",
+ "fault_class": "host-fault-guest",
+ "truncated": false,
+ "imports_called": [
+  "BYIZGKm6bO4[NpUtility_v1][NpUtility_v1.1][Func]",
+  "Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]",
+  "hqzi1IHdQQQ[NpUtility_v1][NpUtility_v1.1][Func]",
+  "kvdMF48mB3Y[NpUtility_v1][NpUtility_v1.1][Func]",
+  "pLr1fEQS1z8[NpUtility_v1][NpUtility_v1.1][Func]"
+ ],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

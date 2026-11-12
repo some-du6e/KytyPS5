@@ -1,0 +1,21 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/829",
+ "outcome": "crash",
+ "primary_category": "DESCRIPTOR_POOL",
+ "primary_rule": "descriptor-pool",
+ "crash_site": "descriptorHeap.cpp:125",
+ "top_rule": "descriptor-pool",
+ "top_fix_area": "src/graphics/host_gpu/renderer/pipeline/descriptorHeap.cpp",
+ "fatal_count": 1,
+ "title_id": null,
+ "build_label": "Fork build TheCruZ/KytyPS5-GTA cb0adf6",
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

@@ -1,0 +1,11 @@
+# SYNTHETIC fixture (hand-written, not from a real run): --strict-shaders keeps the old fatal
+# CFG error; the diagnostics workstream names the shader after the report.
+--- Session 2026-11-19 21:20:00 ---
+Official build KytyPS5-2026-11-19-abcdef1
+Title ID: PPSA00004
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+shader CFG build failed: unsupported decoded instruction in CFG at pc 0x000001a0: 0x000001a0: unsupported family=MIMG opcode=0xe6 raw=[0xf0e60f00 0x00020004] reason=MIMG opcode is not implemented
+ in D:\a\KytyPS5\KytyPS5\src\graphics\shader\recompiler\frontend\cfg\ShaderCFG.cpp:1478
+while compiling shader: stage=CS hash=0xa1b2c3d4e5f60718

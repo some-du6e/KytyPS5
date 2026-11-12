@@ -1,0 +1,219 @@
+# SYNTHETIC fixture (hand-written, not from a real run): one fatal report per fatal rule of
+# rules.json, with message texts from the survey catalogue. Each report is preceded by a line
+# 'expect: <rule id>' that tests/test_rules.py checks.
+Official build KytyPS5-2026-11-19-abcdef1
+expect: strict-import-exit
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Unresolved import called: FFFFFFFFFFF[NpAuth_v1][NpAuth_v1.1][Func] from eboot.bin
+ in D:\a\KytyPS5\KytyPS5\src\loader\runtimeLinker.cpp:285
+expect: shader-opcode
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+unsupported decoded instruction: 0x00000120: unsupported family=VOP3 opcode=0x344 raw=[0xd7440000 0x00020501] reason=VOP3 opcode is not implemented
+ in D:\a\KytyPS5\KytyPS5\src\graphics\shader\recompiler\frontend\translate\Dispatch.cpp:20
+expect: shader-resource-tracking
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+shader resource tracking: hash=0x5e3e42fe237d3e16 stage=compute pc=0x0000093c GetBufferResource dword 0 is not a valid runtime value in D:\a\KytyPS5\KytyPS5\src\graphics\shader\recompiler\ir\passes\ResourceTracking.cpp:603
+expect: spirv-failure
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+SPIR-V validation failed: hash=0x0123456789abcdef stage=4 opcode=OpLoad reason=ID has not been defined
+ in D:\a\KytyPS5\KytyPS5\src\graphics\shader\recompiler\backend\spirv\SpirvEmitter.cpp:16
+expect: pipeline-creation
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+vkCreateGraphicsPipelines failed: ErrorUnknown, vs 0x1111111111111111, hs 0x0000000000000000, ds 0x0000000000000000, ps 0x2222222222222222
+ in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\pipeline\shaders.cpp:440
+expect: vram-oom
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+failed to create image: extent=3840x2160x1 format=97 layers=1 levels=1
+ in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\image\image.cpp:741
+expect: device-lost
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+vkAcquireNextImageKHR failed: ErrorDeviceLost
+ in D:\a\KytyPS5\KytyPS5\src\graphics\presentation\window\swapchain.cpp:623
+expect: descriptor-pool
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Fatal Error ---
+Error: condition (!Allocate(layout, fresh_batch)) is true in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\pipeline\descriptorHeap.cpp:55
+expect: device-lost-disguised
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Fatal Error ---
+Not implemented (result != vk::Result::eSuccess) in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\masterSemaphore.cpp:53
+expect: validation-fatal
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+[Vulkan][E][2]: vkCmdDispatch(): the sampled image descriptor [Set 0, Binding 24, Index 0, variable "image_24"] has VkImageView with format of VK_FORMAT_R32_SFLOAT (VUID-vkCmdDispatch-None-06479)
+ in D:\a\KytyPS5\KytyPS5\src\graphics\presentation\window\vulkanWindow.cpp:861
+expect: device-selection
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Could not find suitable device:
+  Synthetic GPU: shaderCullDistance is not supported in /Users/runner/work/KytyPS5/KytyPS5/src/graphics/presentation/window/vulkanWindow.cpp:966
+expect: render-state-depth-upload
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+TextureCache: invalid depth upload
+ in /home/runner/work/KytyPS5/KytyPS5/src/graphics/host_gpu/renderer/cache/textureCache.cpp:1081
+expect: render-state-feedback-loop
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+depth attachment feedback loop is not supported by the host
+ in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\renderDraw.cpp:542
+expect: render-state-storage-image
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+unsupported storage color image resource: kind=11 dimension=3 mip=1 read=0 written=1 atomic=0 depth_compare=0
+ in D:\a\KytyPS5\KytyPS5\src\graphics/host_gpu/renderer/image/imageView.h:137
+expect: render-state-tiled-rt
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+unsupported 64KB texture-tiled render-target view: dimension=1 depth=0 layer=5/6
+ in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\colorRenderTarget.cpp:191
+expect: render-state-depth-target
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+unsupported render state; details were printed above
+ in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\depthRenderTarget.cpp:42
+expect: render-state-sh-reg
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+unknown sh reg at 02e40: 0x00000001
+ in D:\a\KytyPS5\KytyPS5\src\graphics\guest_gpu\pm4Handlers.cpp:1109
+expect: guest-memory
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Memory: attempted to access invalid address 0x0000000000001000 with size 0x10
+ in D:\a\KytyPS5\KytyPS5\src\kernel\memory.cpp:980
+expect: guest-abort
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Guest abort()
+ in D:\a\KytyPS5\KytyPS5\src\libs\libC.cpp:250
+expect: hle-fatal
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Fatal Error ---
+Error: condition (reinterpret_cast<uint64_t>(address) != DriverDmemBase) is true in src/libs/agc.cpp:4176
+expect: kernel-fatal
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Fatal Error ---
+Not implemented (flags != 0) in D:\a\KytyPS5\KytyPS5\src\kernel\pthread.cpp:1234
+expect: host-fault-guest
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Unhandled host exception: type=1 code=3221225477 pc=0x00000009028abdd4 access=2 address=0x000000100ae00000
+ in D:\a\KytyPS5\KytyPS5\src\loader\runtimeLinker.cpp:843
+expect: host-fault-bad-jump
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Unhandled host exception: type=1 code=11 pc=0x000000000000bffe access=3 address=0x000000000000bffe
+ in /home/runner/work/KytyPS5/KytyPS5/src/loader/runtimeLinker.cpp:807
+expect: host-fault-host
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Unhandled host exception: type=1 code=3221225477 pc=0x00007ff9fec0e9cd access=1 address=0x0000000000000350
+ in D:\a\KytyPS5-GTA\KytyPS5-GTA\src\loader\runtimeLinker.cpp:728
+expect: fatal-other
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+BufferCache: download exceeds 64 MiB staging buffer capacity
+ in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\cache\bufferCache.cpp:132
+expect: host-fault-driver
+--- Guest fault context ---
+thread: (host thread)
+pc: 00007ffb12345678 (nvgpucomp64.dll+0x345678)
+pipeline being created by the driver: vs 0x3333333333333333 ps 0x4444444444444444
+rax=0000000000000000 rbx=0000000000000000 rcx=0000000000000000 rdx=0000000000000000
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Unhandled host exception: type=1 code=3221225477 pc=0x00007ffb12345678 access=2 address=0x0000000000000000
+ in D:\a\KytyPS5\KytyPS5\src\loader\runtimeLinker.cpp:833
+filler line 0
+filler line 1
+filler line 2
+filler line 3
+filler line 4
+filler line 5
+filler line 6
+filler line 7
+filler line 8
+filler line 9
+filler line 10
+filler line 11
+filler line 12
+filler line 13
+filler line 14
+filler line 15
+filler line 16
+filler line 17
+filler line 18
+filler line 19
+filler line 20
+filler line 21
+filler line 22
+filler line 23
+filler line 24
+filler line 25
+filler line 26
+filler line 27
+filler line 28
+filler line 29
+filler line 30
+filler line 31
+filler line 32
+filler line 33
+filler line 34
+filler line 35
+filler line 36
+filler line 37
+filler line 38
+filler line 39
+filler line 40
+filler line 41
+filler line 42
+filler line 43
+filler line 44
+expect: host-fault-emulator
+--- Guest fault context ---
+thread: (host thread)
+pc: 00007ff6a1b2c3d4 (KytyPS5.exe+0x12c3d4)
+rax=0000000000000000 rbx=0000000000000000 rcx=0000000000000000 rdx=0000000000000000
+--- Build ---
+Official build KytyPS5-2026-11-19-abcdef1
+--- Error ---
+Unhandled host exception: type=1 code=3221225477 pc=0x00007ff6a1b2c3d4 access=1 address=0x0000000000000008
+ in D:\a\KytyPS5\KytyPS5\src\loader\runtimeLinker.cpp:833
+expect: page-manager
+PageManager fatal: write-watcher underflow at 0x0000001000000000
+expect: uncaught-exception
+terminate: uncaught exception: std::bad_alloc

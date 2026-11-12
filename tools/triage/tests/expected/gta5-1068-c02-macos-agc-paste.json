@@ -1,0 +1,21 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/1068",
+ "outcome": "crash",
+ "primary_category": "HLE",
+ "primary_rule": "hle-fatal",
+ "crash_site": "agc.cpp:4176",
+ "top_rule": "hle-fatal",
+ "top_fix_area": "src/libs/agc.cpp",
+ "fatal_count": 2,
+ "title_id": null,
+ "build_label": null,
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

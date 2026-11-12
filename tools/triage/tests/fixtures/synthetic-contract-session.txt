@@ -1,0 +1,56 @@
+# SYNTHETIC fixture (hand-written, not from a real run): one example of every line in
+# notes/log-contract.md, in the order a session log would carry them. Expected results are in
+# tests/expected/synthetic-contract-session.json and tests/test_contract.py.
+--- Session 2026-11-19 20:05:11 ---
+Fork build some-du6e/KytyPS5 1234abc
+GPU: NVIDIA GeForce RTX 3050 vendor=0x10de device=0x2507 driver=581.42.0.0 api=1.4.312 driverID=NvidiaProprietary vram=8192 MiB bar=256 MiB
+Host: cpu=AMD Ryzen 5 5600 6-Core Processor threads=12 ram=16304 MiB os=Windows 11 (10.0.26100)
+Title profile: none (none) id=PPSA00001 version=01.000.000 name="SYNTHETIC TITLE" quirks=none preset=none
+Preset: low-vram -> --vram-profile low --oom-recovery
+Preset: nvidia-safe -> --no-shader-cache
+VRAM: budget=7168 MiB limit=off profile=low gc=proportional fixed: bda_table=64 fault=16 rings=96 recycle_cap=256 rt_arena=off thresholds: tex_trigger=4096 tex_pressure=5120 tex_critical=6144 buf_trigger=1024 buf_critical=1536
+Title ID: PPSA00001
+PS5 NID fallback: zr094EQ39Ww -> zr094EQ39Ww[libc_v1][libc_v1.1][Func] (type)
+Rebind: Q1oaUuFhv8Y[NpManager_v1][NpManager_v1.1][Func] -> sceNpGetAccountIdA (program=eboot.bin)
+Unresolved imports: 37 functions, 2 objects; by library: NpManager=9, NpWebApi2=8, NpUniversalDataSystem=7, Http2=5, Ssl=4, NpTrophy2=4
+Guest syscall: 3 raw syscall instruction(s) in eboot.bin (first at +0x1a2b3c); raw syscalls are not emulated
+--- Execute: Main
+Unresolved import stub called: AAAAAAAAAAA[NpManager_v1][NpManager_v1.1][Func] (program=eboot.bin, first call, returns=0x80550003, policy=np-offline)
+Unresolved import name: AAAAAAAAAAA[NpManager_v1][NpManager_v1.1][Func] = sceNpCheckPlus
+Unresolved import stub called: BBBBBBBBBBB[Http2_v1][Http2_v1.1][Func] (program=eboot.bin, first call, returns=0x80420001, policy=http-down)
+Unresolved import stub called: DDDDDDDDDDD[Net_v1][Net_v1.1][Func] (program=eboot.bin, first call, returns=0x80410101, policy=net-down)
+Unresolved import stub called: EEEEEEEEEEE[Ajm_v1][Ajm_v1.1][Func] (program=libSceAudio.prx, first call, returns=0x00000000, policy=zero)
+Unresolved object import: CCCCCCCCCCC[NpUniversalDataSystem_v1][NpUniversalDataSystem_v1.1][Object] (program=eboot.bin) -> invalid page 0x0000000ffff00000
+Soft-fail: sceNpSetContentRestriction: param size 0x30 larger than 0x28, ignoring tail
+Soft-fail: sceAudio3dPortOpen: unknown port type 7, returning SCE_AUDIO3D_ERROR_INVALID_PARAMETER
+[HACK] skip unsupported shader instruction: first at PipelineCache::GetProgram, shader=0x1122334455667788, where=0x120, 0x00000120: unsupported family=VOP3 opcode=0x344 raw=[0xd7440000 0x00020501] reason=VOP3 opcode is not implemented
+ShaderRecompiler CS phase begin: hash=0x1122334455667788 decode
+Shaders: VS 12 | PS 14 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+VRAM spill: images allocated outside device-local memory: count=1 bytes=64 MiB (first: render target 3840x2160 R16G16B16A16Sfloat)
+VRAM spill: images allocated outside device-local memory: count=2 bytes=96 MiB (first: render target 3840x2160 R16G16B16A16Sfloat)
+VRAM spill: buffers allocated outside device-local memory: count=1 bytes=32 MiB (first: GameBuffer 0x0000001000000000 size 32 MiB)
+VRAM pressure: emergency eviction freed 512 MiB after allocation failure of 128 MiB (image 4096x4096 BC7), retry 1
+--- Guest fault context ---
+thread: [GAME] Main Thread
+guest pc: eboot.bin+0x1234567
+rax=0000000000000000 rbx=0000000000000000 rcx=0000000900001000 rdx=0000000000000010
+rsi=0000000000000000 rdi=0000000000000000 rbp=00000007eff00000 rsp=00000007efeffe00
+r8 =0000000000000000 r9 =0000000000000000 r10=0000000000000000 r11=0000000000000246
+r12=0000000000000000 r13=0000000000000000 r14=0000000000000000 r15=0000000000000000
+code (pc-48 .. pc+48, fault at byte 48):
+ 48 8b 05 00 00 00 00 48 85 c0 74 10 48 8b 40 08
+ 48 8b 05 00 00 00 00 48 85 c0 74 10 48 8b 40 08
+ 48 8b 05 00 00 00 00 48 85 c0 74 10 48 8b 40 08
+ 48 8b 40 18 48 85 c0 74 10 48 8b 40 08 c3 90 90
+ 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90
+ 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90 90
+stack:
+ 0000000901234600 0000000000000000 0000000000000000 0000000000000000
+ 0000000000000000 0000000000000000 0000000000000000 0000000000000000
+ [rsp+0x00] 0000000901234600 (eboot.bin+0x1234600)
+ [rsp+0x18] 00007ff6a1b2c3d4 (KytyPS5.exe+0x12c3d4)
+--- Build ---
+Fork build some-du6e/KytyPS5 1234abc
+--- Error ---
+Unhandled host exception: type=1 code=3221225477 pc=0x0000000901234567 access=1 address=0x0000000000000018
+ in D:\a\KytyPS5\KytyPS5\src\loader\runtimeLinker.cpp:833

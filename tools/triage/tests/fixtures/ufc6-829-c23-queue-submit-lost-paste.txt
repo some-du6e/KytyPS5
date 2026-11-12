@@ -1,0 +1,23 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/829 c23 by RobertBruno454 at 2026-10-13T11:51:45Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 2
+
+@TheCruZ I ran your amd-diag build (098b5fd) on an RX 9070 XT, Windows 11, with UFC 6 (PPSA23566). It's not GTA, but it may help with the AMD issues.
+
+**Driver 26.8.1:** crashes inside `vkCreateComputePipelines` (null write inside the driver, same offset on every run, also with `--no-async-pipelines --gpu-pipeline 0`).
+
+**Driver 26.9.2 (optional):** that crash is gone and the game gets much further (VS 72 | PS 84 | CS 121). Shortly after BDA is enabled, the GPU is lost:
+
+```
+GPU: using buffer device address (BDA) shader memory access.
+vkQueueSubmit failed: ErrorDeviceLost (-4), tick=28186 debug_op=0 debug_submit=14568 args=60,2160,1,65,0x00000011604c8000
+Not implemented (result != vk::Result::eSuccess) in commandScheduler.cpp:548
+```
+
+- Deterministic: two separate runs show identical `args=60,2160,1,65,0x00000011604c8000`. The 60×2160×1 might be a full-resolution 4K compute dispatch, but that's only a guess.
+- Launched from the launcher, the hang took down the whole system (black screen, hard reboot). Launched from the command line, Windows recovered and only the emulator exited.
+- The depth-copy path works: no feedback-loop exit. I get the same results with #1187.
+- With Vulkan validation on, this build exits early on the amd-diag BC5 probe (`vkCreateImage ... VK_ERROR_FORMAT_NOT_SUPPORTED`, vulkanWindow.cpp:840), so validation can't be used to chase the device lost.
+
+The full log (26.9.2, validation off) is attached. I'm happy to test any build.
+
+[_kyty9070.txt](https://github.com/user-attachments/files/33383412/_kyty9070.txt)

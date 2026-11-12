@@ -1,0 +1,25 @@
+{
+ "_source": "synthetic",
+ "outcome": "crash",
+ "primary_category": "UNRESOLVED_IMPORT",
+ "primary_rule": "strict-import-exit",
+ "crash_site": "runtimeLinker.cpp:285",
+ "top_rule": "strict-import-exit",
+ "top_fix_area": "src/libs/",
+ "fatal_count": 29,
+ "title_id": null,
+ "build_label": "Official build KytyPS5-2026-11-19-abcdef1",
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [
+  "0x5e3e42fe237d3e16"
+ ],
+ "shader_opcodes": [
+  "VOP3:0x344"
+ ],
+ "hacks": [],
+ "vuids": []
+}

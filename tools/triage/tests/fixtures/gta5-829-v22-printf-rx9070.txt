@@ -1,0 +1,2016 @@
+TITLE_ID, string = PPSA04263
+CONTENT_ID, string = EP1004-PPSA04263_00-GTAVFULLGAMEDISC
+APP_VER, string = 01.011.001
+ATTRIBUTE, int = 0x20000000
+ATTRIBUTE3, int = 0x00000084
+USER_DEFINED_PARAM_1, int = 0x00000009
+USER_DEFINED_PARAM_2, int = 0x00000000
+USER_DEFINED_PARAM_3, int = 0x00000000
+USER_DEFINED_PARAM_4, int = 0x00000000
+TITLE, string = Grand Theft Auto V
+Can't open <game>\sce_sys\playgo-chunk.dat
+Can't open <game>\playgo-chunkdefs.xml
+Can't open <game>\Data\chunkmanifest
+	 flexible memory size = 448 MiB, direct memory size = 12288 MiB
+	 guest address-space self-test: ok
+	 direct-memory sub-64K placeholder self-test: ok
+WindowCreate(): width = 2560, height = 1440
+Display luminance: max full frame = 417.712, max = 417.712, min = 0 nits
+Vulkan required extension: VK_KHR_surface
+Vulkan required extension: VK_KHR_win32_surface
+Vulkan required extension: VK_EXT_debug_utils
+Vulkan available extension: VK_KHR_device_group_creation, version = 1
+Vulkan available extension: VK_KHR_external_fence_capabilities, version = 1
+Vulkan available extension: VK_KHR_external_memory_capabilities, version = 1
+Vulkan available extension: VK_KHR_external_semaphore_capabilities, version = 1
+Vulkan available extension: VK_KHR_get_physical_device_properties2, version = 2
+Vulkan available extension: VK_KHR_get_surface_capabilities2, version = 1
+Vulkan available extension: VK_KHR_surface, version = 25
+Vulkan available extension: VK_KHR_surface_maintenance1, version = 1
+Vulkan available extension: VK_KHR_win32_surface, version = 6
+Vulkan available extension: VK_EXT_debug_report, version = 10
+Vulkan available extension: VK_EXT_debug_utils, version = 2
+Vulkan available extension: VK_EXT_swapchain_colorspace, version = 5
+Vulkan available extension: VK_KHR_portability_enumeration, version = 1
+Vulkan available extension: VK_LUNARG_direct_driver_loading, version = 1
+Vulkan available layer: VK_LAYER_AMD_switchable_graphics, specVersion = 4211047, implVersion = 1, AMD switchable graphics layer
+Vulkan available layer: VK_LAYER_VALVE_steam_overlay, specVersion = 4206799, implVersion = 1, Steam Overlay Layer
+Vulkan available layer: VK_LAYER_VALVE_steam_fossilize, specVersion = 4210991, implVersion = 1, Steam Pipeline Caching Layer
+no validation layer: VK_LAYER_KHRONOS_validation
+Vulkan loader version: 1.4.357
+Vulkan device: AMD Radeon RX 9070
+	queue family: { Graphics | Compute | Transfer | SparseBinding } [count = 8], [present = true]
+	selected universal queue family 0
+Format vk::Format::eR8G8B8A8Srgb cannot be used as storage image
+Format vk::Format::eB8G8R8A8Srgb cannot be used as storage image
+Block Texel View support: Yes
+Select device: AMD Radeon RX 9070
+Vulkan subgroup: default=64 min=32 max=64 stages=0x000000f0 size_control=true wave64=true
+Vulkan maintenance8 support: true
+Vulkan depth feedback support: false
+Vulkan MeshEXT: invocations=256 vertices=256 primitives=256 shared=32768
+Vulkan occlusion queries: true, precise: true
+Vulkan robustness: robustImageAccess=true robustImageAccess2=true buffer bounds=shader checks
+Vulkan native ray tracing: true
+Vulkan pipeline cache: loading _PipelineCache\PPSA04263.bin
+Vulkan pipeline cache: loaded 107.47 MB from _PipelineCache\PPSA04263.bin
+Shader cache: not used while the pipeline manifest records
+Pipeline manifest: 1933 modules, 1560 pipelines in C:\Users\<redacted>\Downloads\KytyPS5-GTA-v22-Windows-x64\assets\pipelines\PPSA04263_01.011.001.kpm (loaded in 20.6 ms)
+Pipeline manifest: 2430 modules, 1890 pipelines in _PipelineCache\PPSA04263_01.011.001.kpm (loaded in 22.9 ms)
+Pipeline manifest: 1041 modules, 489 pipelines in _PipelineCache\PPSA04263_01.011.001.shared.kpm (loaded in 9.8 ms, 1795 records left out)
+Pipeline manifest: recording into _PipelineCache\PPSA04263_01.011.001.kpm
+NativeRayTracing: enabled, BLAS memory budget 4012 MiB
+warning: requested present mode is unavailable; falling back to Fifo
+Vulkan presentation: SDR
+	 search_start = 0x0000000000000000
+	 search_end   = 0x0000000300000000
+	 len          = 0x0000000000200000
+	 alignment    = 0x0000000000200000
+	 memory_type  = 12
+	phys_addr    = 0000000000000000
+	[Ok]
+	 name = SceAgcDriver
+	 in_addr  = 0x0000000fe0000000
+	 out_addr = 0x0000000fe0000000
+	 dmem     = 0x0000000000000000
+	 size     = 0x0000000000200000
+	 mode     = ReadWrite
+	 flags    = 0x00000000
+	 align    = 0x0000000000200000
+	 reason   = n/a
+	 [Ok]
+Build
+  version: Fork build TheCruZ/KytyPS5-GTA 5ea31b6
+
+Host
+  os:      Windows
+  cpu:     AMD Ryzen 7 5800X3D 8-Core
+  threads: 16
+
+Title ID: PPSA04263
+Mounted /download0 -> _DownloadData/PPSA04263
+Mounted /temp0 -> _TempData/PPSA04263
+Mounted /temp -> _TempData/PPSA04263
+Loaded touchpad cursor image: C:\Users\<redacted>\Downloads\KytyPS5-GTA-v22-Windows-x64\assets\cursors\hand.png
+Loading: <game>\eboot.bin
+Loaded touchpad cursor image: C:\Users\<redacted>\Downloads\KytyPS5-GTA-v22-Windows-x64\assets\cursors\drawing.png
+SELF: skipping ELF section table: shoff=0x0000000015ff46d8, shnum=53
+base_vaddr             = 0x0000000900000000
+base_size              = 0x00000000062d39f0
+base_size_aligned      = 0x00000000062d4000
+mapped_size            = 0x0000000006ad5000
+tls_handler_size       = 0x0000000000001000
+[0] addr        = 0x0000000900000000
+[0] file_size   = 54259260
+[0] memory_size = 54263808
+[0] mode        = Execute
+Patch tls at addr: [00000009004b68c7]
+Patch tls at addr: [00000009004b6f47]
+Patch tls at addr: [00000009004b6fa7]
+Patch tls at addr: [00000009004b6fe1]
+Patch tls at addr: [00000009004b701c]
+Patch tls at addr: [00000009004b70bc]
+Patch tls at addr: [00000009004b7160]
+Patch tls at addr: [00000009004b7211]
+Patch tls at addr: [00000009004b7251]
+Patch tls at addr: [00000009004b72c2]
+Patch tls at addr: [00000009004b8184]
+Patch tls at addr: [00000009004b86fa]
+Patch tls at addr: [00000009004b88d0]
+Patch tls at addr: [00000009004b8bf7]
+Patch tls at addr: [00000009004b8ce8]
+Patch tls at addr: [00000009004b8d37]
+Patch tls at addr: [00000009004b8e25]
+Patch tls at addr: [00000009004b8e55]
+Patch tls at addr: [00000009004b8ea0]
+Patch tls at addr: [00000009004b8f17]
+Patch tls at addr: [00000009004b9139]
+Patch tls at addr: [00000009004b9178]
+Patch tls at addr: [00000009004b91c8]
+Patch tls at addr: [00000009004b9215]
+Patch tls at addr: [00000009004b929c]
+Patch tls at addr: [00000009004b9453]
+Patch tls at addr: [00000009004b956c]
+Patch tls at addr: [00000009004b9665]
+Patch tls at addr: [00000009004b9697]
+Patch tls at addr: [00000009004b96c9]
+Patch tls at addr: [00000009004b96fb]
+Patch tls at addr: [00000009004b9728]
+Patch tls at addr: [00000009004b97dc]
+Patch tls at addr: [00000009004b9858]
+Patch tls at addr: [00000009004b98e5]
+Patch tls at addr: [00000009004b9a09]
+Patch tls at addr: [00000009004b9a3b]
+Patch tls at addr: [00000009004b9a6d]
+Patch tls at addr: [00000009004b9a9f]
+Patch tls at addr: [00000009004b9ad1]
+Patch tls at addr: [00000009004b9b03]
+Patch tls at addr: [00000009004b9b35]
+Patch tls at addr: [00000009004b9b67]
+Patch tls at addr: [00000009004b9b93]
+Patch tls at addr: [00000009004b9bbf]
+Patch tls at addr: [00000009004b9beb]
+Patch tls at addr: [00000009004b9c17]
+Patch tls at addr: [00000009004b9c43]
+Patch tls at addr: [00000009004b9c6f]
+Patch tls at addr: [00000009004b9c8b]
+Patch tls at addr: [00000009004b9e82]
+Patch tls at addr: [00000009004b9ec1]
+Patch tls at addr: [00000009004ba1bf]
+Patch tls at addr: [00000009004ba484]
+Patch tls at addr: [00000009004ba4c4]
+Patch tls at addr: [00000009004ba53f]
+Patch tls at addr: [00000009004ba754]
+Patch tls at addr: [00000009004ba7ab]
+Patch tls at addr: [00000009004ba7d3]
+Patch tls at addr: [00000009004ba7fb]
+Patch tls at addr: [00000009004ba85d]
+Patch tls at addr: [00000009004ba8fa]
+Patch tls at addr: [00000009004ba925]
+Patch tls at addr: [00000009004ba958]
+Patch tls at addr: [00000009004ba989]
+Patch tls at addr: [00000009004bac5c]
+Patch tls at addr: [00000009004bac9c]
+Patch tls at addr: [00000009004bacc1]
+Patch tls at addr: [00000009004bad00]
+Patch tls at addr: [00000009004bae96]
+Patch tls at addr: [00000009004baf12]
+Patch tls at addr: [00000009004baf8e]
+Patch tls at addr: [00000009004bb00a]
+Patch tls at addr: [00000009004bb086]
+Patch tls at addr: [00000009004bb102]
+Patch tls at addr: [00000009004bb17e]
+Patch tls at addr: [00000009004bb1fa]
+Patch tls at addr: [00000009004bb276]
+Patch tls at addr: [00000009004bb2f2]
+Patch tls at addr: [00000009004bb36e]
+Patch tls at addr: [00000009004bb3ea]
+Patch tls at addr: [00000009004bb466]
+Patch tls at addr: [00000009004bb4e2]
+Patch tls at addr: [00000009004bb55e]
+Patch tls at addr: [00000009004bb5da]
+Patch tls at addr: [00000009004bb656]
+Patch tls at addr: [00000009004bb6d2]
+Patch tls at addr: [00000009004bb74e]
+Patch tls at addr: [00000009004bb7ca]
+Patch tls at addr: [00000009004bb846]
+Patch tls at addr: [00000009004bb8c2]
+Patch tls at addr: [00000009004bb93e]
+Patch tls at addr: [00000009004bb9ba]
+Patch tls at addr: [00000009004bba36]
+[... 31763 lines omitted by make_fixture.py ...]
+Window 3 size changed to 2560x1440
+Window 3 shown
+Window 3 gained keyboard focus
+[... 3 lines omitted by make_fixture.py ...]
+Window 3 exposed
+[... 1 lines omitted by make_fixture.py ...]
+Loading: <game>\sce_module/libc.prx
+[... 1 lines omitted by make_fixture.py ...]
+base_vaddr             = 0x0000000910000000
+[... 2 lines omitted by make_fixture.py ...]
+mapped_size            = 0x00000000009d8000
+[... 192 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 8zLSfEfW5AU -> 8zLSfEfW5AU[Coredump_v1][Coredump_v1.1][Func]
+PS5 NID fallback: fFkhOgztiCA -> fFkhOgztiCA[Coredump_v1][Coredump_v1.1][Func]
+Relocate: unresolved PLT import patched to stub [47] [0000000903cdc850] <- 0000000200000000, Dbbkj6YHWdo[Coredump_v1][libkernel_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [119] [0000000903cdca90] <- 0000000200000022, wVwPU50pS1c[AudioOut_v1][AudioOut_v1.1][Func], Func, Global, <game>\eboot.bin
+PS5 NID fallback: bY-PO6JhzhQ -> bY-PO6JhzhQ[libkernel_v1][libkernel_v1.1][Func]
+Relocate: unresolved PLT import patched to stub [333] [0000000903cdd140] <- 0000000200000044, P6piso307SE[NpManager_v1][NpManager_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [335] [0000000903cdd150] <- 0000000200000066, -Rjp3-YViXc[NpManager_v1][NpManager_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [336] [0000000903cdd158] <- 0000000200000088, kvdMF48mB3Y[NpUtility_v1][NpUtility_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [337] [0000000903cdd160] <- 00000002000000aa, pLr1fEQS1z8[NpUtility_v1][NpUtility_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [338] [0000000903cdd168] <- 00000002000000cc, hqzi1IHdQQQ[NpUtility_v1][NpUtility_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [339] [0000000903cdd170] <- 00000002000000ee, mA0zsbqm+kA[NpUtility_v1][NpUtility_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [340] [0000000903cdd178] <- 0000000200000110, BYIZGKm6bO4[NpUtility_v1][NpUtility_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [347] [0000000903cdd1b0] <- 0000000200000132, h1dR-t5ISgg[WebBrowserDialog_v1][WebBrowserDialog_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [348] [0000000903cdd1b8] <- 0000000200000154, vCaW0fgVQmc[WebBrowserDialog_v1][WebBrowserDialog_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [349] [0000000903cdd1c0] <- 0000000200000176, PSK+Eik919Q[WebBrowserDialog_v1][WebBrowserDialog_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [350] [0000000903cdd1c8] <- 0000000200000198, kFhuwHrIUqs[PlayerInvitationDialog_v1][PlayerInvitationDialog_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [361] [0000000903cdd220] <- 00000002000001ba, gDm5a6GSE94[PlayerInvitationDialog_v1][PlayerInvitationDialog_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [362] [0000000903cdd228] <- 00000002000001dc, CgdJ1PkIsE4[PlayerSelectionDialog_v1][PlayerSelectionDialog_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [367] [0000000903cdd250] <- 00000002000001fe, FraP7debcdg[WebBrowserDialog_v1][WebBrowserDialog_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [371] [0000000903cdd270] <- 0000000200000220, DHmwsa6S8Tc[NpCommerce_v1][NpCommerce_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [372] [0000000903cdd278] <- 0000000200000242, dsqCVsNM0Zg[NpCommerce_v1][NpCommerce_v1.1][Func], Func, Global, <game>\eboot.bin
+PS5 NID fallback: hdpVEUDFW3s -> hdpVEUDFW3s[Ssl_v1][Ssl_v1.1][Func]
+PS5 NID fallback: 0K1yQ6Lv-Yc -> 0K1yQ6Lv-Yc[Ssl_v1][Ssl_v1.1][Func]
+Relocate: unresolved PLT import patched to stub [407] [0000000903cdd390] <- 0000000200000264, 8x++mBOUeso[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [408] [0000000903cdd398] <- 0000000200000286, UYPxv8MIzGo[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [409] [0000000903cdd3a0] <- 00000002000002a8, 52AlYvq+dmk[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [410] [0000000903cdd3a8] <- 00000002000002ca, oTirsxQpqj0[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [413] [0000000903cdd3c0] <- 00000002000002ec, NNVf18SlbT8[NpWebApi2_v1][NpWebApi2_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [414] [0000000903cdd3c8] <- 000000020000030e, AAj9X+4aGYA[NpWebApi2_v1][NpWebApi2_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [426] [0000000903cdd428] <- 0000000200000330, 9y9YsMBbUq0[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [427] [0000000903cdd430] <- 0000000200000352, BgDtc93upnM[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [428] [0000000903cdd438] <- 0000000200000374, iTIgJfwD0MY[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [429] [0000000903cdd440] <- 0000000200000396, DNmJw98YzUU[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [430] [0000000903cdd448] <- 00000002000003b8, 5wM1AxqBnvM[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [431] [0000000903cdd450] <- 00000002000003da, Q-u6dljYZ9o[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [432] [0000000903cdd458] <- 00000002000003fc, RolXukwAUco[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [433] [0000000903cdd460] <- 000000020000041e, onFll9DvvBY[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [434] [0000000903cdd468] <- 0000000200000440, ygLeNBGWgf8[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [435] [0000000903cdd470] <- 0000000200000462, 7kSGOVXdivc[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [436] [0000000903cdd478] <- 0000000200000484, AzRzzMkPW-g[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [437] [0000000903cdd480] <- 00000002000004a6, 05E7yxe+58U[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [438] [0000000903cdd488] <- 00000002000004c8, VbZ1QQAYHqY[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [439] [0000000903cdd490] <- 00000002000004ea, EGYpmwU7ra4[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [440] [0000000903cdd498] <- 000000020000050c, Oe1W+jARzBQ[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [441] [0000000903cdd4a0] <- 000000020000052e, ckpI53I9ZWw[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+[... 189 lines omitted by make_fixture.py ...]
+PS5 NID fallback: OJPTonqdg0I -> OJPTonqdg0I[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: 9KUZFjI1IxA -> 9KUZFjI1IxA[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: sZIoMRGO+jk -> sZIoMRGO+jk[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: ERuf9y0DY84 -> ERuf9y0DY84[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: 4zrm6VrgIAw -> 4zrm6VrgIAw[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: cG1VE2HMl6c -> cG1VE2HMl6c[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: WTtYf+cNnXI -> WTtYf+cNnXI[Json2_v1][Json2_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: a+W7HHlwpBs -> a+W7HHlwpBs[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: 5JmzZt8twAo -> 5JmzZt8twAo[Json2_v1][Json2_v1.1][Func]
+[... 220 lines omitted by make_fixture.py ...]
+PS5 NID fallback: Cxwy7wHq4J0 -> Cxwy7wHq4J0[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: PR5k1penBLM -> PR5k1penBLM[Json2_v1][Json2_v1.1][Func]
+[... 5 lines omitted by make_fixture.py ...]
+PS5 NID fallback: -hJRce8wn1U -> -hJRce8wn1U[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: cK6bYHf-Q5E -> cK6bYHf-Q5E[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: RujUxbr3haM -> RujUxbr3haM[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: OcAgPxcq5Vk -> OcAgPxcq5Vk[Json2_v1][Json2_v1.1][Func]
+[... 25 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 2JtWUUiYBXs -> 2JtWUUiYBXs[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 23LRUSvYu1M -> 23LRUSvYu1M[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: BfBDZGbti7A -> BfBDZGbti7A[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: wRbq6ZjNop4 -> wRbq6ZjNop4[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: UglJIZjGssM -> UglJIZjGssM[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: AhGvpITrf4M -> AhGvpITrf4M[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: 6UzEidRZwkg -> 6UzEidRZwkg[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: +T8Xo6LtFJI -> +T8Xo6LtFJI[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: gSRnr79F8tQ -> gSRnr79F8tQ[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: HF3YllT3mXU -> HF3YllT3mXU[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: w2rJhmD+dsE -> w2rJhmD+dsE[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: DL2RXaXOy88 -> DL2RXaXOy88[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: 5CdQTZIQPxM -> 5CdQTZIQPxM[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: Zw7uUVPulbw -> Zw7uUVPulbw[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: h9z6+0hEydk -> h9z6+0hEydk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 4 lines omitted by make_fixture.py ...]
+PS5 NID fallback: Ddwk4gLT5j0 -> Ddwk4gLT5j0[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 8 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 3AyTaWcF-H8 -> 3AyTaWcF-H8[Graphics5_v1][Graphics5_v1.1][Func]
+[... 4 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 7Wa3aeJgeVU -> 7Wa3aeJgeVU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: Ikfdt-rIqCE -> Ikfdt-rIqCE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: Qrj4c+61z4A -> Qrj4c+61z4A[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: nCUgItdN2ms -> nCUgItdN2ms[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: z2duB-hHQSM -> z2duB-hHQSM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: vcmNN+AAXnY -> vcmNN+AAXnY[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: whb1RL7K4Ss -> whb1RL7K4Ss[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: d-6uF9sZDIU -> d-6uF9sZDIU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 6lNcCp+fxi4 -> 6lNcCp+fxi4[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: fRG-JOH5+sI -> fRG-JOH5+sI[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: vRoArM9zaIk -> vRoArM9zaIk[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: ORWsxIbk4TE -> ORWsxIbk4TE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: YWTKOju587o -> YWTKOju587o[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: k-JpyR2dYAM -> k-JpyR2dYAM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 3ZWa3AoyWZQ -> 3ZWa3AoyWZQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: ziVA3whp3p4 -> ziVA3whp3p4[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: eWaWyFegzgQ -> eWaWyFegzgQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: w6Dj1VJt5qY -> w6Dj1VJt5qY[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: n8vgpaQg6dA -> n8vgpaQg6dA[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: Lkf86B98qPc -> Lkf86B98qPc[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: K2mciNVxUCE -> K2mciNVxUCE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: V++UgBtQhn0 -> V++UgBtQhn0[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: s+VGAMDQ0AQ -> s+VGAMDQ0AQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: IxYiarKlXxM -> IxYiarKlXxM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: cdDRpqcFGbU -> cdDRpqcFGbU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 3KDcnM3lrcU -> 3KDcnM3lrcU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 7nOoijNPvEU -> 7nOoijNPvEU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 0fWWK5uG9rQ -> 0fWWK5uG9rQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: MlEw1feXcjg -> MlEw1feXcjg[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: fPSCdQxgpSw -> fPSCdQxgpSw[Graphics5_v1][Graphics5_v1.1][Func]
+[... 5 lines omitted by make_fixture.py ...]
+PS5 NID fallback: AOLcoIkQDgM -> AOLcoIkQDgM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: F0Y42t-3e18 -> F0Y42t-3e18[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: uJziRsODk1c -> uJziRsODk1c[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: X-Nm5KLREeg -> X-Nm5KLREeg[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: W5z4eZrjEas -> W5z4eZrjEas[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: pWLG7WOpVcw -> pWLG7WOpVcw[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: ZLJk9r2+2Aw -> ZLJk9r2+2Aw[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: U9ueyEhSkF4 -> U9ueyEhSkF4[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: F0ZXt5q0ZTA -> F0ZXt5q0ZTA[Graphics5_v1][Graphics5_v1.1][Func]
+[... 8 lines omitted by make_fixture.py ...]
+PS5 NID fallback: XlNp7jzGiPo -> XlNp7jzGiPo[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: MM4IZSEYytQ -> MM4IZSEYytQ[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: T6xuVw0KUJo -> T6xuVw0KUJo[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: f3dg2CSgRKY -> f3dg2CSgRKY[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: dolOmWH+huQ -> dolOmWH+huQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: fd5Bp5tGTgo -> fd5Bp5tGTgo[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: HV4j+E0MBHE -> HV4j+E0MBHE[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: D9sr1xGUriE -> D9sr1xGUriE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: Y3ymLfZ1384 -> Y3ymLfZ1384[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: NKIzURsgV7I -> NKIzURsgV7I[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: w1KFAHVqpaU -> w1KFAHVqpaU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: k3GhuSNmBLU -> k3GhuSNmBLU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: wr23dPKyWc0 -> wr23dPKyWc0[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: LtTouSCZjHM -> LtTouSCZjHM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: n2fD4A+pb+g -> n2fD4A+pb+g[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: UZbQjYAwwXM -> UZbQjYAwwXM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 03RZmELWWzw -> 03RZmELWWzw[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: Abendgtz+3o -> Abendgtz+3o[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: uZW-mqsxkrM -> uZW-mqsxkrM[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: t7PlZ9nt5Lc -> t7PlZ9nt5Lc[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: hL7C0IRpWZI -> hL7C0IRpWZI[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: bxGoVxpdSPQ -> bxGoVxpdSPQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 4 lines omitted by make_fixture.py ...]
+PS5 NID fallback: KT-hTp-Ch14 -> KT-hTp-Ch14[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: qyM2bxYFPAk -> qyM2bxYFPAk[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: qzMN2XKGA4k -> qzMN2XKGA4k[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: j3EtxFkSIhQ -> j3EtxFkSIhQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: -RnpfpxIhec -> -RnpfpxIhec[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: cFazmnXpJOE -> cFazmnXpJOE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: e1DFTg+Sd8U -> e1DFTg+Sd8U[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: eZ4+17OQz4Q -> eZ4+17OQz4Q[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: htn36gPnBk4 -> htn36gPnBk4[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: DwICrVxerkY -> DwICrVxerkY[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: JrtiDtKeS38 -> JrtiDtKeS38[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: xAeBOa0A3kk -> xAeBOa0A3kk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: cpCILPya5Zk -> cpCILPya5Zk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 6mFxkVqdmbQ -> 6mFxkVqdmbQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: q4VuU-QsLOE -> q4VuU-QsLOE[Graphics5_v1][Graphics5_v1.1][Func]
+[... 3 lines omitted by make_fixture.py ...]
+PS5 NID fallback: ewobAQeMo5k -> ewobAQeMo5k[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: ozKzBP4aki4 -> ozKzBP4aki4[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: b-oySn+G2tE -> b-oySn+G2tE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: CbQh3DKMSno -> CbQh3DKMSno[Graphics5_v1][Graphics5_v1.1][Func]
+[... 5 lines omitted by make_fixture.py ...]
+PS5 NID fallback: idlaArvdXEs -> idlaArvdXEs[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 57labkp+rSQ -> 57labkp+rSQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: qj7QZpgr9Uw -> qj7QZpgr9Uw[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: BIPexNBSGog -> BIPexNBSGog[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: xSAR0LTcRKM -> xSAR0LTcRKM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 1rZSWUv1IRc -> 1rZSWUv1IRc[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: WmAc2MEj6Io -> WmAc2MEj6Io[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: i1jyy49AjXU -> i1jyy49AjXU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: -HOOCn0JY48 -> -HOOCn0JY48[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: ZvwO9euwYzc -> ZvwO9euwYzc[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: hvUfkUIQcOE -> hvUfkUIQcOE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: w4-d0n60hdo -> w4-d0n60hdo[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: LHFXRrlTPD8 -> LHFXRrlTPD8[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: pFLArOT53+w -> pFLArOT53+w[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: CtB+A9-VxO0 -> CtB+A9-VxO0[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: Yw0jKSqop+E -> Yw0jKSqop+E[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: q88lQ+GP5Yk -> q88lQ+GP5Yk[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: B+aG9DUnTKA -> B+aG9DUnTKA[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 1q1titRBL6o -> 1q1titRBL6o[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: kUlvghKs-mA -> kUlvghKs-mA[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: ypVBz4uPKcQ -> ypVBz4uPKcQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: t1vNu082-jM -> t1vNu082-jM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: Rlx+bykm0r0 -> Rlx+bykm0r0[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: aJf+j5yntiU -> aJf+j5yntiU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: vuSXe69VILM -> vuSXe69VILM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: RmaJwLtc8rY -> RmaJwLtc8rY[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: -KRzWekV120 -> -KRzWekV120[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: l4fM9K-Lyks -> l4fM9K-Lyks[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 8N2tmT3jmC8 -> 8N2tmT3jmC8[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: tSBxhAPyytQ -> tSBxhAPyytQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: u2T2DiA5hRI -> u2T2DiA5hRI[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: VmW0Tdpy420 -> VmW0Tdpy420[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: zfcxg-ewMK8 -> zfcxg-ewMK8[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: TRO721eVt4g -> TRO721eVt4g[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: bbFueFP+J4k -> bbFueFP+J4k[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: MWiElSNE8j8 -> MWiElSNE8j8[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: QhCbS4X9Rl8 -> QhCbS4X9Rl8[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: +kSrjIVxKFE -> +kSrjIVxKFE[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: H7uZqCoNuWk -> H7uZqCoNuWk[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: YUeqkyT7mEQ -> YUeqkyT7mEQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: LFSPFmGc9Hg -> LFSPFmGc9Hg[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: hEK26Wdny6s -> hEK26Wdny6s[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: nNlUtdDDvZ0 -> nNlUtdDDvZ0[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: GBCh3zCihoU -> GBCh3zCihoU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 1DeUNpRIDDA -> 1DeUNpRIDDA[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: -vnlTPPXPrw -> -vnlTPPXPrw[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: ou16V5hh5sg -> ou16V5hh5sg[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: H6vHS5cidSA -> H6vHS5cidSA[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: VEGu4dixjUg -> VEGu4dixjUg[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: b5u0Jzm8TF8 -> b5u0Jzm8TF8[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: p9tI+yTvx68 -> p9tI+yTvx68[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: w8HVkEeXPv8 -> w8HVkEeXPv8[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: WrdP9Zxx3lQ -> WrdP9Zxx3lQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 6ee9Hd3EWXQ -> 6ee9Hd3EWXQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: qMlfB1ZhMDc -> qMlfB1ZhMDc[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: cxPZ4Wgvdj8 -> cxPZ4Wgvdj8[Graphics5_v1][Graphics5_v1.1][Func]
+[... 3 lines omitted by make_fixture.py ...]
+PS5 NID fallback: mR9j7+SfM34 -> mR9j7+SfM34[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: C4l9fB17t8w -> C4l9fB17t8w[Graphics5_v1][Graphics5_v1.1][Func]
+[... 6 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 6DFuRKT4C9w -> 6DFuRKT4C9w[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 43WJ08sSugE -> 43WJ08sSugE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: QIXCsbipds0 -> QIXCsbipds0[Graphics5_v1][Graphics5_v1.1][Func]
+[... 9 lines omitted by make_fixture.py ...]
+PS5 NID fallback: yS8U2TGCe1A -> yS8U2TGCe1A[Posix_v1][libkernel_v1.1][Func]
+[... 3 lines omitted by make_fixture.py ...]
+PS5 NID fallback: al3JzFI9MQ0 -> al3JzFI9MQ0[LibcInternal_v1][LibcInternal_v1.1][Func]
+PS5 NID fallback: cfwBSQyr5Ys -> cfwBSQyr5Ys[Posix_v1][libkernel_v1.1][Func]
+PS5 NID fallback: NhpspxdjEKU -> NhpspxdjEKU[Posix_v1][libkernel_v1.1][Func]
+[... 4 lines omitted by make_fixture.py ...]
+--- Start module: <game>\sce_module/libc.prx
+[... 30 lines omitted by make_fixture.py ...]
+--- Execute: Main
+[... 3197 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase begin: hash=0x444dcb1ad39517da CFG BuildGraph
+ShaderRecompiler CS phase begin: hash=0x444dcb1ad39517da CFG BuildGraph
+[... 33 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase begin: hash=0x9f62359f2a36eb56 CFG BuildGraph
+[... 12 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase end: hash=0x444dcb1ad39517da CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase end: hash=0x444dcb1ad39517da CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: hash=0x444dcb1ad39517da CFG Structurize
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x6260342b7c01d0fa CFG BuildGraph
+ShaderRecompiler CS phase begin: hash=0x444dcb1ad39517da CFG Structurize
+ShaderRecompiler PS phase begin: hash=0xd6efb75be89c5f19 CFG BuildGraph
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase end: hash=0x9f62359f2a36eb56 CFG BuildGraph blocks=3 loops=0 back_edges=0 elapsed_ms=0
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase begin: hash=0x9f62359f2a36eb56 CFG Structurize
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase end: hash=0x6260342b7c01d0fa CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x6260342b7c01d0fa CFG Structurize
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: hash=0xd6efb75be89c5f19 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: hash=0xd6efb75be89c5f19 CFG Structurize
+ShaderRecompiler CS phase end: hash=0x444dcb1ad39517da CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase begin: hash=0x444dcb1ad39517da IR TranslateProgram
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=3
+ShaderRecompiler CS phase end: hash=0x444dcb1ad39517da CFG Structurize blocks=1 loops=0 elapsed_ms=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase begin: hash=0x444dcb1ad39517da IR TranslateProgram
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: hash=0x9f62359f2a36eb56 CFG Structurize blocks=3 loops=0 elapsed_ms=0
+ShaderRecompiler PS phase end: hash=0xd6efb75be89c5f19 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: hash=0x9f62359f2a36eb56 IR TranslateProgram
+ShaderRecompiler PS phase begin: hash=0xd6efb75be89c5f19 IR TranslateProgram
+ShaderRecompiler VS phase end: hash=0x6260342b7c01d0fa CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: hash=0x6260342b7c01d0fa IR TranslateProgram
+[... 115 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: hash=0xd6efb75be89c5f19 IR TranslateProgram blocks=2 elapsed_ms=0
+[... 12 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase end: hash=0x444dcb1ad39517da IR TranslateProgram blocks=2 elapsed_ms=0
+[... 114 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase end: hash=0x444dcb1ad39517da IR TranslateProgram blocks=2 elapsed_ms=0
+[... 144 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase end: hash=0x6260342b7c01d0fa IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS phase end: hash=0x9f62359f2a36eb56 IR TranslateProgram blocks=4 elapsed_ms=0
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: hash=0xd6efb75be89c5f19 SPIR-V EmitProgram
+ShaderRecompiler CS phase begin: hash=0x444dcb1ad39517da SPIR-V EmitProgram
+ShaderRecompiler CS masked select elimination: selects=5
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase begin: hash=0x444dcb1ad39517da SPIR-V EmitProgram
+[... 49 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x6260342b7c01d0fa SPIR-V EmitProgram
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: hash=0xd6efb75be89c5f19 SPIR-V EmitProgram words=215 wave_size=64 elapsed_ms=0
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase end: hash=0x444dcb1ad39517da SPIR-V EmitProgram words=428 wave_size=64 elapsed_ms=0
+ShaderRecompiler CS phase end: hash=0x444dcb1ad39517da SPIR-V EmitProgram words=619 wave_size=64 elapsed_ms=0
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x788cdfb8e66b19c1 CFG BuildGraph
+ShaderRecompiler PS phase begin: hash=0xe06f33595be6159d CFG BuildGraph
+ShaderRecompiler PS phase begin: hash=0xe06f33595be6159d CFG BuildGraph
+ShaderRecompiler VS phase end: hash=0x788cdfb8e66b19c1 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x788cdfb8e66b19c1 CFG Structurize
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase end: hash=0x6260342b7c01d0fa SPIR-V EmitProgram words=630 wave_size=64 elapsed_ms=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: hash=0xe06f33595be6159d CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase end: hash=0xe06f33595be6159d CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: hash=0xe06f33595be6159d CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler PS phase begin: hash=0xe06f33595be6159d CFG Structurize
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: hash=0x788cdfb8e66b19c1 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: hash=0xe06f33595be6159d CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: hash=0xe06f33595be6159d IR TranslateProgram
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+ShaderRecompiler PS phase end: hash=0xe06f33595be6159d CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: hash=0x788cdfb8e66b19c1 IR TranslateProgram
+ShaderRecompiler PS phase begin: hash=0xe06f33595be6159d IR TranslateProgram
+ShaderRecompiler PS phase end: hash=0xe06f33595be6159d IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler PS phase end: hash=0xe06f33595be6159d IR TranslateProgram blocks=2 elapsed_ms=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=1
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase begin: hash=0x9f62359f2a36eb56 SPIR-V EmitProgram
+[... 12 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: hash=0xe06f33595be6159d SPIR-V EmitProgram
+[... 21 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: hash=0xe06f33595be6159d SPIR-V EmitProgram
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: hash=0xe06f33595be6159d SPIR-V EmitProgram words=838 wave_size=64 elapsed_ms=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS phase end: hash=0x9f62359f2a36eb56 SPIR-V EmitProgram words=1214 wave_size=64 elapsed_ms=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase end: hash=0x788cdfb8e66b19c1 IR TranslateProgram blocks=2 elapsed_ms=0
+[... 15 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: hash=0xe06f33595be6159d SPIR-V EmitProgram words=847 wave_size=64 elapsed_ms=0
+[... 526 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x788cdfb8e66b19c1 SPIR-V EmitProgram
+[... 108 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase end: hash=0x788cdfb8e66b19c1 SPIR-V EmitProgram words=808 wave_size=64 elapsed_ms=0
+[... 2133 lines omitted by make_fixture.py ...]
+Pipeline manifest: 1/2430 modules, 0/1890 pipelines (2251 modules wait for their shaders) at 5.9 s
+[... 1412 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: hash=0x6f2d53928e0d6a05 CFG BuildGraph
+ShaderRecompiler PS phase end: hash=0x6f2d53928e0d6a05 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: hash=0x6f2d53928e0d6a05 CFG Structurize
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler PS phase end: hash=0x6f2d53928e0d6a05 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: hash=0x6f2d53928e0d6a05 IR TranslateProgram
+ShaderRecompiler PS phase begin: hash=0x46cbf50d082f4654 CFG BuildGraph
+ShaderRecompiler PS phase end: hash=0x46cbf50d082f4654 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: hash=0x46cbf50d082f4654 CFG Structurize
+ShaderRecompiler PS phase end: hash=0x6f2d53928e0d6a05 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler PS phase end: hash=0x46cbf50d082f4654 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: hash=0x46cbf50d082f4654 IR TranslateProgram
+ShaderRecompiler PS phase begin: hash=0x46cbf50d082f4654 CFG BuildGraph
+ShaderRecompiler PS phase end: hash=0x46cbf50d082f4654 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler PS phase begin: hash=0xf9b7c05389a58a58 CFG BuildGraph
+ShaderRecompiler PS phase begin: hash=0xdf1cd4b4394b48f4 CFG BuildGraph
+ShaderRecompiler PS phase end: hash=0x46cbf50d082f4654 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 37 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x1e2730797e78783f CFG BuildGraph
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase end: hash=0x1e2730797e78783f CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: hash=0x1e2730797e78783f CFG Structurize
+ShaderRecompiler CS phase begin: hash=0x2fa11a87cd41361b CFG BuildGraph
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: hash=0x1e2730797e78783f CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: hash=0x1e2730797e78783f IR TranslateProgram
+ShaderRecompiler CS phase end: hash=0x2fa11a87cd41361b CFG BuildGraph blocks=4 loops=1 back_edges=1 elapsed_ms=0
+ShaderRecompiler CS phase begin: hash=0x2fa11a87cd41361b CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=5
+ShaderRecompiler CS phase end: hash=0x2fa11a87cd41361b CFG Structurize blocks=5 loops=1 elapsed_ms=0
+ShaderRecompiler CS phase begin: hash=0x2fa11a87cd41361b IR TranslateProgram
+ShaderRecompiler VS phase end: hash=0x1e2730797e78783f IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS phase end: hash=0x2fa11a87cd41361b IR TranslateProgram blocks=6 elapsed_ms=0
+ShaderRecompiler VS phase begin: hash=0x1e2730797e78783f SPIR-V EmitProgram
+ShaderRecompiler VS phase end: hash=0x1e2730797e78783f SPIR-V EmitProgram words=535 wave_size=64 elapsed_ms=0
+ShaderRecompiler CS phase begin: hash=0x9a200c36cc8cd5c8 CFG BuildGraph
+ShaderRecompiler CS phase end: hash=0x9a200c36cc8cd5c8 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: hash=0x9a200c36cc8cd5c8 CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: hash=0x9a200c36cc8cd5c8 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: hash=0x9a200c36cc8cd5c8 IR TranslateProgram
+ShaderRecompiler CS phase begin: hash=0x9a200c36cc8cd5c8 CFG BuildGraph
+ShaderRecompiler CS phase end: hash=0x9a200c36cc8cd5c8 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: hash=0x9a200c36cc8cd5c8 CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: hash=0x9a200c36cc8cd5c8 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS phase end: hash=0x9a200c36cc8cd5c8 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 52 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 29 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 18 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=1
+[... 23 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=1
+[... 53 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 20 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=5
+[... 101 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=5
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=5
+[... 93 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=5
+[... 31 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=5
+[... 192 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=5
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=5
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=2
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 12 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=2
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=3
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=3
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=7
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=7
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 20 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=9
+[... 13 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=9
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=22
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=22
+[... 22 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 27 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 15 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 164 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=25
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=8
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 30 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=58
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=267
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=267
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=267
+[... 50 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=267
+[... 16 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=267
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=267
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=267
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS masked select elimination: selects=267
+[... 452 lines omitted by make_fixture.py ...]
+Loading: <game>\sce_module/libSceNpCppWebApi.prx
+base_vaddr             = 0x0000000920000000
+[... 2 lines omitted by make_fixture.py ...]
+mapped_size            = 0x0000000000f88000
+[... 1657 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x3f6ee54cbaa768a6 CFG BuildGraph
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase end: hash=0x3f6ee54cbaa768a6 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: hash=0x3f6ee54cbaa768a6 CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: hash=0x3f6ee54cbaa768a6 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS embedded vertex fetch plan: detected=1
+ShaderRecompiler VS phase begin: hash=0x3f6ee54cbaa768a6 IR TranslateProgram
+ShaderRecompiler VS phase end: hash=0x3f6ee54cbaa768a6 IR TranslateProgram blocks=2 elapsed_ms=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x3f6ee54cbaa768a6 SPIR-V EmitProgram
+ShaderRecompiler VS phase end: hash=0x3f6ee54cbaa768a6 SPIR-V EmitProgram words=645 wave_size=64 elapsed_ms=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: hash=0x4dca6c60b03659f9 CFG BuildGraph
+ShaderRecompiler VS phase end: hash=0x4dca6c60b03659f9 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: hash=0x4dca6c60b03659f9 CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: hash=0x4dca6c60b03659f9 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+ShaderRecompiler VS phase begin: hash=0x4dca6c60b03659f9 IR TranslateProgram
+ShaderRecompiler VS phase end: hash=0x4dca6c60b03659f9 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler VS phase begin: hash=0x9fc4afa48a42ec28 CFG BuildGraph
+ShaderRecompiler VS phase end: hash=0x9fc4afa48a42ec28 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=4
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=26
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=4
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=4
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=4
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=26
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=26
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=6
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=26
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=6
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=137
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=6
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=3
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=137
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=3
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=1
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=137
+ShaderRecompiler VS masked select elimination: selects=3
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=4
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=1
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=13
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=4
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=11
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=4
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=4
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=4
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=3
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=38
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=3
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=3
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=37
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=5
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=6
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=43
+ShaderRecompiler VS masked select elimination: selects=3
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=43
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=71
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=38
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=23
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=1
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=1
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=5
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=1
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=5
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=3
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=5
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=5
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=4
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=6
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=1
+[... 154 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 13 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=3
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=3
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=7
+[... 14 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=80
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=10
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 13 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=5
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=5
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=3
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=20
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=22
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=3
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=9
+[... 101 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=98
+[... 13 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=141
+[... 71 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=27
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=8
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=31
+[... 4 lines omitted by make_fixture.py ...]
+Pipeline manifest: idle at 6.1 s: 355 modules compiled (1807 ms), 2 compiled already, 1 failed, 2072 waiting for their shaders; 138 pipelines and 240 compute pipelines created (35 ms), 2 created already, 0 failed; 0 records dropped after a fatal error
+[... 47 lines omitted by make_fixture.py ...]
+PS5 NID fallback: zr094EQ39Ww -> zr094EQ39Ww[libc_v1][libc_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: zr094EQ39Ww -> zr094EQ39Ww[libc_v1][libc_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: zr094EQ39Ww -> zr094EQ39Ww[libc_v1][libc_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: nM5XqdeXFPw -> nM5XqdeXFPw[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: IKQimvG9Wqs -> IKQimvG9Wqs[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: a+W7HHlwpBs -> a+W7HHlwpBs[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 9KUZFjI1IxA -> 9KUZFjI1IxA[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 5JmzZt8twAo -> 5JmzZt8twAo[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: zQtLRTqceMY -> zQtLRTqceMY[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 0lLK8+kDqmE -> 0lLK8+kDqmE[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: WTtYf+cNnXI -> WTtYf+cNnXI[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: -NxEk7XLkDY -> -NxEk7XLkDY[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: urOpESTBZmo -> urOpESTBZmo[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: zTwZdI8AZ5Y -> zTwZdI8AZ5Y[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: R7FDWtcN6f8 -> R7FDWtcN6f8[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: oH8aBmLU+fc -> oH8aBmLU+fc[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 4zrm6VrgIAw -> 4zrm6VrgIAw[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: bAM9Qwofus0 -> bAM9Qwofus0[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: cG1VE2HMl6c -> cG1VE2HMl6c[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: UeuWT+yNdCQ -> UeuWT+yNdCQ[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: ERuf9y0DY84 -> ERuf9y0DY84[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 3xUXnmUkXfo -> 3xUXnmUkXfo[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: qBMjqyBn3OM -> qBMjqyBn3OM[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: OJPTonqdg0I -> OJPTonqdg0I[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: cn9svYGWKDQ -> cn9svYGWKDQ[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: b9V6fmppLXY -> b9V6fmppLXY[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: EUH+EmT-v9E -> EUH+EmT-v9E[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: epJ6x2LV0kU -> epJ6x2LV0kU[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: XlWbvieLj2M -> XlWbvieLj2M[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: IlsmvBtMkak -> IlsmvBtMkak[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: SHtAad20YYM -> SHtAad20YYM[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: DIxvoy7Ngvk -> DIxvoy7Ngvk[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: qSmqLXXCPas -> qSmqLXXCPas[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: HwDt5lD9Bfo -> HwDt5lD9Bfo[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: S5JxQnoGF3E -> S5JxQnoGF3E[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: L1KAkYWml-M -> L1KAkYWml-M[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: ONT8As5R1ug -> ONT8As5R1ug[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 3qrge7L-AU4 -> 3qrge7L-AU4[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: sOmU4vnx3s0 -> sOmU4vnx3s0[Json2_v1][Json2_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: rQGJeNjOuUk -> rQGJeNjOuUk[Json2_v1][Json2_v1.1][Func]
+[... 12 lines omitted by make_fixture.py ...]
+PS5 NID fallback: OJjm-QOIHlI -> OJjm-QOIHlI[libc_v1][libc_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: Vla-Z+eXlxo -> Vla-Z+eXlxo[libc_v1][libc_v1.1][Func]
+[... 3 lines omitted by make_fixture.py ...]
+PS5 NID fallback: hcuQgD53UxM -> hcuQgD53UxM[libc_v1][libc_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: gigoVHZvVPE -> gigoVHZvVPE[libc_v1][libc_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: mfHdJTIvhuo -> mfHdJTIvhuo[libc_v1][libc_v1.1][Func]
+[... 3 lines omitted by make_fixture.py ...]
+PS5 NID fallback: -hn1tcVHq5Q -> -hn1tcVHq5Q[libc_v1][libc_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: W6SiVSiCDtI -> W6SiVSiCDtI[libc_v1][libc_v1.1][Func]
+[... 4 lines omitted by make_fixture.py ...]
+PS5 NID fallback: z+P+xCnWLBk -> z+P+xCnWLBk[libc_v1][libc_v1.1][Func]
+[... 11 lines omitted by make_fixture.py ...]
+PS5 NID fallback: kHg45qPC6f0 -> kHg45qPC6f0[libc_v1][libc_v1.1][Func]
+[... 19 lines omitted by make_fixture.py ...]
+--- Start module: <game>\sce_module/libSceNpCppWebApi.prx
+[... 1174 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=27
+[... 12 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=27
+[... 89 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=27
+[... 22 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=23
+[... 188 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=27
+[... 506 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=139
+[... 403 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=139
+[... 114 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=139
+[... 1104 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS masked select elimination: selects=23
+[... 17019 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS phase begin: hash=0xc830099ead0b9d53 CFG BuildGraph
+ShaderRecompiler LS phase end: hash=0xc830099ead0b9d53 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler LS phase begin: hash=0xc830099ead0b9d53 CFG Structurize
+ShaderRecompiler LS structured CFG success: blocks=1
+ShaderRecompiler LS phase end: hash=0xc830099ead0b9d53 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler LS embedded vertex fetch plan: detected=7
+ShaderRecompiler LS phase begin: hash=0xc830099ead0b9d53 IR TranslateProgram
+ShaderRecompiler LS phase end: hash=0xc830099ead0b9d53 IR TranslateProgram blocks=2 elapsed_ms=0
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS phase begin: hash=0xc830099ead0b9d53 CFG BuildGraph
+ShaderRecompiler LS phase end: hash=0xc830099ead0b9d53 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler LS phase begin: hash=0xc830099ead0b9d53 CFG Structurize
+ShaderRecompiler LS structured CFG success: blocks=1
+ShaderRecompiler LS phase end: hash=0xc830099ead0b9d53 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler LS embedded vertex fetch plan: detected=7
+ShaderRecompiler LS phase begin: hash=0xc830099ead0b9d53 IR TranslateProgram
+ShaderRecompiler LS phase end: hash=0xc830099ead0b9d53 IR TranslateProgram blocks=2 elapsed_ms=0
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS masked select elimination: selects=43
+ShaderRecompiler LS phase begin: hash=0xc830099ead0b9d53 SPIR-V EmitProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS masked select elimination: selects=43
+ShaderRecompiler LS phase begin: hash=0xc830099ead0b9d53 SPIR-V EmitProgram
+ShaderRecompiler LS phase end: hash=0xc830099ead0b9d53 SPIR-V EmitProgram words=2743 wave_size=64 elapsed_ms=0
+ShaderRecompiler LS phase end: hash=0xc830099ead0b9d53 SPIR-V EmitProgram words=2743 wave_size=64 elapsed_ms=0
+[... 279 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS phase begin: hash=0xda65dd0ffca8e7cc CFG BuildGraph
+ShaderRecompiler LS phase end: hash=0xda65dd0ffca8e7cc CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler LS phase begin: hash=0xda65dd0ffca8e7cc CFG Structurize
+ShaderRecompiler LS structured CFG success: blocks=1
+ShaderRecompiler LS phase end: hash=0xda65dd0ffca8e7cc CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler LS embedded vertex fetch plan: detected=8
+ShaderRecompiler LS phase begin: hash=0xda65dd0ffca8e7cc IR TranslateProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS phase end: hash=0xda65dd0ffca8e7cc IR TranslateProgram blocks=2 elapsed_ms=0
+[... 19 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS masked select elimination: selects=48
+ShaderRecompiler LS phase begin: hash=0xda65dd0ffca8e7cc SPIR-V EmitProgram
+ShaderRecompiler LS phase end: hash=0xda65dd0ffca8e7cc SPIR-V EmitProgram words=3050 wave_size=64 elapsed_ms=0
+[... 2247 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS phase begin: hash=0x3cbd42fff1b87799 CFG BuildGraph
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS phase end: hash=0x3cbd42fff1b87799 CFG BuildGraph blocks=3 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler LS phase begin: hash=0x3cbd42fff1b87799 CFG Structurize
+ShaderRecompiler LS structured CFG success: blocks=3
+ShaderRecompiler LS phase end: hash=0x3cbd42fff1b87799 CFG Structurize blocks=3 loops=0 elapsed_ms=0
+ShaderRecompiler LS embedded vertex fetch plan: detected=4
+ShaderRecompiler LS phase begin: hash=0x3cbd42fff1b87799 IR TranslateProgram
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS phase end: hash=0x3cbd42fff1b87799 IR TranslateProgram blocks=4 elapsed_ms=0
+[... 26 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS masked select elimination: selects=48
+ShaderRecompiler LS phase begin: hash=0x3cbd42fff1b87799 SPIR-V EmitProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler LS phase end: hash=0x3cbd42fff1b87799 SPIR-V EmitProgram words=7588 wave_size=64 elapsed_ms=0
+[... 570 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=5 reductions=0
+[... 42 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=2 reductions=0
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=2 reductions=0
+[... 4574 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 356 lines omitted by make_fixture.py ...]
+Unresolved import stub called [0]: patch_vaddr=0x0000000903cde3a8 jmprela_index=922 symbol=Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func] type=Func bind=Global program=<game>\eboot.bin
+Unresolved import stub called [1]: patch_vaddr=0x0000000903cde3a8 jmprela_index=922 symbol=Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func] type=Func bind=Global program=<game>\eboot.bin
+Unresolved import stub called [2]: patch_vaddr=0x0000000903cde3a8 jmprela_index=922 symbol=Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func] type=Func bind=Global program=<game>\eboot.bin
+[... 208 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=16 reductions=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=13 reductions=0
+ShaderRecompiler VS read-lane elimination: reads=16 reductions=0
+[... 27 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=16 reductions=0
+[... 1000 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=23 reductions=0
+[... 26 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=14 reductions=0
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=14 reductions=0
+[... 14 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS read-lane elimination: reads=14 reductions=0
+[... 547 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=176
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=159
+[... 25 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 18 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=33
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=32
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 16 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=129
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=159
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=152
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=16
+[... 33 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=23
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=2
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=13
+[... 31 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=6
+[... 18 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=11
+[... 27 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=35
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=31
+[... 41 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 16 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=180
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=153
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=5
+[... 19 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=153
+[... 15 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS masked select elimination: selects=36
+[... 1987 lines omitted by make_fixture.py ...]
+Pipeline manifest: 1247/2430 modules, 551/1890 pipelines (322 modules wait for their shaders) at 8.1 s
+[... 215 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=5 reductions=0
+[... 2922 lines omitted by make_fixture.py ...]
+[HACK] sampler border color word changed: first at ResourceTracking::GetHandle, shader=0x5298508a1c4defe7, where=0xc8, pc=0x000000c8: the S# border color word is not a runtime value; its lane-dependent bits were dropped
+[... 867 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=2 reductions=0
+[... 157 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=6 reductions=0
+[... 77 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=14 reductions=0
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=3 reductions=0
+[... 15 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=14 reductions=0
+[... 328 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=7 reductions=0
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=7 reductions=0
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=7 reductions=0
+[... 491 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=4 reductions=0
+[... 364 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=6 reductions=0
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=3 reductions=0
+[... 18 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=6 reductions=0
+[... 4351 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=19 reductions=0
+[... 21 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS read-lane elimination: reads=21 reductions=0
+[... 129 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES phase begin: hash=0xfbaa99f31248258d CFG BuildGraph
+ShaderRecompiler TES phase end: hash=0xfbaa99f31248258d CFG BuildGraph blocks=9 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0xfbaa99f31248258d CFG Structurize
+ShaderRecompiler TES structured CFG success: blocks=11
+ShaderRecompiler TES phase end: hash=0xfbaa99f31248258d CFG Structurize blocks=11 loops=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0xfbaa99f31248258d IR TranslateProgram
+ShaderRecompiler TES phase end: hash=0xfbaa99f31248258d IR TranslateProgram blocks=12 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0xef3ebeeba6c78ba1 CFG BuildGraph
+ShaderRecompiler TES phase begin: hash=0x9ff8ad68ca5a60ee CFG BuildGraph
+ShaderRecompiler TES phase end: hash=0xef3ebeeba6c78ba1 CFG BuildGraph blocks=9 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0xef3ebeeba6c78ba1 CFG Structurize
+ShaderRecompiler TES structured CFG success: blocks=11
+ShaderRecompiler TES phase end: hash=0xef3ebeeba6c78ba1 CFG Structurize blocks=11 loops=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0xef3ebeeba6c78ba1 IR TranslateProgram
+ShaderRecompiler TES phase end: hash=0x9ff8ad68ca5a60ee CFG BuildGraph blocks=9 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0x9ff8ad68ca5a60ee CFG Structurize
+ShaderRecompiler TES structured CFG success: blocks=11
+ShaderRecompiler TES phase end: hash=0x9ff8ad68ca5a60ee CFG Structurize blocks=11 loops=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0x9ff8ad68ca5a60ee IR TranslateProgram
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES phase end: hash=0xef3ebeeba6c78ba1 IR TranslateProgram blocks=12 elapsed_ms=0
+ShaderRecompiler TES phase end: hash=0x9ff8ad68ca5a60ee IR TranslateProgram blocks=12 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0x9ff8ad68ca5a60ee CFG BuildGraph
+ShaderRecompiler TES phase end: hash=0x9ff8ad68ca5a60ee CFG BuildGraph blocks=9 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0x9ff8ad68ca5a60ee CFG Structurize
+ShaderRecompiler TES structured CFG success: blocks=11
+ShaderRecompiler TES phase end: hash=0x9ff8ad68ca5a60ee CFG Structurize blocks=11 loops=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0x9ff8ad68ca5a60ee IR TranslateProgram
+ShaderRecompiler TES phase end: hash=0x9ff8ad68ca5a60ee IR TranslateProgram blocks=12 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0xe1da7ba622a6b03e CFG BuildGraph
+ShaderRecompiler TES phase end: hash=0xe1da7ba622a6b03e CFG BuildGraph blocks=9 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0xe1da7ba622a6b03e CFG Structurize
+ShaderRecompiler TES structured CFG success: blocks=11
+ShaderRecompiler TES phase end: hash=0xe1da7ba622a6b03e CFG Structurize blocks=11 loops=0 elapsed_ms=0
+ShaderRecompiler TES phase begin: hash=0xe1da7ba622a6b03e IR TranslateProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES phase end: hash=0xe1da7ba622a6b03e IR TranslateProgram blocks=12 elapsed_ms=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES masked select elimination: selects=20
+ShaderRecompiler TES phase begin: hash=0xfbaa99f31248258d SPIR-V EmitProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES phase end: hash=0xfbaa99f31248258d SPIR-V EmitProgram words=11078 wave_size=64 elapsed_ms=0
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES masked select elimination: selects=20
+ShaderRecompiler TES masked select elimination: selects=20
+ShaderRecompiler TES phase begin: hash=0x9ff8ad68ca5a60ee SPIR-V EmitProgram
+ShaderRecompiler TES phase begin: hash=0xef3ebeeba6c78ba1 SPIR-V EmitProgram
+ShaderRecompiler TES phase end: hash=0x9ff8ad68ca5a60ee SPIR-V EmitProgram words=11070 wave_size=64 elapsed_ms=0
+ShaderRecompiler TES phase end: hash=0xef3ebeeba6c78ba1 SPIR-V EmitProgram words=11253 wave_size=64 elapsed_ms=0
+ShaderRecompiler TES masked select elimination: selects=20
+ShaderRecompiler TES phase begin: hash=0x9ff8ad68ca5a60ee SPIR-V EmitProgram
+ShaderRecompiler TES phase end: hash=0x9ff8ad68ca5a60ee SPIR-V EmitProgram words=11082 wave_size=64 elapsed_ms=0
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES masked select elimination: selects=20
+ShaderRecompiler TES phase begin: hash=0xe1da7ba622a6b03e SPIR-V EmitProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES phase end: hash=0xe1da7ba622a6b03e SPIR-V EmitProgram words=11253 wave_size=64 elapsed_ms=0
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES structured CFG success: blocks=11
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler TES structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 CFG BuildGraph
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 CFG BuildGraph blocks=6 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 CFG Structurize
+ShaderRecompiler HS structured CFG success: blocks=7
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 CFG Structurize blocks=7 loops=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 IR TranslateProgram
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 CFG BuildGraph
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 CFG BuildGraph blocks=6 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 CFG Structurize
+ShaderRecompiler HS structured CFG success: blocks=7
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 CFG Structurize blocks=7 loops=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 IR TranslateProgram
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 IR TranslateProgram blocks=8 elapsed_ms=0
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 IR TranslateProgram blocks=8 elapsed_ms=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 CFG BuildGraph
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 CFG BuildGraph blocks=6 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 CFG Structurize
+ShaderRecompiler HS structured CFG success: blocks=7
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 CFG Structurize blocks=7 loops=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 IR TranslateProgram
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 IR TranslateProgram blocks=8 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9bc9f0302beb3d06 CFG BuildGraph
+ShaderRecompiler HS phase end: hash=0x9bc9f0302beb3d06 CFG BuildGraph blocks=6 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9bc9f0302beb3d06 CFG Structurize
+ShaderRecompiler HS structured CFG success: blocks=7
+ShaderRecompiler HS phase end: hash=0x9bc9f0302beb3d06 CFG Structurize blocks=7 loops=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x9bc9f0302beb3d06 IR TranslateProgram
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase end: hash=0x9bc9f0302beb3d06 IR TranslateProgram blocks=8 elapsed_ms=0
+ShaderRecompiler TES masked select elimination: selects=17
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS masked select elimination: selects=44
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 SPIR-V EmitProgram
+ShaderRecompiler HS masked select elimination: selects=44
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 SPIR-V EmitProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 SPIR-V EmitProgram words=19104 wave_size=64 elapsed_ms=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase begin: hash=0x24b4b2bccdd9ca26 CFG BuildGraph
+ShaderRecompiler HS phase end: hash=0x24b4b2bccdd9ca26 CFG BuildGraph blocks=4 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x24b4b2bccdd9ca26 CFG Structurize
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 SPIR-V EmitProgram words=19104 wave_size=64 elapsed_ms=1
+ShaderRecompiler HS structured CFG success: blocks=5
+ShaderRecompiler HS phase end: hash=0x24b4b2bccdd9ca26 CFG Structurize blocks=5 loops=0 elapsed_ms=0
+ShaderRecompiler HS phase begin: hash=0x24b4b2bccdd9ca26 IR TranslateProgram
+ShaderRecompiler HS phase end: hash=0x24b4b2bccdd9ca26 IR TranslateProgram blocks=6 elapsed_ms=0
+ShaderRecompiler HS masked select elimination: selects=36
+ShaderRecompiler HS phase begin: hash=0x9bc9f0302beb3d06 SPIR-V EmitProgram
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase end: hash=0x9bc9f0302beb3d06 SPIR-V EmitProgram words=19291 wave_size=64 elapsed_ms=1
+ShaderRecompiler HS masked select elimination: selects=44
+ShaderRecompiler HS phase begin: hash=0x9c9883049a0566d5 SPIR-V EmitProgram
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase end: hash=0x9c9883049a0566d5 SPIR-V EmitProgram words=19104 wave_size=64 elapsed_ms=2
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS masked select elimination: selects=158
+ShaderRecompiler HS phase begin: hash=0x24b4b2bccdd9ca26 SPIR-V EmitProgram
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler HS phase end: hash=0x24b4b2bccdd9ca26 SPIR-V EmitProgram words=13825 wave_size=64 elapsed_ms=1
+[... 54 lines omitted by make_fixture.py ...]
+Pipeline manifest: 2015/2430 modules, 1622/1890 pipelines (322 modules wait for their shaders) at 10.1 s
+[... 399 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=58 reductions=0
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=58 reductions=0
+ShaderRecompiler CS read-lane elimination: reads=58 reductions=0
+[... 34 lines omitted by make_fixture.py ...]
+ShaderRecompiler hash=0x0b41af19bddf132c native ray tracing alpha test: per lane
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=226 reductions=0
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=226 reductions=0
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler hash=0x0b41af19bddf132c native ray tracing alpha test: per lane
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler hash=0x0b41af19bddf132c native ray tracing alpha test: per lane
+[... 69 lines omitted by make_fixture.py ...]
+ShaderRecompiler hash=0x48d704640ab9fb40 native ray tracing alpha test: per lane
+[... 25 lines omitted by make_fixture.py ...]
+ShaderRecompiler hash=0x48d704640ab9fb40 native ray tracing alpha test: per lane
+[... 78 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=56 reductions=0
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=56 reductions=0
+[... 26 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=56 reductions=0
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=6 reductions=0
+[... 24 lines omitted by make_fixture.py ...]
+ShaderRecompiler hash=0x6aeb221de7ff018e native ray tracing alpha test: per lane
+[... 51 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=6 reductions=0
+ShaderRecompiler CS read-lane elimination: reads=6 reductions=0
+[... 49 lines omitted by make_fixture.py ...]
+ShaderRecompiler hash=0x6aeb221de7ff018e native ray tracing alpha test: per lane
+ShaderRecompiler hash=0x6aeb221de7ff018e native ray tracing alpha test: per lane
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=6 reductions=0
+[... 31 lines omitted by make_fixture.py ...]
+ShaderRecompiler hash=0x6aeb221de7ff018e native ray tracing alpha test: per lane
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=6 reductions=0
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=226 reductions=0
+[... 18 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=226 reductions=0
+[... 77 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=6 reductions=0
+ShaderRecompiler CS read-lane elimination: reads=6 reductions=0
+[... 13 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=6 reductions=0
+[... 131 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 19 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 37 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 17 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 65 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 25 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 18 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 23 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 20 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 88 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 55 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 14 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS read-lane elimination: reads=24 reductions=0
+[... 223 lines omitted by make_fixture.py ...]
+Pipeline manifest: idle at 10.8 s: 2104 modules compiled (34367 ms), 3 compiled already, 1 failed, 322 waiting for their shaders; 1604 pipelines and 346 compute pipelines created (229 ms), 21 created already, 0 failed; 0 records dropped after a fatal error
+[... 206636 lines omitted by make_fixture.py ...]
+Vulkan pipeline cache: saved 107.47 MB to _PipelineCache\PPSA04263.bin
+[... 18639 lines omitted by make_fixture.py ...]
+Warning: format Bc5UnormBlock does not support storage access; block-compressed textures written by the guest will not render.
+[... 5321 lines omitted by make_fixture.py ...]
+Accessed non-GPU cached memory at 0x0000000af85b4000
+[... 106012 lines omitted by make_fixture.py ...]
+Accessed non-GPU cached memory at 0x00000002003c0000
+Accessed non-GPU cached memory at 0x00000002003c4000
+Accessed non-GPU cached memory at 0x00000002003c8000
+Accessed non-GPU cached memory at 0x00000002003cc000
+Accessed non-GPU cached memory at 0x00000002003d0000
+Accessed non-GPU cached memory at 0x00000002003d4000
+Accessed non-GPU cached memory at 0x00000002003d8000
+Accessed non-GPU cached memory at 0x00000002003dc000
+Accessed non-GPU cached memory at 0x00000002003e0000
+Accessed non-GPU cached memory at 0x00000002003e4000
+Accessed non-GPU cached memory at 0x00000002003e8000
+Accessed non-GPU cached memory at 0x00000002003ec000
+Accessed non-GPU cached memory at 0x00000002003f0000
+Accessed non-GPU cached memory at 0x00000002003f4000
+Accessed non-GPU cached memory at 0x00000002003f8000
+[... 14193 lines omitted by make_fixture.py ...]
+Accessed non-GPU cached memory at 0x000000030e698000
+Accessed non-GPU cached memory at 0x0000000346698000
+[... 4937 lines omitted by make_fixture.py ...]
+Accessed non-GPU cached memory at 0x000000033d6c8000
+Accessed non-GPU cached memory at 0x00000003bca00000
+Accessed non-GPU cached memory at 0x00000003bbea8000
+Accessed non-GPU cached memory at 0x00000003bc974000
+[... 1915 lines omitted by make_fixture.py ...]
+Accessed non-GPU cached memory at 0x00000004f6b00000
+Accessed non-GPU cached memory at 0x00000008f6210000
+Accessed non-GPU cached memory at 0x0000000200168000
+Accessed non-GPU cached memory at 0x0000000afe10c000
+Accessed non-GPU cached memory at 0x00000003bca00000
+Accessed non-GPU cached memory at 0x000000037e10c000
+Accessed non-GPU cached memory at 0x000000033c698000
+Accessed non-GPU cached memory at 0x000000033d4d4000
+Accessed non-GPU cached memory at 0x00000006fa10c000
+Accessed non-GPU cached memory at 0x00000006fe10c000
+Accessed non-GPU cached memory at 0x00000004e8b18000
+Accessed non-GPU cached memory at 0x00000004ec918000
+Accessed non-GPU cached memory at 0x00000004eed58000
+Accessed non-GPU cached memory at 0x00000008eff0c000
+Accessed non-GPU cached memory at 0x000000020016c000
+Accessed non-GPU cached memory at 0x00000004ee7d8000
+Accessed non-GPU cached memory at 0x00000003bbea8000
+Accessed non-GPU cached memory at 0x000000033b1f0000
+[... 119250 lines omitted by make_fixture.py ...]
+Window 3 lost keyboard focus
+[... 196737 lines omitted by make_fixture.py ...]
+Window 3 gained keyboard focus
+[... 1793446 lines omitted by make_fixture.py ...]
+Vulkan pipeline cache: saved 107.48 MB to _PipelineCache\PPSA04263.bin
+[... 44674 lines omitted by make_fixture.py ...]
+Pipeline manifest: wrote _PipelineCache\PPSA04263_01.011.001.kpm (2430 modules, 1891 pipelines, 830.6 KB; 0 modules and 1 pipelines new in this session)
+[... 267190 lines omitted by make_fixture.py ...]
+Window 3 lost keyboard focus
+[... 96649 lines omitted by make_fixture.py ...]
+Window 3 gained keyboard focus
+[... 15906 lines omitted by make_fixture.py ...]
+Window 3 lost keyboard focus
+[... 29222 lines omitted by make_fixture.py ...]
+Window 3 gained keyboard focus
+[... 17069 lines omitted by make_fixture.py ...]
+Window 3 exposed
+[... 27679 lines omitted by make_fixture.py ...]
+Window 3 lost keyboard focus
+[... 131018 lines omitted by make_fixture.py ...]
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d40658
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d40658
+	 data = 0x0000000000020f0e
+	 cmd            = 0x0000000242fa0e00
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023e740080
+	 size_in_dwords = 132
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9c858
+	 data = 0x0000000000020f0f
+	 cmd            = 0x0000000242d40680
+	 arg1           = 0x0000000000000002
+	 target         = 0x00000002403b0080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9dfd8
+	 data = 0x0000000000020f10
+	 cmd            = 0x0000000242d9c880
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023e4c0080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9e058
+	 data = 0x0000000000020f11
+	 cmd            = 0x0000000242d9e000
+	 arg1           = 0x0000000000000002
+	 target         = 0x0000000240220080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9c8d8
+	 data = 0x0000000000020f12
+	 cmd            = 0x0000000242d9e080
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023fe60080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242fa0e58
+	 data = 0x0000000000020f13
+	 cmd            = 0x0000000242d9c900
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f8c0080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9e0d8
+	 data = 0x0000000000020f14
+	 cmd            = 0x0000000242fa0e80
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f2d0080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242fa0ed8
+	 data = 0x0000000000020f15
+	 cmd            = 0x0000000242d9e100
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023dfc0080
+	 size_in_dwords = 2518
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 user_id = 1000
+	 user_id = 1000
+Window 3 gained keyboard focus
+Mouse entered window 3
+Mouse motion: time = 190.6211, , [1479, 1367], (0, 0)
+Window 3 lost keyboard focus
+Window 3 closed
+Event: quit
+	 user_id = 1000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d406d8
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d406d8
+	 data = 0x0000000000020f16
+	 cmd            = 0x0000000242fa0f00
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f5f0080
+	 size_in_dwords = 132
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9e158
+	 data = 0x0000000000020f17
+	 cmd            = 0x0000000242d40700
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023e010080
+	 size_in_dwords = 1833
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d40758
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d40758
+	 data = 0x0000000000020f18
+	 cmd            = 0x0000000242d9e180
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023ea10080
+	 size_in_dwords = 132
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9c958
+	 data = 0x0000000000020f19
+	 cmd            = 0x0000000242d40780
+	 arg1           = 0x0000000000000002
+	 target         = 0x0000000240720080
+	 size_in_dwords = 2867
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 user_id = 1000
+	 user_id = 1000
+	 instance = 0x00000016, input = 0x000000020fef1a10, input_size = 0x00000000000003c0, output = 0x0000000204c4ab20, output_size = 0x0000000000002400
+	 instance = 0x00000017, input = 0x000000020fea0150, input_size = 0x00000000000003c0, output = 0x0000000204c41710, output_size = 0x0000000000002400
+	 user_id = 1000
+	 user_id = 1000
+	 user_id = 1000
+	 user_id = 1000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d407d8
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d407d8
+	 data = 0x0000000000020f1a
+	 cmd            = 0x0000000242d9c980
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023fbe0080
+	 size_in_dwords = 132
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9e1d8
+	 data = 0x0000000000020f1b
+	 cmd            = 0x0000000242d40800
+	 arg1           = 0x0000000000000002
+	 target         = 0x00000002406d0080
+	 size_in_dwords = 4029
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d40858
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d40858
+	 data = 0x0000000000020f1c
+	 cmd            = 0x0000000242d9e200
+	 arg1           = 0x0000000000000002
+	 target         = 0x00000002400e0080
+	 size_in_dwords = 124
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242fa0f58
+	 data = 0x0000000000020f1d
+	 cmd            = 0x0000000242d40880
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023e2e0080
+	 size_in_dwords = 4190
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d408d8
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d408d8
+	 data = 0x0000000000020f1e
+	 cmd            = 0x0000000242fa0f80
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f910080
+	 size_in_dwords = 484
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9c9d8
+	 data = 0x0000000000020f1f
+	 cmd            = 0x0000000242d40900
+	 arg1           = 0x0000000000000002
+	 target         = 0x0000000240630080
+	 size_in_dwords = 8884
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9ca58
+	 data = 0x0000000000020f20
+	 cmd            = 0x0000000242d9ca00
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023fb40080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242fa0fd8
+	 data = 0x0000000000020f21
+	 cmd            = 0x0000000242d9ca80
+	 arg1           = 0x0000000000000002
+	 target         = 0x00000002408b0080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d40958
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d40958
+	 data = 0x0000000000020f22
+	 cmd            = 0x0000000242fa1000
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f7d0080
+	 size_in_dwords = 60
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242d9cad8
+	 data = 0x0000000000020f23
+	 cmd            = 0x0000000242d40980
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023ed30080
+	 size_in_dwords = 1646
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242fa1058
+	 data = 0x0000000000020f24
+	 cmd            = 0x0000000242d9cb00
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f640080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242fa10d8
+	 data = 0x0000000000020f25
+	 cmd            = 0x0000000242fa1080
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023dc50080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242fa1158
+	 data = 0x0000000000020f26
+	 cmd            = 0x0000000242fa1100
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023eb00080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x0000000242fa11d8
+	 data = 0x0000000000020f27
+	 cmd            = 0x0000000242fa1180
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023ea60080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 cmd  = 0x000000023e880158
+	 data = 0x0000000000020f28
+	 cmd            = 0x0000000242fa1200
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023e880080
+	 size_in_dwords = 62
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x0000000000011140
+	 user_id = 1000
+	 user_id = 1000
+	 user_id = 1000
+	 user_id = 1000

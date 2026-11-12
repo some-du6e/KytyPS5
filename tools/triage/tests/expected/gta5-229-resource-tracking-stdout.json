@@ -1,0 +1,29 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/229",
+ "outcome": "crash",
+ "primary_category": "SHADER_RESOURCE_TRACKING",
+ "primary_rule": "shader-resource-tracking",
+ "crash_site": "ResourceTracking.cpp:168",
+ "top_rule": "shader-resource-tracking",
+ "top_fix_area": "src/graphics/shader/recompiler/ir/passes/ResourceTracking.cpp",
+ "fatal_count": 1,
+ "title_id": "PPSA04264",
+ "build_label": "Official build KytyPS5-2026-09-20-ba55ba5",
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [
+  "BYIZGKm6bO4[NpUtility_v1][NpUtility_v1.1][Func]",
+  "Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]",
+  "hqzi1IHdQQQ[NpUtility_v1][NpUtility_v1.1][Func]",
+  "kvdMF48mB3Y[NpUtility_v1][NpUtility_v1.1][Func]",
+  "pLr1fEQS1z8[NpUtility_v1][NpUtility_v1.1][Func]"
+ ],
+ "srt_hashes": [
+  "0x6a53456e7ef5d1b0"
+ ],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

@@ -1,0 +1,12 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/548 body by CatchMeZZo at 2026-09-09T20:00:40Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 7
+
+WIN11
+Game: Grand.Theft.Auto.V.PPSA04263.EUR.v01.010.002-PS5
+
+Shaders: VS 36 | PS 48 | CS 7 | GS 0
+Shaders: VS 37 | PS 48 | CS 7 | GS 0
+--- Build ---
+Official build KytyPS5-2026-09-09-0b4e78c
+--- Error ---
+shader resource tracking: hash=0x5e3e42fe237d3e16 stage=compute pc=0x0000093c GetBufferResource dword 0 is not a valid runtime value in D:\a\KytyPS5\KytyPS5\src\graphics\shader\recompiler\ir\passes\ResourceTracking.cpp:167

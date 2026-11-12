@@ -1,0 +1,46 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/1476 body by HenriqueBicudo at 2026-10-13T13:26:48Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 3
+
+### Environment
+- **Build:** Official build KytyPS5-2026-10-12-df5b9b9
+- **Game:** ASTRO's PLAYROOM (PPSA01325), contentVersion 01.905.000
+- **CPU:** AMD Ryzen 5 3600 (AMD CPU patch enabled)
+- **GPU:** NVIDIA GeForce RTX 4060 Ti, latest driver
+- **RAM:** 16 GB
+- **OS:** Windows
+
+### Symptom
+The game boots, plays the intro video, then crashes while loading the hub:
+
+```
+Not implemented (result != vk::Result::eSuccess) in src\graphics\host_gpu\renderer\masterSemaphore.cpp:53
+```
+
+- The crash point varies between runs (somewhere between PS 55 and PS 80 shaders compiled).
+- Windows logs `nvlddmkm` Event ID 153 (GPU reset / TDR) at the time of each crash, so this is a real `VK_ERROR_DEVICE_LOST`.
+- Raising `TdrDelay`/`TdrDdiDelay` doesn't help. Changing shader optimization, accurate texture sync, present mode or disabling implicit Vulkan layers doesn't help either.
+- Build `5b54137` (2026-09-16) fails earlier with `unsupported MIMG opcode 0xe6` in ShaderCFG.cpp, so I can't test an older build.
+
+### Root cause (Vulkan validation)
+With Vulkan validation enabled (LunarG SDK installed), the emulator stops at:
+
+```
+vkCmdDrawIndexed(): the sampled image descriptor [Set 0, Binding 80, Index 0, variable "image_24"]
+has VkImageView with format of VK_FORMAT_R32_SFLOAT which doesn't support
+VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT.
+VUID-vkCmdDrawIndexed-None-06479
+```
+
+NVIDIA doesn't expose `SAMPLED_IMAGE_DEPTH_COMPARISON` for `R32_SFLOAT` (AMD does, which is probably why this doesn't show up on AMD GPUs). Using a comparison sampler on it is undefined behavior and hangs the GPU here.
+
+### Where it seems to happen (from reading the source at df5b9b9)
+In `src/graphics/host_gpu/renderer/pipeline/descriptors.cpp`:
+
+1. For a `k32Float` texture with `resource.depth_compare`, `pixel_format` is correctly switched to `eD32Sfloat` via `FindGuestDepthFormatPolicy` (~line 583).
+2. But `TextureCache::FindImage` (non-exact format) can return an **existing color `R32_SFLOAT` image** at the same address. This could be a color render target the game wrote depth into, or the destination of `CopyDepthToColor`.
+3. That image isn't `IsDepth()`, so it takes the color branch (`SelectSampledColorView`, ~line 655), and it ends up bound as an `R32_SFLOAT` view with a sampler that has `compareEnable = VK_TRUE` (`samplerCache.cpp:133`).
+
+### Possible fix
+When `depth_compare` is set and the resolved image is a color format without `SAMPLED_IMAGE_DEPTH_COMPARISON_BIT` on the host, bind a `D32_SFLOAT` image instead. For example, a shadow D32 copy of the R32 image via `vkCmdCopyImage` (color→depth copies are available here through `VK_KHR_maintenance8`; the log reports `Vulkan depth/color copy support: true`).
+
+yuzu hit the same problem and fixed it by treating R32F textures sampled with depth compare as Z32F surfaces: https://git.openpunk.com/OpenPunk/yuzu/commit/b0aa8ad73625941fe08b2d9df36e8319bb958dd0

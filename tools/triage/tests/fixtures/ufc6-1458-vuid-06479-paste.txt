@@ -1,0 +1,37 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/1458 body by Woesch-Nich at 2026-10-12T16:18:38Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 1
+
+**Game:** EA SPORTS UFC 6 (PPSA23566). Related: #1379, #1055
+**Build:** official `KytyPS5-2026-10-12-df5b9b9`
+**Hardware:** RTX 5090 32 GB, Ryzen 7 9800X3D, Windows 11. Per #1379, the same cutscene runs on RTX 4060 and RTX 3080, but hangs on RTX 4090 and RTX 5090.
+
+### Symptom (all builds so far)
+The intro cutscene (before the octagon) always ends in a GPU hang: TDR (nvlddmkm event 153) followed by the fatal error in `masterSemaphore.cpp` (`waitSemaphores != success`). With progress markers we saw the last completed draw just before the hang. Its position moves from run to run and does not point to one shader. Removing the suspicious draws only moves the hang.
+
+### Vulkan validation with `--gpu-assisted-validation true`
+Same game, launch args `--screen-width 2560 --screen-height 1440 --present-mode Mailbox --vblank-frequency 120 --gpu-assisted-validation true`, Vulkan SDK 1.4.350.0. Kyty treats every validation error as fatal, so each run stops at the first error.
+
+**1. At boot (every run): shared-memory data race in a compute shader**
+```
+vkCmdDispatch(): A data race was detected on the shared memory variable "lds_dwords" in local invocation index 0 while performing a load operation. (Likely against local invocation index 2)
+The other access in this race was at: SPIR-V Instruction: OpStore %1459 %1323 0
+Stage = Compute.  Global invocation ID (x, y, z) = (128, 0, 0)
+Command buffer (0) Compute Dispatch Index 7
+Shader Module (internal ID 43)
+SPIR-V Instruction: %2201 = OpLoad %1 %2202 0
+```
+This looks like an LDS access that is missing a workgroup barrier in the translated compute shader. Such a race depends on how threads are scheduled, which can differ between GPU sizes and generations.
+
+**2. With that check switched off (`VK_KHRONOS_VALIDATION_GPUAV_SHARED_MEMORY_DATA_RACE=false`), at the usual cutscene crash point:**
+```
+vkCmdDrawIndexed(): the sampled image descriptor [Set 0, Binding 80, Index 1, variable "image_24"] has VkImageView with format of VK_FORMAT_R32_SFLOAT which doesn't support VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT.
+The Vulkan spec states: If a VkImageView is sampled with depth comparison, the image view's format features must contain VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT (VUID-vkCmdDrawIndexed-None-06479)
+```
+A depth buffer seems to be sampled with a comparison (shadow) sampler through an `R32_SFLOAT` colour view instead of a depth-format view. This is undefined behaviour, and it happens exactly where the cutscene hangs.
+
+We have not proven that either of these causes the hang. They are the first concrete spec violations we found, and both are the kind of undefined behaviour that can work on one GPU and hang another. Full logs are available on request.
+
+### Credits
+- **Vince** ([@Woesch-Nich](https://github.com/Woesch-Nich)): ran every test build, day after day, through a week of crashes at the same cutscene.
+- **Stevie**: a Hermes agent on a local Qwen model, who built and instrumented the test builds.
+- **Rot Doc**: Claude (Anthropic), who supervised and analysed the logs and found these two validation errors.

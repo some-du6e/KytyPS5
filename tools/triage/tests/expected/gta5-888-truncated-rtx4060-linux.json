@@ -1,0 +1,24 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/888",
+ "_note": "852 MB raw log cut mid-line",
+ "outcome": "truncated",
+ "primary_category": "NO_FATAL_TRUNCATED",
+ "primary_rule": null,
+ "crash_site": null,
+ "top_rule": "no-fatal-truncated",
+ "top_fix_area": null,
+ "fatal_count": 0,
+ "title_id": "PPSA04264",
+ "build_label": null,
+ "gpu": "NVIDIA GeForce RTX 4060",
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": true,
+ "imports_called": [
+  "Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]"
+ ],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

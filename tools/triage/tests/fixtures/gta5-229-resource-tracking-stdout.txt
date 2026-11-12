@@ -1,0 +1,291 @@
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+Initialized: Config
+Initialized: Log
+Initialized: Timer
+Initialized: Pthread
+Initialized: Profiler
+Initialized: Network
+Initialized: Memory
+Initialized: FileSystem
+Initialized: Controller
+Initialized: Audio
+Vulkan pipeline cache: initializing _PipelineCache/PPSA04264.bin
+Vulkan pipeline cache: initialized empty
+Initialized: Graphics
+Title ID: PPSA04264
+version = 10
+AJM codec=0, name=MP3 decoder
+Shaders: VS 0 | PS 1 | CS 0 | GS 0 | LS 0 | HS 0 | TES 0
+Shader: emitted zero-position clip guard
+Shaders: VS 1 | PS 1 | CS 0 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 1 | PS 1 | CS 1 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 1 | PS 2 | CS 1 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 1 | PS 2 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 1 | PS 3 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 3 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 4 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Unresolved import stub called: Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]
+Unresolved import stub called: Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]
+Unresolved import stub called: Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]
+Shaders: VS 2 | PS 4 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 5 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 3 | PS 5 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 3 | PS 6 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 4 | PS 6 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 4 | PS 6 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 4 | PS 7 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 5 | PS 7 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 5 | PS 8 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 6 | PS 8 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 6 | PS 9 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 7 | PS 9 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 7 | PS 10 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 8 | PS 10 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 8 | PS 11 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 9 | PS 11 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 9 | PS 11 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Unresolved import stub called: hqzi1IHdQQQ[NpUtility_v1][NpUtility_v1.1][Func]
+Unresolved import stub called: BYIZGKm6bO4[NpUtility_v1][NpUtility_v1.1][Func]
+Unresolved import stub called: kvdMF48mB3Y[NpUtility_v1][NpUtility_v1.1][Func]
+Unresolved import stub called: pLr1fEQS1z8[NpUtility_v1][NpUtility_v1.1][Func]
+Shaders: VS 9 | PS 12 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 10 | PS 12 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 10 | PS 13 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 11 | PS 13 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 11 | PS 14 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 12 | PS 14 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 12 | PS 15 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 13 | PS 15 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 13 | PS 16 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 14 | PS 16 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 14 | PS 17 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 14 | PS 18 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 15 | PS 18 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 15 | PS 19 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 15 | PS 20 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 16 | PS 20 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 16 | PS 21 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 17 | PS 21 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 17 | PS 22 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 18 | PS 22 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 18 | PS 23 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 19 | PS 23 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 19 | PS 24 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 20 | PS 24 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 20 | PS 25 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 20 | PS 26 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 21 | PS 26 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 21 | PS 27 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 22 | PS 27 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 22 | PS 28 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 23 | PS 28 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 24 | PS 28 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 25 | PS 28 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 25 | PS 29 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 25 | PS 30 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 26 | PS 30 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 26 | PS 31 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 27 | PS 31 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 27 | PS 32 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 27 | PS 33 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 27 | PS 34 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 27 | PS 35 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 27 | PS 36 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 28 | PS 36 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 28 | PS 37 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 29 | PS 37 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 29 | PS 38 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 30 | PS 38 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 30 | PS 39 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 31 | PS 39 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 31 | PS 40 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 32 | PS 40 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 32 | PS 41 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 33 | PS 41 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 33 | PS 41 | CS 6 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 33 | PS 42 | CS 6 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 34 | PS 42 | CS 6 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 35 | PS 42 | CS 6 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 35 | PS 43 | CS 6 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 36 | PS 43 | CS 6 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 36 | PS 43 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 36 | PS 44 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 37 | PS 44 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 37 | PS 45 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 38 | PS 45 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 39 | PS 45 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 40 | PS 45 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 40 | PS 46 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 41 | PS 46 | CS 7 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 41 | PS 46 | CS 8 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 42 | PS 46 | CS 8 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 43 | PS 46 | CS 8 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 44 | PS 46 | CS 8 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 45 | PS 46 | CS 8 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 46 | PS 46 | CS 8 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 46 | PS 46 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 47 | PS 46 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 48 | PS 46 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 48 | PS 47 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 49 | PS 47 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 49 | PS 48 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 50 | PS 48 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 50 | PS 49 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 51 | PS 49 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 51 | PS 50 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 52 | PS 50 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 53 | PS 50 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 54 | PS 50 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 55 | PS 50 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 56 | PS 50 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 56 | PS 50 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 56 | PS 51 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 57 | PS 51 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 57 | PS 52 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 58 | PS 52 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 58 | PS 53 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 59 | PS 53 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 59 | PS 54 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 60 | PS 54 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 60 | PS 55 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 55 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 56 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 57 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 58 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 59 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 62 | PS 59 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 62 | PS 60 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 63 | PS 60 | CS 10 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 63 | PS 60 | CS 11 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 63 | PS 60 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 63 | PS 60 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 63 | PS 61 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 64 | PS 61 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 64 | PS 62 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 65 | PS 62 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 65 | PS 63 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 66 | PS 63 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 66 | PS 64 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 66 | PS 65 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 66 | PS 66 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 66 | PS 67 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 66 | PS 68 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 67 | PS 68 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 67 | PS 69 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 68 | PS 69 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 68 | PS 70 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 69 | PS 70 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 70 | PS 70 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 71 | PS 70 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 71 | PS 71 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 71 | PS 72 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 72 | PS 72 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 72 | PS 73 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 72 | PS 74 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 73 | PS 74 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 73 | PS 75 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 74 | PS 75 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 75 | PS 75 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 75 | PS 76 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 76 | PS 76 | CS 13 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 76 | PS 76 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 76 | PS 77 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 77 | PS 77 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 77 | PS 78 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 78 | PS 78 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 78 | PS 79 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 79 | PS 79 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 79 | PS 80 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 80 | PS 80 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 80 | PS 81 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 81 | PS 81 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 81 | PS 82 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 82 | PS 82 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 82 | PS 83 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 83 | PS 83 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 83 | PS 84 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 84 | PS 84 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Warning: game uses occlusion queries, which are currently treated as always visible; GPU usage may be higher and FPS may be lower.
+Shaders: VS 84 | PS 85 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 85 | PS 85 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 85 | PS 85 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 85 | PS 86 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 86 | PS 86 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 86 | PS 87 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 87 | PS 87 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 87 | PS 88 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 88 | PS 88 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 89 | PS 88 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 89 | PS 89 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 89 | PS 90 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 90 | PS 90 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 90 | PS 91 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 91 | PS 91 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 91 | PS 92 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 92 | PS 92 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 92 | PS 93 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 93 | PS 93 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 93 | PS 94 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 94 | PS 94 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 94 | PS 95 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 95 | PS 95 | CS 15 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 95 | PS 95 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 95 | PS 96 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 96 | PS 96 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 96 | PS 97 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 97 | PS 97 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 97 | PS 98 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 98 | PS 98 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 98 | PS 99 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 99 | PS 99 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 99 | PS 100 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 99 | PS 101 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 99 | PS 102 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 99 | PS 103 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 99 | PS 104 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 100 | PS 104 | CS 16 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 100 | PS 104 | CS 17 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 100 | PS 105 | CS 17 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 101 | PS 105 | CS 17 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 101 | PS 106 | CS 17 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 102 | PS 106 | CS 17 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 102 | PS 107 | CS 17 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 17 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 18 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 19 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 20 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 21 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 22 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 23 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 24 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 25 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 26 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 27 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 28 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 107 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 103 | PS 108 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 104 | PS 108 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 104 | PS 109 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 104 | PS 110 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 104 | PS 111 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 104 | PS 112 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 104 | PS 113 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 104 | PS 114 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 105 | PS 114 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 105 | PS 115 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 105 | PS 116 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 105 | PS 117 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 105 | PS 118 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 105 | PS 119 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 105 | PS 120 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 106 | PS 120 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 106 | PS 121 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 106 | PS 122 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 106 | PS 123 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 107 | PS 123 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 107 | PS 124 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 108 | PS 124 | CS 29 | GS 0 | LS 0 | HS 0 | TES 0
+--- Build ---
+Official build KytyPS5-2026-09-20-ba55ba5
+--- Error ---
+shader resource tracking: hash=0x6a53456e7ef5d1b0 stage=compute pc=0x0000086c GetBufferResource dword 0 is not a valid runtime value in /home/runner/work/KytyPS5/KytyPS5/src/graphics/shader/recompiler/ir/passes/ResourceTracking.cpp:168

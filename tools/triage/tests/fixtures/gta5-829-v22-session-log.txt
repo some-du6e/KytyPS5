@@ -1,0 +1,25 @@
+--- Session 2026-11-10 18:12:48 ---
+Fork build TheCruZ/KytyPS5-GTA 5ea31b6
+Vulkan pipeline cache: loading _PipelineCache\PPSA04263.bin
+Vulkan pipeline cache: loaded 107.47 MB from _PipelineCache\PPSA04263.bin
+Shader cache: not used while the pipeline manifest records
+Pipeline manifest: 1933 modules, 1560 pipelines in C:\Users\<redacted>\Downloads\KytyPS5-GTA-v22-Windows-x64\assets\pipelines\PPSA04263_01.011.001.kpm (loaded in 20.6 ms)
+Pipeline manifest: 2430 modules, 1890 pipelines in _PipelineCache\PPSA04263_01.011.001.kpm (loaded in 22.9 ms)
+Pipeline manifest: 1041 modules, 489 pipelines in _PipelineCache\PPSA04263_01.011.001.shared.kpm (loaded in 9.8 ms, 1795 records left out)
+Pipeline manifest: recording into _PipelineCache\PPSA04263_01.011.001.kpm
+Title ID: PPSA04263
+AMD CPU compatibility: eboot.bin patched (VRSQRTPS: native=1441, trapped=224, skipped=0; EXTRQ: native=0, trapped=0, skipped=0; INSERTQ: native=0, trapped=0, skipped=0; RDPID: native=0, trapped=0, skipped=0; CLWB: native=0, trapped=0, skipped=0)
+AMD CPU compatibility: libc.prx no matching instructions (VRSQRTPS: native=0, trapped=0, skipped=0; EXTRQ: native=0, trapped=0, skipped=0; INSERTQ: native=0, trapped=0, skipped=0; RDPID: native=0, trapped=0, skipped=0; CLWB: native=0, trapped=0, skipped=0)
+Shader: emitted zero-position clip guard
+Pipeline manifest: 1/2430 modules, 0/1890 pipelines (2251 modules wait for their shaders) at 5.9 s
+Pipeline manifest: idle at 6.1 s: 355 modules compiled (1807 ms), 2 compiled already, 1 failed, 2072 waiting for their shaders; 138 pipelines and 240 compute pipelines created (35 ms), 2 created already, 0 failed; 0 records dropped after a fatal error
+AMD CPU compatibility: libSceNpCppWebApi.prx no matching instructions (VRSQRTPS: native=0, trapped=0, skipped=0; EXTRQ: native=0, trapped=0, skipped=0; INSERTQ: native=0, trapped=0, skipped=0; RDPID: native=0, trapped=0, skipped=0; CLWB: native=0, trapped=0, skipped=0)
+Pipeline manifest: 1247/2430 modules, 551/1890 pipelines (322 modules wait for their shaders) at 8.1 s
+[HACK] sampler border color word changed: first at ResourceTracking::GetHandle, shader=0x5298508a1c4defe7, where=0xc8, pc=0x000000c8: the S# border color word is not a runtime value; its lane-dependent bits were dropped
+Pipeline manifest: 2015/2430 modules, 1622/1890 pipelines (322 modules wait for their shaders) at 10.1 s
+Pipeline manifest: idle at 10.8 s: 2104 modules compiled (34367 ms), 3 compiled already, 1 failed, 322 waiting for their shaders; 1604 pipelines and 346 compute pipelines created (229 ms), 21 created already, 0 failed; 0 records dropped after a fatal error
+AMD CPU compatibility: trapping vrsqrtps (first at 0x902adf18f)
+Vulkan pipeline cache: saved 107.47 MB to _PipelineCache\PPSA04263.bin
+Warning: format Bc5UnormBlock does not support storage access; block-compressed textures written by the guest will not render.
+Vulkan pipeline cache: saved 107.48 MB to _PipelineCache\PPSA04263.bin
+Pipeline manifest: wrote _PipelineCache\PPSA04263_01.011.001.kpm (2430 modules, 1891 pipelines, 830.6 KB; 0 modules and 1 pipelines new in this session)

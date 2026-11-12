@@ -1,0 +1,548 @@
+[
+ {
+  "case": "astro-1476-master-semaphore-paste",
+  "file": "astro-1476-master-semaphore-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/1476",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/1476",
+  "original_filename": "pasted-body-HenriqueBicudo-2026-10-13.txt",
+  "sha256": "34ce84086b96d2904b148ae5e58f4d29c16e40518b98c06e44b39936edfe085f",
+  "raw_lines": 46,
+  "kept_lines": 46,
+  "bytes": 3105,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "astro-831-master-semaphore-typed-paste",
+  "file": "astro-831-master-semaphore-typed-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/831",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/831",
+  "original_filename": "pasted-body-ajmi982-2026-09-25.txt",
+  "sha256": "fc4a6bd0abb7f4a1bc052f90a44b073cbf5d76ecb421aadc236e08aa64ceadd3",
+  "raw_lines": 21,
+  "kept_lines": 21,
+  "bytes": 805,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "gta5-1068-c02-macos-agc-paste",
+  "file": "gta5-1068-c02-macos-agc-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/1068",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/1068",
+  "original_filename": "pasted-c02-ThisisYoYoDev-2026-10-14.txt",
+  "sha256": "dae75cc95e649070831fb30d2d7af053ea422e304d219a508b5e5987022326bc",
+  "raw_lines": 66,
+  "kept_lines": 66,
+  "bytes": 4322,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "gta5-1123-c02-host-null-read-paste",
+  "file": "gta5-1123-c02-host-null-read-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/1123",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/1123",
+  "original_filename": "pasted-c02-mikeb1031-2026-10-06.txt",
+  "sha256": "9aa0a7fd601f8d539d394c7f9a49eeb691ce714ddd3fcf28a0fb2403fef179a8",
+  "raw_lines": 12,
+  "kept_lines": 12,
+  "bytes": 847,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "gta5-1123-depth-feedback-arc",
+  "file": "gta5-1123-depth-feedback-arc.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/1123",
+  "source_url": "https://github.com/user-attachments/files/33126903/kyty-gta5-arc-b580-depth-feedback-crash.txt",
+  "original_filename": "kyty-gta5-arc-b580-depth-feedback-crash.txt",
+  "sha256": "f2e5c603f6f73718f03bcddfc33b2f225a70d3cbb50d5348099f885965c9b463",
+  "raw_lines": 210,
+  "kept_lines": 210,
+  "bytes": 8186,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-10-06-6ef4065 / Intel Arc B580 / --- Error --- depth attachment feedback loop is not supported by the host in renderDraw.cpp:542"
+ },
+ {
+  "case": "gta5-166-c09-bad-jump-paste",
+  "file": "gta5-166-c09-bad-jump-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/166",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/166",
+  "original_filename": "pasted-c09-Gih-pt-2026-09-03.txt",
+  "sha256": "77d72df81a603b0d97bc9230aff0e8aba6cd420556f16b032e1906b3b03e6aeb",
+  "raw_lines": 14,
+  "kept_lines": 14,
+  "bytes": 662,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "gta5-166-legacy-storage-image",
+  "file": "gta5-166-legacy-storage-image.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/166",
+  "source_url": "https://drive.google.com/file/d/1uwDB0VH7mMO0XD_5KC6naUpvYs4nJLz7",
+  "original_filename": "_kyty.txt.gz",
+  "sha256": "bbf5bf1517aa81afca1c2feb09662f9e989918f7b292541b18825fb622669744",
+  "raw_sha256": "d9857721867bd06a271ccdd17383876cf8fe7f0f56329e8e87d99dcb49d46b25",
+  "raw_lines": 1595955,
+  "kept_lines": 1101,
+  "bytes": 84924,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "v0.2.2 a3a0046..7a40dad era (Aug 2026, no build label line) / AMD Radeon RX 9070 XT / --- Stack Trace --- (host addrs) + --- Error --- unsupported storage color image resource: kind=11 dimension=3 ... imageView.h:137"
+ },
+ {
+  "case": "gta5-1835-sampler-dword3-paste",
+  "file": "gta5-1835-sampler-dword3-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/1835",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/1835",
+  "original_filename": "pasted-body-Ameo-Koradi-2026-10-22.txt",
+  "sha256": "66cc87dbe3e6ac5129ff09a84fd5134410f654b90a177b4596b64ba13a20b82d",
+  "raw_lines": 217,
+  "kept_lines": 217,
+  "bytes": 10115,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "gta5-229-clean-exit-rtx4070",
+  "file": "gta5-229-clean-exit-rtx4070.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/229",
+  "source_url": "https://github.com/user-attachments/files/32116287/_kyty.txt",
+  "original_filename": "_kyty.txt",
+  "sha256": "a7e90cacb5511828b2a721dbc08c87a3fca39c4199c19ee37d7052b2fdff5ee0",
+  "raw_lines": 129743,
+  "kept_lines": 1004,
+  "bytes": 64481,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-09-10-2e315a3 / NVIDIA GeForce RTX 4070 / no fatal report: ends with 'Window 1 closed' / 'Event: quit' (user closed)"
+ },
+ {
+  "case": "gta5-229-resource-tracking-stdout",
+  "file": "gta5-229-resource-tracking-stdout.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/229",
+  "source_url": "https://github.com/user-attachments/files/32577722/run1-release-shaderfail.out.txt",
+  "original_filename": "run1-release-shaderfail.out.txt",
+  "sha256": "e4e0ac514f6f9f606fbc707e1e233e1fdb29d8f5fa144fd387695df8d7dfbbde",
+  "raw_lines": 291,
+  "kept_lines": 291,
+  "bytes": 17125,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-09-20-ba55ba5 / AMD Radeon RX 9070 XT (RADV) / shader resource tracking: hash=0x6a53456e7ef5d1b0 stage=compute pc=0x0000086c GetBufferResource dword 0 is not a valid runtime value (ResourceTracking.cpp:168)"
+ },
+ {
+  "case": "gta5-229-storage-image-rx6600",
+  "file": "gta5-229-storage-image-rx6600.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/229",
+  "source_url": "https://github.com/user-attachments/files/30892343/_kyty.zip",
+  "original_filename": "_kyty.zip",
+  "zip_member": "_kyty.txt",
+  "sha256": "849911d600d7b5ce3fd1c3ba4c5219799089e1ecd8adb032ec7ff60526019231",
+  "raw_lines": 1718408,
+  "kept_lines": 1259,
+  "bytes": 99141,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-08-09-d7063d0 / AMD Radeon RX 6600 / --- Stack Trace --- + unsupported storage color image resource kind=11 ... imageView.h:137"
+ },
+ {
+  "case": "gta5-548-buffer-dword0-paste",
+  "file": "gta5-548-buffer-dword0-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/548",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/548",
+  "original_filename": "pasted-body-CatchMeZZo-2026-09-09.txt",
+  "sha256": "c968cf6b81c29066b1c29c9a9807315ed2b546d1f6b3a69c33ca355ad5542052",
+  "raw_lines": 12,
+  "kept_lines": 12,
+  "bytes": 603,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "gta5-729-guest-write-rtx3060",
+  "file": "gta5-729-guest-write-rtx3060.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/729",
+  "source_url": "https://www.mediafire.com/file/yvzhhwrbmn7284o/_kyty.txt/file",
+  "original_filename": "_kyty.txt.gz",
+  "sha256": "75c8424f09d89be2eb16bdf2422b6f4b76ae6c6d2b23d05abd3780c2ceb1708c",
+  "raw_sha256": "778939c847dcb6fc29e53969d4bb56209dd602682275572f3162597d0e21c617",
+  "raw_lines": 2901488,
+  "kept_lines": 1542,
+  "bytes": 116276,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-09-19-8cecaf4 / NVIDIA GeForce RTX 3060 / Unhandled host exception: type=1 code=3221225477 pc=0x00000009028abdd4 access=2 address=0x000000100ae00000 (runtimeLinker.cpp:843)"
+ },
+ {
+  "case": "gta5-810-depth-upload-rx9070xt-linux",
+  "file": "gta5-810-depth-upload-rx9070xt-linux.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/810",
+  "source_url": "https://github.com/user-attachments/files/32620175/_kyty.txt",
+  "original_filename": "_kyty.txt",
+  "sha256": "48b47a968732cfe95816e7478df845f9b66da383ac1ed4b3419fa6186edbca89",
+  "raw_lines": 358179,
+  "kept_lines": 1374,
+  "bytes": 111982,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-09-24-2aaf0c9 / AMD Radeon RX 9070 XT (RADV GFX1201), Linux / --- Error --- TextureCache: invalid depth upload in textureCache.cpp:1081"
+ },
+ {
+  "case": "gta5-829-c12-descriptor-pool-paste",
+  "file": "gta5-829-c12-descriptor-pool-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "original_filename": "pasted-c12-TotoWood-2026-10-09.txt",
+  "sha256": "9632bf7f778ea5c128b6d65291c8cd2b8718efe109bf41a0e714487ae0af150d",
+  "raw_lines": 24,
+  "kept_lines": 24,
+  "bytes": 1430,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "gta5-829-c29-softexit-hacks-paste",
+  "file": "gta5-829-c29-softexit-hacks-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "original_filename": "pasted-c29-TotoWood-2026-10-20.txt",
+  "sha256": "d2a2768554154d9b1100747408278719dc719dec0c50fd88b8be33c5ed7c73ee",
+  "raw_lines": 36,
+  "kept_lines": 36,
+  "bytes": 4699,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "gta5-829-no-fatal-rtx5050",
+  "file": "gta5-829-no-fatal-rtx5050.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "source_url": "https://drive.google.com/file/d/114M-s1O6Iauvt-A6R4vemetsp_yQZM_2",
+  "original_filename": "_kyty-gdrive-114M.txt.gz",
+  "sha256": "28cf9be7c0174cdb0d673ae1843ceb94bdb5af779ce3e807c09b7213c962b4aa",
+  "raw_sha256": "2f0d43118d297bb8236a72c55578044258b6cf30858761267aea8bff3e3b2e92",
+  "raw_lines": 2640601,
+  "kept_lines": 1156,
+  "bytes": 85616,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-10-02-39e23ac / NVIDIA GeForce RTX 5050 8 GB / no fatal report in file (ends in PM4 trace lines)"
+ },
+ {
+  "case": "gta5-829-v22-printf-rx9070",
+  "file": "gta5-829-v22-printf-rx9070.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "source_url": "https://github.com/user-attachments/files/34641741/Kyty-log.zip",
+  "original_filename": "Kyty-log.zip",
+  "zip_member": "_kyty.txt",
+  "sha256": "1b919a5807675aa6de7dcee222325bbea6ce84ffa7c3a4bbad7334468ef7ddb2",
+  "raw_lines": 3187688,
+  "kept_lines": 1474,
+  "bytes": 117489,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Fork build TheCruZ/KytyPS5-GTA 5ea31b6 (v22) / AMD Radeon RX 9070 / no fatal; perf complaint (Fidelity 9-10 fps)"
+ },
+ {
+  "case": "gta5-829-v22-session-log",
+  "file": "gta5-829-v22-session-log.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "source_url": "https://github.com/user-attachments/files/34641741/Kyty-log.zip",
+  "original_filename": "Kyty-log.zip",
+  "zip_member": "PPSA04263_2026-11-10_18-12-48.log",
+  "sha256": "1b919a5807675aa6de7dcee222325bbea6ce84ffa7c3a4bbad7334468ef7ddb2",
+  "raw_lines": 25,
+  "kept_lines": 25,
+  "bytes": 3119,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Fork build TheCruZ/KytyPS5-GTA 5ea31b6 (v22) / AMD Radeon RX 9070 / no fatal; perf complaint (Fidelity 9-10 fps)"
+ },
+ {
+  "case": "gta5-888-guest-write-rtx4060-win",
+  "file": "gta5-888-guest-write-rtx4060-win.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/888",
+  "source_url": "https://drive.google.com/file/d/1izHtzQ6cmif4chUntQjoYfU37e-F0g_S",
+  "original_filename": "_kyty-windows-e317465.txt.gz",
+  "sha256": "ee033ca7823731f609744aaf536085755a85b84f903f38acc926e3dd53547fbb",
+  "raw_sha256": "3670a36341612b9106dc6e3e08a872ebababa9db32e7eb38e36e0857452df21a",
+  "raw_lines": 5903641,
+  "kept_lines": 1553,
+  "bytes": 118848,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-10-02-e317465 / NVIDIA GeForce RTX 4060 8 GB, Windows (GPU passthrough VM) / Unhandled host exception: type=1 code=3221225477 pc=0x00000009028ab5fd access=2 address=0x00000010133f2000 (runtimeLinker.cpp:719)"
+ },
+ {
+  "case": "gta5-888-truncated-rtx4060-linux",
+  "file": "gta5-888-truncated-rtx4060-linux.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/888",
+  "source_url": "https://drive.google.com/file/d/1iTKlGB6rafUOwVaA8Z2sAt8OOYAV3wbj",
+  "original_filename": "_kyty-linux-e6cb880.txt.gz",
+  "sha256": "de06d902298ea1da6264f35881d21737cf0fe8014ad1944b6504701dc8530742",
+  "raw_sha256": "f7f9e0c156c8a5774929b927a875756eb55ff67970beb38d430b6e1fff752d9d",
+  "raw_lines": 28560617,
+  "kept_lines": 1179,
+  "bytes": 85805,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-10-03-e6cb880 / NVIDIA GeForce RTX 4060 8 GB, Linux (CachyOS) / no fatal report (truncated mid-line: run killed or still writing)"
+ },
+ {
+  "case": "macos-1133-device-selection",
+  "file": "macos-1133-device-selection.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/1133",
+  "source_url": "https://github.com/user-attachments/files/33146127/kytylog.txt",
+  "original_filename": "kytylog.txt",
+  "sha256": "ecf209e91b18794c4c56fd028147c7acd9f5d31a52930695093e62d5a6151e9e",
+  "raw_lines": 40,
+  "kept_lines": 40,
+  "bytes": 2348,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Official build KytyPS5-2026-10-07-bb98f26 / Apple M4 (MoltenVK) / Could not find suitable device: Apple M4: image view minLod ... in vulkanWindow.cpp:966"
+ },
+ {
+  "case": "synthetic-contract-device-lost",
+  "file": "synthetic-contract-device-lost.txt",
+  "synthetic": true,
+  "description": "diagnostics-workstream device lost: named VkResult, VK_EXT_device_fault lines, a VUID-06479 validation error, NVIDIA 8 GB",
+  "bytes": 1444
+ },
+ {
+  "case": "synthetic-contract-session",
+  "file": "synthetic-contract-session.txt",
+  "synthetic": true,
+  "description": "every identity/import/HLE/shader/VRAM line of notes/log-contract.md plus the guest pc fault context, as a session log",
+  "bytes": 4547
+ },
+ {
+  "case": "synthetic-contract-strict-imports",
+  "file": "synthetic-contract-strict-imports.txt",
+  "synthetic": true,
+  "description": "--strict-imports EXIT text (HLE workstream)",
+  "bytes": 549
+ },
+ {
+  "case": "synthetic-contract-strict-shaders",
+  "file": "synthetic-contract-strict-shaders.txt",
+  "synthetic": true,
+  "description": "--strict-shaders keeps the fatal CFG error; \"while compiling shader:\" line (diagnostics workstream)",
+  "bytes": 678
+ },
+ {
+  "case": "synthetic-fatal-catalogue",
+  "file": "synthetic-fatal-catalogue.txt",
+  "synthetic": true,
+  "description": "one fatal report per fatal rule of rules.json (rule coverage)",
+  "bytes": 8384
+ },
+ {
+  "case": "synthetic-gta6-boot-failure",
+  "file": "synthetic-gta6-boot-failure.txt",
+  "synthetic": true,
+  "description": "FABRICATED GTA 6-like boot failure on an RTX 3050 8 GB: unresolved Np imports, skipped unsupported shader instructions, VRAM spill, guest null read",
+  "bytes": 4968
+ },
+ {
+  "case": "synthetic-rule-lines",
+  "file": "synthetic-rule-lines.txt",
+  "synthetic": true,
+  "description": "one line per line rule of rules.json (rule coverage)",
+  "bytes": 3460
+ },
+ {
+  "case": "ufc6-1458-vuid-06479-paste",
+  "file": "ufc6-1458-vuid-06479-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/1458",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/1458",
+  "original_filename": "pasted-body-Woesch-Nich-2026-10-12.txt",
+  "sha256": "a6b4d6d52e693942ef1d6bd677553e482278b57c9e0e1940503447ac3e639f2c",
+  "raw_lines": 37,
+  "kept_lines": 37,
+  "bytes": 3294,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "ufc6-829-c23-queue-submit-lost-paste",
+  "file": "ufc6-829-c23-queue-submit-lost-paste.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "source_url": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "original_filename": "pasted-c23-RobertBruno454-2026-10-13.txt",
+  "sha256": "f57b21950e3853731c2d29281ee370a325721cf52f010e177bbfdcfe4d4e7a5d",
+  "raw_lines": 23,
+  "kept_lines": 23,
+  "bytes": 1734,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true
+ },
+ {
+  "case": "ufc6-829-device-lost-rx9070xt",
+  "file": "ufc6-829-device-lost-rx9070xt.txt",
+  "synthetic": false,
+  "issue": "https://github.com/KytyPS5/KytyPS5/issues/829",
+  "source_url": "https://github.com/user-attachments/files/33383412/_kyty9070.txt",
+  "original_filename": "_kyty9070.txt",
+  "sha256": "eab49100bb3126b444799cbd779c624139a2a665ea157c92ef4e1d0d63eedd2c",
+  "raw_lines": 371467,
+  "kept_lines": 956,
+  "bytes": 108319,
+  "trim": {
+   "head": 200,
+   "tail": 300,
+   "per_key": 40,
+   "context": 48
+  },
+  "redacted": true,
+  "note": "Fork build TheCruZ/KytyPS5-GTA 098b5fd / AMD Radeon RX 9070 XT, Adrenalin 26.9.2 / vkQueueSubmit failed: ErrorDeviceLost (-4) ... -> Not implemented (result != vk::Result::eSuccess) commandScheduler.cpp:548; then vkAcquireNextImageKHR failed: ErrorDeviceLost swapchain.cpp:623"
+ }
+]
