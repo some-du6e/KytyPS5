@@ -539,8 +539,10 @@ void Translator::S_CMOV_B32(const Decoder::Instruction& inst) {
 	             ir.Select(ir.GetScc(), ReadU32(inst.src0), ReadU32(inst.dst)));
 }
 
-// D.i64 = signext((S0.u64 >> S1[5:0]) & ((1 << S1[22:16]) - 1)) from bit S1[22:16] - 1; SCC =
-// D != 0. A width of 0 gives 0; widths past the remaining bits keep the field zero extended.
+// D.i64 = signext((S0.i64 >> S1[5:0]) & ((1 << S1[22:16]) - 1)) from bit S1[22:16] - 1; SCC =
+// D != 0. The shift is arithmetic: when offset + width passes bit 63 the field's upper bits are
+// copies of S0's sign (LLVM's constantFoldBFE gives Src0 >> Offset, signed, there). A width of 0
+// gives 0; widths above 64 act as 64.
 void Translator::S_BFE_I64(const Decoder::Instruction& inst) {
 	const auto source = ReadU64(inst.src0);
 	const auto field  = ReadU32(inst.src1);
@@ -549,7 +551,7 @@ void Translator::S_BFE_I64(const Decoder::Instruction& inst) {
 	const auto raw_width =
 	    IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract, {field, IR::Value(16u), IR::Value(7u)}));
 	const auto width   = IR::U32(ir.Emit(IR::ValueOpcode::UMin32, {raw_width, IR::Value(64u)}));
-	const auto shifted = ir.Emit(IR::ValueOpcode::ShiftRightLogical64, {source, offset});
+	const auto shifted = ir.Emit(IR::ValueOpcode::ShiftRightArithmetic64, {source, offset});
 	// 64 - width is 64 only for width 0, whose result the mask clears: shift by 63 instead.
 	const auto empty   = ir.IEqual(width, IR::U32(IR::Value(0u)));
 	const auto unused  = ir.Select(empty, IR::U32(IR::Value(63u)), ir.ISub(IR::U32(IR::Value(64u)), width));
