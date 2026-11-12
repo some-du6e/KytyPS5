@@ -974,6 +974,11 @@ void IncludeInstructionVectorRegisters(const Decoder::Instruction& inst, uint32_
 			include_vector(inst.src0, 2u);
 			include_vector(inst.src1, 2u);
 			break;
+		// gta6-prep: shader-mem: data_dwords counts the returned value; compare-swap VDATA also
+		// holds the comparison after the source.
+		case Decoder::Opcode::BUFFER_ATOMIC_CMPSWAP:
+		case Decoder::Opcode::BUFFER_ATOMIC_FCMPSWAP: include_vector(inst.dst, 2u); break;
+		case Decoder::Opcode::BUFFER_ATOMIC_CMPSWAP_X2: include_vector(inst.dst, 4u); break;
 		default: break;
 	}
 	if (inst.family == Decoder::Family::DS) {
