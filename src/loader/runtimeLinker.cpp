@@ -724,6 +724,20 @@ static std::string HostModuleAddress(uint64_t address) {
 #endif
 }
 
+// "<module file name>+0x<offset>" for an address in a loaded guest module (eboot.bin, a PRX),
+// else empty. Only for the fault report: it takes the linker's (recursive) lock.
+static std::string GuestModuleAddress(uint64_t address) {
+	if (address == 0) {
+		return {};
+	}
+	const auto* program = Common::Singleton<RuntimeLinker>::Instance()->FindProgramByAddr(address);
+	if (program == nullptr) {
+		return {};
+	}
+	return fmt::format("{}+0x{:x}", Common::PathToString(program->file_name.filename()),
+	                   address - program->base_vaddr);
+}
+
 static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exception_info) {
 	const auto* info = &exception_info;
 
@@ -799,6 +813,16 @@ static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exc
 		if (const auto where = HostModuleAddress(info->exception_address); !where.empty()) {
 			report += fmt::format("pc: {:016x} ({})\n", info->exception_address, where);
 		}
+		// A fault in guest code: where in which module, to match against a disassembly.
+		if (const auto where = GuestModuleAddress(info->exception_address); !where.empty()) {
+			report += fmt::format("guest pc: {}\n", where);
+		}
+		if (info->type == Common::HostException::ExceptionType::AccessViolation) {
+			if (const auto where = GuestModuleAddress(info->access_violation_vaddr);
+			    !where.empty()) {
+				report += fmt::format("guest address: {}\n", where);
+			}
+		}
 		Libs::Graphics::DescribeDriverPipelineCreation(report);
 		report += fmt::format("rax={:016x} rbx={:016x} rcx={:016x} rdx={:016x}\n"
 		                      "rsi={:016x} rdi={:016x} rbp={:016x} rsp={:016x}\n"
@@ -823,8 +847,28 @@ static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exc
 			}
 			report += "\n";
 			for (int i = 0; i < 32; i++) {
-				if (const auto where = HostModuleAddress(stack[i]); !where.empty()) {
+				auto where = HostModuleAddress(stack[i]);
+				if (where.empty()) {
+					where = GuestModuleAddress(stack[i]);
+				}
+				if (!where.empty()) {
 					report += fmt::format(" [rsp+0x{:02x}] {:016x} ({})\n", i * 8, stack[i], where);
+				}
+			}
+		}
+		// The guest's frame chain, when rbp is a guest frame: WalkGuestStack reads only frames
+		// within 1 MiB above rsp that are readable and return into guest code.
+		{
+			void*     frames[16];
+			const int depth = WalkGuestStack(info->rbp, info->rsp, frames,
+			                                 static_cast<int>(std::size(frames)));
+			if (depth > 0) {
+				report += "guest stack trace:\n";
+				for (int i = 0; i < depth; i++) {
+					const auto address = reinterpret_cast<uint64_t>(frames[i]);
+					const auto where   = GuestModuleAddress(address);
+					report += fmt::format(" #{} {:016x} ({})\n", i, address,
+					                      where.empty() ? std::string("?") : where);
 				}
 			}
 		}
