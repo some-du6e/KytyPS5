@@ -1,6 +1,7 @@
 #include "common/assert.h"
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 #include "graphics/shader/recompiler/frontend/decode/ImageOps.h"
+#include "graphics/shader/recompiler/frontend/decode/MemoryOps.h"
 
 #include <algorithm>
 #include <array>
@@ -47,6 +48,13 @@ bool IsScalarAddressLoad(Decoder::Opcode opcode) {
 	}
 }
 
+// gta6-prep: shader-mem: the appended MUBUF atomics sit outside the SWAP..FMAX range.
+bool IsBufferAtomic(Decoder::Opcode opcode) {
+	return (opcode >= Decoder::Opcode::BUFFER_ATOMIC_SWAP &&
+	        opcode <= Decoder::Opcode::BUFFER_ATOMIC_FMAX) ||
+	       Decoder::IsShaderMemBufferAtomicOpcode(opcode);
+}
+
 ResourceKind MemoryKind(const Decoder::Instruction& decoded) {
 	switch (decoded.family) {
 		case Decoder::Family::SMEM:
@@ -89,8 +97,7 @@ IR::MemoryInfo MemoryInfoFromDecoded(const Decoder::Instruction& decoded) {
 	memory.idxen         = decoded.idxen;
 	memory.offen         = decoded.offen;
 	// Vector loads use GLC/DLC to bypass L0/GL1; atomics use GLC only to return data.
-	const bool buffer_atomic = decoded.opcode >= Decoder::Opcode::BUFFER_ATOMIC_SWAP &&
-	                           decoded.opcode <= Decoder::Opcode::BUFFER_ATOMIC_FMAX;
+	const bool buffer_atomic = IsBufferAtomic(decoded.opcode);
 	memory.coherent = (memory.kind == ResourceKind::Buffer || memory.kind == ResourceKind::Flat ||
 	                   memory.kind == ResourceKind::Global) &&
 	                  !buffer_atomic && (decoded.glc || decoded.dlc);
@@ -147,8 +154,7 @@ Decoder::Operand MemorySourceAt(const Decoder::Instruction& decoded, uint32_t in
 		     decoded.opcode <= Decoder::Opcode::BUFFER_STORE_DWORDX4) ||
 		    (decoded.opcode >= Decoder::Opcode::TBUFFER_STORE_FORMAT_X &&
 		     decoded.opcode <= Decoder::Opcode::TBUFFER_STORE_FORMAT_XYZW) ||
-		    (decoded.opcode >= Decoder::Opcode::BUFFER_ATOMIC_SWAP &&
-		     decoded.opcode <= Decoder::Opcode::BUFFER_ATOMIC_FMAX);
+		    IsBufferAtomic(decoded.opcode);
 		uint32_t cursor = 0;
 		if (store_or_atomic && index == cursor++) return decoded.dst;
 		if (decoded.idxen && index == cursor++) return decoded.src0;
@@ -520,6 +526,14 @@ void Translator::BUFFER_ATOMIC(const Decoder::Instruction& inst, IR::ValueOpcode
 	if (opcode == IR::ValueOpcode::BufferAtomicCmpSwap32) {
 		const auto desired    = ReadU32(data_src);
 		const auto comparator = ReadU32(OffsetOperand(data_src, 1u));
+		result = ir.Emit(opcode,
+		                 {resource, address.index, address.offset, address.soffset, desired,
+		                  comparator, ir.GetExec()},
+		                 flags);
+	} else if (opcode == IR::ValueOpcode::BufferAtomicCmpSwap64) {
+		// gta6-prep: shader-mem: DATA[1:0] is the source, DATA[3:2] the comparison.
+		const auto desired    = ReadU64(data_src);
+		const auto comparator = ReadU64(OffsetOperand(data_src, 2u));
 		result = ir.Emit(opcode,
 		                 {resource, address.index, address.offset, address.soffset, desired,
 		                  comparator, ir.GetExec()},
@@ -1165,6 +1179,72 @@ void Translator::EmitMemory(const Decoder::Instruction& inst) {
 			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicFMaxReturn32, true);
 		case Decoder::Opcode::DS_MSKOR_RTN_B32:
 			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicMaskedOrReturn32, true);
+		case Decoder::Opcode::DS_SUB_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicISub64, false);
+		case Decoder::Opcode::DS_SUB_RTN_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicISub64, true);
+		case Decoder::Opcode::DS_RSUB_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicRSub64, false);
+		case Decoder::Opcode::DS_RSUB_RTN_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicRSub64, true);
+		case Decoder::Opcode::DS_INC_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicInc64, false);
+		case Decoder::Opcode::DS_INC_RTN_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicInc64, true);
+		case Decoder::Opcode::DS_DEC_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicDec64, false);
+		case Decoder::Opcode::DS_DEC_RTN_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicDec64, true);
+		case Decoder::Opcode::DS_MIN_I64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicSMin64, false);
+		case Decoder::Opcode::DS_MIN_RTN_I64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicSMin64, true);
+		case Decoder::Opcode::DS_MAX_I64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicSMax64, false);
+		case Decoder::Opcode::DS_MAX_RTN_I64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicSMax64, true);
+		case Decoder::Opcode::DS_MIN_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicUMin64, false);
+		case Decoder::Opcode::DS_MIN_RTN_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicUMin64, true);
+		case Decoder::Opcode::DS_MAX_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicUMax64, false);
+		case Decoder::Opcode::DS_AND_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicAnd64, false);
+		case Decoder::Opcode::DS_AND_RTN_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicAnd64, true);
+		case Decoder::Opcode::DS_OR_RTN_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicOrReturn64, true);
+		case Decoder::Opcode::DS_XOR_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicXor64, false);
+		case Decoder::Opcode::DS_XOR_RTN_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicXor64, true);
+		case Decoder::Opcode::DS_MSKOR_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicMaskedOr64, false);
+		case Decoder::Opcode::DS_MSKOR_RTN_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicMaskedOr64, true);
+		case Decoder::Opcode::DS_CMPST_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicCmpSwap64, false);
+		case Decoder::Opcode::DS_ADD_RTN_U64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicIAddReturn64, true);
+		case Decoder::Opcode::DS_WRXCHG_RTN_B64:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicSwap64, true);
+		case Decoder::Opcode::BUFFER_ATOMIC_CMPSWAP_X2:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicCmpSwap64);
+		case Decoder::Opcode::BUFFER_ATOMIC_SUB_X2:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicISub64);
+		case Decoder::Opcode::BUFFER_ATOMIC_SMIN_X2:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicSMin64);
+		case Decoder::Opcode::BUFFER_ATOMIC_SMAX_X2:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicSMax64);
+		case Decoder::Opcode::BUFFER_ATOMIC_UMAX_X2:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicUMax64);
+		case Decoder::Opcode::BUFFER_ATOMIC_XOR_X2:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicXor64);
+		case Decoder::Opcode::BUFFER_ATOMIC_INC_X2:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicInc64);
+		case Decoder::Opcode::BUFFER_ATOMIC_DEC_X2:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicDec64);
 
 		case Decoder::Opcode::IMAGE_ATOMIC_CMPSWAP:
 			return IMAGE_ATOMIC(inst, IR::ValueOpcode::ImageAtomicCompareSwap32);

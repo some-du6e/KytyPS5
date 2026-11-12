@@ -93,6 +93,55 @@ void TestShaderMemDsAtomics32() {
   Check(gds.opcode == O::UNSUPPORTED, "DS_CMPST_F32 must reject GDS");
 }
 
+// DS QWORD atomics read DATA (and DATA2) as VGPR pairs; MUBUF _x2 atomics return the old QWORD
+// with GLC and CMPSWAP_X2 reads its source and comparison pairs from VDATA[3:0].
+void TestShaderMemAtomics64() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  const ShaderMemDecodeCase cases[] = {
+      {"ds_sub_u64 v1, v[2:3] offset:8", {0xd9040008u, 0x00000201u}, O::DS_SUB_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicISub64", "OpAtomicISub %ulong"},
+      {"ds_rsub_u64 v1, v[2:3] offset:8", {0xd9080008u, 0x00000201u}, O::DS_RSUB_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicRSub64", "OpAtomicCompareExchange %ulong"},
+      {"ds_inc_u64 v1, v[2:3] offset:8", {0xd90c0008u, 0x00000201u}, O::DS_INC_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicInc64", "OpAtomicCompareExchange %ulong"},
+      {"ds_dec_u64 v1, v[2:3] offset:8", {0xd9100008u, 0x00000201u}, O::DS_DEC_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicDec64", "OpAtomicCompareExchange %ulong"},
+      {"ds_min_i64 v1, v[2:3] offset:8", {0xd9140008u, 0x00000201u}, O::DS_MIN_I64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicSMin64", "OpAtomicSMin %ulong"},
+      {"ds_max_i64 v1, v[2:3] offset:8", {0xd9180008u, 0x00000201u}, O::DS_MAX_I64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicSMax64", "OpAtomicSMax %ulong"},
+      {"ds_min_u64 v1, v[2:3] offset:8", {0xd91c0008u, 0x00000201u}, O::DS_MIN_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicUMin64", "OpAtomicUMin %ulong"},
+      {"ds_max_u64 v1, v[2:3] offset:8", {0xd9200008u, 0x00000201u}, O::DS_MAX_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicUMax64", "OpAtomicUMax %ulong"},
+      {"ds_and_b64 v1, v[2:3] offset:8", {0xd9240008u, 0x00000201u}, O::DS_AND_B64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicAnd64", "OpAtomicAnd %ulong"},
+      {"ds_xor_b64 v1, v[2:3] offset:8", {0xd92c0008u, 0x00000201u}, O::DS_XOR_B64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicXor64", "OpAtomicXor %ulong"},
+      {"ds_mskor_b64 v1, v[2:3], v[4:5] offset:8", {0xd9300008u, 0x00040201u}, O::DS_MSKOR_B64, 3, -1, 1, 2, 4, 8, 2, "SharedAtomicMaskedOr64", "OpAtomicCompareExchange %ulong"},
+      {"ds_cmpst_b64 v1, v[2:3], v[4:5] offset:8", {0xd9400008u, 0x00040201u}, O::DS_CMPST_B64, 3, -1, 1, 2, 4, 8, 2, "SharedAtomicCmpSwap64", "OpAtomicCompareExchange %ulong"},
+      {"ds_add_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd9800008u, 0x06000201u}, O::DS_ADD_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicIAddReturn64", "OpAtomicIAdd %ulong"},
+      {"ds_sub_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd9840008u, 0x06000201u}, O::DS_SUB_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicISub64", "OpAtomicISub %ulong"},
+      {"ds_rsub_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd9880008u, 0x06000201u}, O::DS_RSUB_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicRSub64", "OpAtomicCompareExchange %ulong"},
+      {"ds_inc_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd98c0008u, 0x06000201u}, O::DS_INC_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicInc64", "OpAtomicCompareExchange %ulong"},
+      {"ds_dec_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd9900008u, 0x06000201u}, O::DS_DEC_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicDec64", "OpAtomicCompareExchange %ulong"},
+      {"ds_min_rtn_i64 v[6:7], v1, v[2:3] offset:8", {0xd9940008u, 0x06000201u}, O::DS_MIN_RTN_I64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicSMin64", "OpAtomicSMin %ulong"},
+      {"ds_max_rtn_i64 v[6:7], v1, v[2:3] offset:8", {0xd9980008u, 0x06000201u}, O::DS_MAX_RTN_I64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicSMax64", "OpAtomicSMax %ulong"},
+      {"ds_min_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd99c0008u, 0x06000201u}, O::DS_MIN_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicUMin64", "OpAtomicUMin %ulong"},
+      {"ds_and_rtn_b64 v[6:7], v1, v[2:3] offset:8", {0xd9a40008u, 0x06000201u}, O::DS_AND_RTN_B64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicAnd64", "OpAtomicAnd %ulong"},
+      {"ds_or_rtn_b64 v[6:7], v1, v[2:3] offset:8", {0xd9a80008u, 0x06000201u}, O::DS_OR_RTN_B64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicOrReturn64", "OpAtomicOr %ulong"},
+      {"ds_xor_rtn_b64 v[6:7], v1, v[2:3] offset:8", {0xd9ac0008u, 0x06000201u}, O::DS_XOR_RTN_B64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicXor64", "OpAtomicXor %ulong"},
+      {"ds_mskor_rtn_b64 v[6:7], v1, v[2:3], v[4:5] offset:8", {0xd9b00008u, 0x06040201u}, O::DS_MSKOR_RTN_B64, 3, 6, 1, 2, 4, 8, 2, "SharedAtomicMaskedOr64", "OpAtomicCompareExchange %ulong"},
+      {"ds_wrxchg_rtn_b64 v[6:7], v1, v[2:3] offset:8", {0xd9b40008u, 0x06000201u}, O::DS_WRXCHG_RTN_B64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicSwap64", "OpAtomicExchange %ulong"},
+      {"buffer_atomic_cmpswap_x2 v[4:7], v1, s[0:3], 0 offen glc", {0xe1445000u, 0x80000401u}, O::BUFFER_ATOMIC_CMPSWAP_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicCmpSwap64", "OpAtomicCompareExchange %ulong"},
+      {"buffer_atomic_sub_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe14c5000u, 0x80000401u}, O::BUFFER_ATOMIC_SUB_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicISub64", "OpAtomicISub %ulong"},
+      {"buffer_atomic_smin_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe1545000u, 0x80000401u}, O::BUFFER_ATOMIC_SMIN_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicSMin64", "OpAtomicSMin %ulong"},
+      {"buffer_atomic_smax_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe15c5000u, 0x80000401u}, O::BUFFER_ATOMIC_SMAX_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicSMax64", "OpAtomicSMax %ulong"},
+      {"buffer_atomic_umax_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe1605000u, 0x80000401u}, O::BUFFER_ATOMIC_UMAX_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicUMax64", "OpAtomicUMax %ulong"},
+      {"buffer_atomic_xor_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe16c5000u, 0x80000401u}, O::BUFFER_ATOMIC_XOR_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicXor64", "OpAtomicXor %ulong"},
+      {"buffer_atomic_inc_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe1705000u, 0x80000401u}, O::BUFFER_ATOMIC_INC_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicInc64", "OpAtomicCompareExchange %ulong"},
+      {"buffer_atomic_dec_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe1745000u, 0x80000401u}, O::BUFFER_ATOMIC_DEC_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicDec64", "OpAtomicCompareExchange %ulong"},
+      {"buffer_atomic_umax_x2 v[4:5], v1, s[0:3], 0 offen", {0xe1601000u, 0x80000401u}, O::BUFFER_ATOMIC_UMAX_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicUMax64", "OpAtomicUMax %ulong"},
+  };
+  for (const auto &test : cases) CheckShaderMemDecodeCase(test);
+
+  ShaderRecompiler::Decoder::Instruction gds;
+  const uint32_t gds_words[] = {0xd9840008u | (1u << 17u), 0x06000201u};
+  ShaderRecompiler::Decoder::DecodeInstruction(gds_words, 0u, gds);
+  Check(gds.opcode == O::UNSUPPORTED, "DS 64-bit atomics must reject GDS");
+}
+
 void RunShaderMemDecodeTests() {
   TestShaderMemDsAtomics32();
+  TestShaderMemAtomics64();
 }

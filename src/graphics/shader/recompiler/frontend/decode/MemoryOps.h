@@ -18,6 +18,10 @@ void DecodeDs(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index, 
 // gta6-prep: shader-mem
 // The DS read-modify-write opcodes of the gta6-prep block of Opcode.
 bool IsDsShaderMemAtomicOpcode(Opcode opcode);
+// The QWORD subset of IsDsShaderMemAtomicOpcode: DATA (and DATA2) and the result are VGPR pairs.
+bool IsDsShaderMemAtomic64Opcode(Opcode opcode);
+// The MUBUF atomics of the gta6-prep block of Opcode.
+bool IsShaderMemBufferAtomicOpcode(Opcode opcode);
 
 } // namespace Libs::Graphics::ShaderRecompiler::Decoder
 

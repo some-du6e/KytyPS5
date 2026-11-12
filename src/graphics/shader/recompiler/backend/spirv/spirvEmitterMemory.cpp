@@ -2126,6 +2126,78 @@ std::array<uint32_t, 3> EmitTriangleIndices(ValueEmitContext& ctx, const std::ar
 	return result;
 }
 
+// gta6-prep: shader-mem
+// The QWORD counterpart of AtomicUpdate: a compare-exchange loop over a 64-bit pointer, for the
+// 64-bit atomics without a SPIR-V instruction. Returns the value the update replaced.
+template <typename Fn>
+static uint32_t AtomicUpdate64(EmitterState& state, uint32_t pointer, spv::Scope scope,
+                               uint32_t storage_semantics, bool ordered, Fn&& desired) {
+	const auto none      = ConstantU32(state, spv::MemorySemanticsMaskNone);
+	const auto load      = ordered ? ConstantU32(state, spv::MemorySemanticsAcquireMask |
+	                                                        storage_semantics)
+	                               : none;
+	const auto equal     = ordered ? ConstantU32(state, spv::MemorySemanticsAcquireReleaseMask |
+	                                                        storage_semantics)
+	                               : none;
+	const auto preheader = state.builder.AllocateId();
+	const auto header    = state.builder.AllocateId();
+	const auto cont      = state.builder.AllocateId();
+	const auto merge     = state.builder.AllocateId();
+	const auto initial   = state.builder.AllocateId();
+	const auto observed  = state.builder.AllocateId();
+	const auto exchanged = state.builder.AllocateId();
+	const auto scope_id  = ConstantU32(state, scope);
+	state.builder.AddFunction(spv::OpBranch, preheader);
+	EmitLabel(state, preheader);
+	state.builder.AddFunction(spv::OpAtomicLoad, TypeU64(state), initial, pointer, scope_id, load);
+	state.builder.AddFunction(spv::OpBranch, header);
+	EmitLabel(state, header);
+	state.builder.AddFunction(spv::OpPhi, TypeU64(state), observed, initial, preheader, exchanged,
+	                          cont);
+	const auto next = desired(observed);
+	state.builder.AddFunction(spv::OpAtomicCompareExchange, TypeU64(state), exchanged, pointer,
+	                          scope_id, equal, load, next, observed);
+	const auto success = state.builder.AllocateId();
+	state.builder.AddFunction(spv::OpIEqual, TypeBool(state), success, exchanged, observed);
+	state.builder.AddFunction(spv::OpLoopMerge, merge, cont, spv::LoopControlMaskNone);
+	state.builder.AddFunction(spv::OpBranchConditional, success, merge, cont);
+	EmitLabel(state, cont);
+	state.builder.AddFunction(spv::OpBranch, header);
+	EmitLabel(state, merge);
+	return observed;
+}
+
+// MEM = old >= limit ? 0 : old + 1, and MEM = old == 0 || old > limit ? limit : old - 1 (unsigned
+// QWORDs), as for the DWORD forms.
+static uint32_t AtomicReplacement64(EmitterState& state, IR::ValueOpcode opcode, uint32_t old,
+                                    uint32_t value, uint32_t value2) {
+	const auto u64 = TypeU64(state);
+	const auto b   = TypeBool(state);
+	switch (opcode) {
+		case IR::ValueOpcode::BufferAtomicInc64:
+		case IR::ValueOpcode::SharedAtomicInc64:
+			return Select(state, u64, Binary(state, spv::OpUGreaterThanEqual, b, old, value),
+			              ConstantU64(state, 0),
+			              Binary(state, spv::OpIAdd, u64, old, ConstantU64(state, 1)));
+		case IR::ValueOpcode::BufferAtomicDec64:
+		case IR::ValueOpcode::SharedAtomicDec64: {
+			const auto wrap = Binary(state, spv::OpLogicalOr, b,
+			                         Binary(state, spv::OpIEqual, b, old, ConstantU64(state, 0)),
+			                         Binary(state, spv::OpUGreaterThan, b, old, value));
+			return Select(state, u64, wrap, value,
+			              Binary(state, spv::OpISub, u64, old, ConstantU64(state, 1)));
+		}
+		case IR::ValueOpcode::SharedAtomicRSub64: return Binary(state, spv::OpISub, u64, value, old);
+		case IR::ValueOpcode::SharedAtomicMaskedOr64:
+			return Binary(state, spv::OpBitwiseOr, u64,
+			              Binary(state, spv::OpBitwiseAnd, u64, old, Unary(state, spv::OpNot, u64, value)),
+			              value2);
+		default: break;
+	}
+	EXIT("64-bit atomic %s has no replacement", std::string(IR::ValueOpcodeName(opcode)).c_str());
+	return old;
+}
+
 uint32_t EmitAtomic32(ValueEmitContext& ctx, const IR::Inst& inst) {
 	const auto& mem = ctx.Memory(inst);
 	return EmitAtomicAccess(ctx, inst, mem, [&](uint32_t pointer) {
@@ -2152,7 +2224,16 @@ uint32_t EmitBufferAtomic64(ValueEmitContext& ctx, const IR::Inst& inst) {
 		        ConstantU64(state, 0), [&]() {
 			        const auto pointer = EmitStorageBufferElementPointer(
 			            state, resource, index, TypeStorageBufferElementPointer(state, 64));
-			        const auto old = EmitAtomicOperation(ctx, inst, pointer, spv::ScopeDevice);
+			        // gta6-prep: shader-mem: wrapping inc/dec_x2 run a compare-exchange loop.
+			        const auto old =
+			            SpirvAtomicOpcode(inst.GetOpcode()) == spv::OpNop
+			                ? AtomicUpdate64(state, pointer, spv::ScopeDevice, 0u, false,
+			                                 [&](uint32_t observed) {
+				                                 return AtomicReplacement64(
+				                                     state, inst.GetOpcode(), observed,
+				                                     ctx.Arg(inst, inst.NumArgs() - 2), 0u);
+			                                 })
+			                : EmitAtomicOperation(ctx, inst, pointer, spv::ScopeDevice);
 			        EmitAtomicMemoryBarrier(state, mem.kind);
 			        return old;
 		        });
@@ -2187,6 +2268,15 @@ void EmitSharedAtomic64(ValueEmitContext& ctx, const IR::Inst& inst) {
 		const auto scope = ConstantU32(state, spv::ScopeWorkgroup);
 		const auto acquire_release =
 		    ConstantU32(state, spv::MemorySemanticsAcquireReleaseMask | semantics);
+		if (opcode == spv::OpNop) {
+			// gta6-prep: shader-mem: inc/dec/rsub/mskor_b64 run a compare-exchange loop.
+			return AtomicUpdate64(state, pointer, spv::ScopeWorkgroup, semantics, true,
+			                      [&](uint32_t observed) {
+				                      return AtomicReplacement64(
+				                          state, inst.GetOpcode(), observed, ctx.Arg(inst, 1),
+				                          inst.NumArgs() == 4u ? ctx.Arg(inst, 2) : 0u);
+			                      });
+		}
 		if (opcode == spv::OpAtomicCompareExchange) {
 			// RDNA2 DS compares DATA and stores DATA2, opposite to BUFFER atomics.
 			state.builder.AddFunction(

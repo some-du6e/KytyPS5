@@ -1,4 +1,5 @@
 #include "common/assert.h"
+#include "graphics/shader/recompiler/frontend/decode/MemoryOps.h"
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 #include "graphics/shader/shader.h"
 
@@ -996,7 +997,13 @@ void IncludeInstructionVectorRegisters(const Decoder::Instruction& inst, uint32_
 				include_vector(inst.src2, width);
 				break;
 			}
-			default: break;
+			default:
+				// gta6-prep: shader-mem: QWORD DATA and DATA2 of the appended DS atomics.
+				if (Decoder::IsDsShaderMemAtomic64Opcode(inst.opcode)) {
+					include_vector(inst.src1, 2u);
+					if (inst.src_count == 3u) include_vector(inst.src2, 2u);
+				}
+				break;
 		}
 	}
 	for (uint32_t index = 0; index + 1u < inst.image_address_components &&

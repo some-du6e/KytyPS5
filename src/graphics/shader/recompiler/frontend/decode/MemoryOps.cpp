@@ -86,6 +86,16 @@ constexpr MemoryOpcodeInfo MUBUF_OPCODE_LIST[] = {
     {0x85u, Opcode::BUFFER_STORE_FORMAT_D16_XY, 1, 16, false, false, true, 2},
     {0x86u, Opcode::BUFFER_STORE_FORMAT_D16_XYZ, 2, 16, false, false, true, 3},
     {0x87u, Opcode::BUFFER_STORE_FORMAT_D16_XYZW, 2, 16, false, false, true, 4},
+    // gta6-prep: shader-mem. CMPSWAP_X2 reads DATA[3:0] (source pair, then comparison pair);
+    // data_dwords counts the returned QWORD.
+    {0x51u, Opcode::BUFFER_ATOMIC_CMPSWAP_X2, 2, 32},
+    {0x53u, Opcode::BUFFER_ATOMIC_SUB_X2, 2, 32},
+    {0x55u, Opcode::BUFFER_ATOMIC_SMIN_X2, 2, 32},
+    {0x57u, Opcode::BUFFER_ATOMIC_SMAX_X2, 2, 32},
+    {0x58u, Opcode::BUFFER_ATOMIC_UMAX_X2, 2, 32},
+    {0x5bu, Opcode::BUFFER_ATOMIC_XOR_X2, 2, 32},
+    {0x5cu, Opcode::BUFFER_ATOMIC_INC_X2, 2, 32},
+    {0x5du, Opcode::BUFFER_ATOMIC_DEC_X2, 2, 32},
 };
 
 constexpr MemoryOpcodeInfo MTBUF_OPCODE_LIST[] = {
@@ -154,6 +164,19 @@ constexpr MemoryOpcodeInfo DS_OPCODE_LIST[] = {
     {0x22u, Opcode::DS_RSUB_RTN_U32, 1, 32},     {0x2cu, Opcode::DS_MSKOR_RTN_B32, 1, 32},
     {0x31u, Opcode::DS_CMPST_RTN_F32, 1, 32},    {0x32u, Opcode::DS_MIN_RTN_F32, 1, 32},
     {0x33u, Opcode::DS_MAX_RTN_F32, 1, 32},      {0x55u, Opcode::DS_ADD_RTN_F32, 1, 32},
+    {0x41u, Opcode::DS_SUB_U64, 2, 32},          {0x42u, Opcode::DS_RSUB_U64, 2, 32},
+    {0x43u, Opcode::DS_INC_U64, 2, 32},          {0x44u, Opcode::DS_DEC_U64, 2, 32},
+    {0x45u, Opcode::DS_MIN_I64, 2, 32},          {0x46u, Opcode::DS_MAX_I64, 2, 32},
+    {0x47u, Opcode::DS_MIN_U64, 2, 32},          {0x48u, Opcode::DS_MAX_U64, 2, 32},
+    {0x49u, Opcode::DS_AND_B64, 2, 32},          {0x4bu, Opcode::DS_XOR_B64, 2, 32},
+    {0x4cu, Opcode::DS_MSKOR_B64, 2, 32},        {0x50u, Opcode::DS_CMPST_B64, 2, 32},
+    {0x60u, Opcode::DS_ADD_RTN_U64, 2, 32},      {0x61u, Opcode::DS_SUB_RTN_U64, 2, 32},
+    {0x62u, Opcode::DS_RSUB_RTN_U64, 2, 32},     {0x63u, Opcode::DS_INC_RTN_U64, 2, 32},
+    {0x64u, Opcode::DS_DEC_RTN_U64, 2, 32},      {0x65u, Opcode::DS_MIN_RTN_I64, 2, 32},
+    {0x66u, Opcode::DS_MAX_RTN_I64, 2, 32},      {0x67u, Opcode::DS_MIN_RTN_U64, 2, 32},
+    {0x69u, Opcode::DS_AND_RTN_B64, 2, 32},      {0x6au, Opcode::DS_OR_RTN_B64, 2, 32},
+    {0x6bu, Opcode::DS_XOR_RTN_B64, 2, 32},      {0x6cu, Opcode::DS_MSKOR_RTN_B64, 2, 32},
+    {0x6du, Opcode::DS_WRXCHG_RTN_B64, 2, 32},
 };
 
 constexpr auto SMEM_OPS  = Detail::MakeOpcodeTable<0x100>(SMEM_OPCODE_LIST);
@@ -217,6 +240,53 @@ bool IsDsShaderMemAtomicOpcode(Opcode opcode) {
 		case Opcode::DS_MIN_RTN_F32:
 		case Opcode::DS_MAX_RTN_F32:
 		case Opcode::DS_MSKOR_RTN_B32: return true;
+		default: return IsDsShaderMemAtomic64Opcode(opcode);
+	}
+}
+
+bool IsDsShaderMemAtomic64Opcode(Opcode opcode) {
+	// gta6-prep: shader-mem
+	switch (opcode) {
+		case Opcode::DS_SUB_U64:
+		case Opcode::DS_RSUB_U64:
+		case Opcode::DS_INC_U64:
+		case Opcode::DS_DEC_U64:
+		case Opcode::DS_MIN_I64:
+		case Opcode::DS_MAX_I64:
+		case Opcode::DS_MIN_U64:
+		case Opcode::DS_MAX_U64:
+		case Opcode::DS_AND_B64:
+		case Opcode::DS_XOR_B64:
+		case Opcode::DS_MSKOR_B64:
+		case Opcode::DS_CMPST_B64:
+		case Opcode::DS_ADD_RTN_U64:
+		case Opcode::DS_SUB_RTN_U64:
+		case Opcode::DS_RSUB_RTN_U64:
+		case Opcode::DS_INC_RTN_U64:
+		case Opcode::DS_DEC_RTN_U64:
+		case Opcode::DS_MIN_RTN_I64:
+		case Opcode::DS_MAX_RTN_I64:
+		case Opcode::DS_MIN_RTN_U64:
+		case Opcode::DS_AND_RTN_B64:
+		case Opcode::DS_OR_RTN_B64:
+		case Opcode::DS_XOR_RTN_B64:
+		case Opcode::DS_MSKOR_RTN_B64:
+		case Opcode::DS_WRXCHG_RTN_B64: return true;
+		default: return false;
+	}
+}
+
+bool IsShaderMemBufferAtomicOpcode(Opcode opcode) {
+	// gta6-prep: shader-mem
+	switch (opcode) {
+		case Opcode::BUFFER_ATOMIC_CMPSWAP_X2:
+		case Opcode::BUFFER_ATOMIC_SUB_X2:
+		case Opcode::BUFFER_ATOMIC_SMIN_X2:
+		case Opcode::BUFFER_ATOMIC_SMAX_X2:
+		case Opcode::BUFFER_ATOMIC_UMAX_X2:
+		case Opcode::BUFFER_ATOMIC_XOR_X2:
+		case Opcode::BUFFER_ATOMIC_INC_X2:
+		case Opcode::BUFFER_ATOMIC_DEC_X2: return true;
 		default: return false;
 	}
 }
@@ -271,7 +341,10 @@ uint32_t DsSourceCount(Opcode opcode) {
 		case Opcode::DS_CMPST_B32:
 		case Opcode::DS_CMPST_F32:
 		case Opcode::DS_CMPST_RTN_F32:
-		case Opcode::DS_MSKOR_RTN_B32: return 3u;
+		case Opcode::DS_MSKOR_RTN_B32:
+		case Opcode::DS_MSKOR_B64:
+		case Opcode::DS_CMPST_B64:
+		case Opcode::DS_MSKOR_RTN_B64: return 3u;
 		case Opcode::DS_MIN_F32:
 		case Opcode::DS_MAX_F32:
 		case Opcode::DS_PERMUTE_B32:
@@ -522,6 +595,10 @@ void DecodeDs(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index, 
 	if (inst.gds && (inst.opcode == Opcode::DS_CMPST_B32 || inst.opcode == Opcode::DS_CMPST_F32 ||
 	                 inst.opcode == Opcode::DS_CMPST_RTN_F32)) {
 		SetUnsupported(inst, Family::DS, opcode, "DS compare-store GDS variant is not implemented");
+	}
+	if (inst.gds && IsDsShaderMemAtomic64Opcode(inst.opcode)) {
+		// 64-bit shared atomics need the 64-bit view of compute LDS (ShaderInfoCollection).
+		SetUnsupported(inst, Family::DS, opcode, "DS 64-bit GDS atomic is not implemented");
 	}
 	if (inst.gds &&
 	    (inst.opcode == Opcode::DS_SWIZZLE_B32 || inst.opcode == Opcode::DS_PERMUTE_B32 ||

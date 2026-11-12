@@ -641,6 +641,22 @@ spv::Op SpirvAtomicOpcode(IR::ValueOpcode opcode) {
 		case IR::ValueOpcode::ImageAtomicXor64:
 		case IR::ValueOpcode::BufferAtomicXor32:
 		case IR::ValueOpcode::SharedAtomicXor32: return spv::OpAtomicXor;
+		// gta6-prep: shader-mem. Inc/Dec/RSub/MaskedOr 64 have no native op (OpNop: CAS loop).
+		case IR::ValueOpcode::BufferAtomicCmpSwap64: return spv::OpAtomicCompareExchange;
+		case IR::ValueOpcode::SharedAtomicSwap64: return spv::OpAtomicExchange;
+		case IR::ValueOpcode::SharedAtomicIAddReturn64: return spv::OpAtomicIAdd;
+		case IR::ValueOpcode::BufferAtomicISub64:
+		case IR::ValueOpcode::SharedAtomicISub64: return spv::OpAtomicISub;
+		case IR::ValueOpcode::BufferAtomicSMin64:
+		case IR::ValueOpcode::SharedAtomicSMin64: return spv::OpAtomicSMin;
+		case IR::ValueOpcode::BufferAtomicSMax64:
+		case IR::ValueOpcode::SharedAtomicSMax64: return spv::OpAtomicSMax;
+		case IR::ValueOpcode::SharedAtomicUMin64: return spv::OpAtomicUMin;
+		case IR::ValueOpcode::BufferAtomicUMax64: return spv::OpAtomicUMax;
+		case IR::ValueOpcode::SharedAtomicAnd64: return spv::OpAtomicAnd;
+		case IR::ValueOpcode::SharedAtomicOrReturn64: return spv::OpAtomicOr;
+		case IR::ValueOpcode::BufferAtomicXor64:
+		case IR::ValueOpcode::SharedAtomicXor64: return spv::OpAtomicXor;
 		default: return spv::OpNop;
 	}
 }
@@ -659,7 +675,7 @@ uint32_t EmitAtomicOperation(ValueEmitContext& ctx, const IR::Inst& inst, uint32
 			std::swap(desired, comparator);
 		}
 		ctx.state.builder.AddFunction(
-		    spv::OpAtomicCompareExchange, TypeU32(ctx.state), old, pointer,
+		    spv::OpAtomicCompareExchange, type, old, pointer,
 		    ConstantU32(ctx.state, scope), ConstantU32(ctx.state, spv::MemorySemanticsMaskNone),
 		    ConstantU32(ctx.state, spv::MemorySemanticsMaskNone), desired, comparator);
 	} else {
