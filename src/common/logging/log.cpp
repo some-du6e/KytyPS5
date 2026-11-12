@@ -205,13 +205,52 @@ std::string SessionLogFileName(std::string_view title_id, const std::tm& time) {
 	return title + "_" + stamp + ".log";
 }
 
+bool IsSessionLogFileName(std::string_view file_name) {
+	constexpr std::string_view extension = ".log";
+	// "_yyyy-MM-dd_HH-mm-ss": '#' is a digit.
+	constexpr std::string_view stamp    = "_####-##-##_##-##-##";
+	const auto                 is_digit = [](char c) { return c >= '0' && c <= '9'; };
+	if (file_name.size() <= extension.size() ||
+	    file_name.substr(file_name.size() - extension.size()) != extension) {
+		return false;
+	}
+	auto rest = file_name.substr(0, file_name.size() - extension.size());
+	// An optional "_<n>" copy number, then the stamp.
+	const auto matches_stamp = [&](std::string_view text) {
+		if (text.size() <= stamp.size()) {
+			return false;
+		}
+		const auto tail = text.substr(text.size() - stamp.size());
+		for (size_t i = 0; i < stamp.size(); i++) {
+			if (stamp[i] == '#' ? !is_digit(tail[i]) : tail[i] != stamp[i]) {
+				return false;
+			}
+		}
+		return true;
+	};
+	if (matches_stamp(rest)) {
+		return true;
+	}
+	size_t digits = 0;
+	while (digits < rest.size() && is_digit(rest[rest.size() - 1 - digits])) {
+		digits++;
+	}
+	if (digits == 0 || digits == rest.size() || rest[rest.size() - 1 - digits] != '_') {
+		return false;
+	}
+	return matches_stamp(rest.substr(0, rest.size() - 1 - digits));
+}
+
 void PruneSessionLogs(const std::filesystem::path& folder, size_t keep) {
 	std::error_code error;
+	const auto      newest_pruned =
+	    std::filesystem::file_time_type::clock::now() - SESSION_LOG_MIN_PRUNE_AGE;
 	std::vector<std::pair<std::filesystem::file_time_type, std::filesystem::path>> logs;
 	for (std::filesystem::directory_iterator it(folder, error), end; !error && it != end;
 	     it.increment(error)) {
 		std::error_code entry_error;
-		if (!it->is_regular_file(entry_error) || it->path().extension() != ".log") {
+		if (!it->is_regular_file(entry_error) ||
+		    !IsSessionLogFileName(Common::PathToString(it->path().filename()))) {
 			continue;
 		}
 		const auto time = it->last_write_time(entry_error);
@@ -226,7 +265,10 @@ void PruneSessionLogs(const std::filesystem::path& folder, size_t keep) {
 	std::sort(logs.begin(), logs.end(),
 	          [](const auto& a, const auto& b) { return a.first > b.first; });
 	for (size_t i = keep; i < logs.size(); i++) {
-		std::filesystem::remove(logs[i].second, error);
+		// Recent: maybe the log of a session that is still running.
+		if (logs[i].first < newest_pruned) {
+			std::filesystem::remove(logs[i].second, error);
+		}
 	}
 }
 

@@ -141,6 +141,19 @@ void TestSessionLogFileName() {
              "a_b_c__d_2026-11-19_07-05-03.log", "unsafe characters");
 }
 
+void TestIsSessionLogFileName() {
+  using Log::IsSessionLogFileName;
+  Check(IsSessionLogFileName("PPSA04264_2026-11-19_07-05-03.log"), "session log name");
+  Check(IsSessionLogFileName("unknown_2026-11-19_07-05-03_2.log"), "session log copy name");
+  Check(IsSessionLogFileName("a_b_2026-11-19_07-05-03_12.log"), "session log copy 12");
+  Check(!IsSessionLogFileName("_2026-11-19_07-05-03.log"), "no title");
+  Check(!IsSessionLogFileName("notes.log"), "a user's log");
+  Check(!IsSessionLogFileName("PPSA04264_2026-11-19_07-05-03.txt"), "not .log");
+  Check(!IsSessionLogFileName("PPSA04264_2026-11-19_07-05-0x.log"), "not a stamp");
+  Check(!IsSessionLogFileName("PPSA04264_2026-11-19_07-05-03_.log"), "empty copy number");
+  Check(!IsSessionLogFileName("PPSA04264_2026-11-19_07-05-03_x.log"), "copy not a number");
+}
+
 void TestPruneSessionLogs() {
   namespace fs = std::filesystem;
   std::error_code error;
@@ -153,25 +166,38 @@ void TestPruneSessionLogs() {
   fs::create_directories(folder, error);
   Check(!error, "create the temporary folder");
   const auto now = fs::file_time_type::clock::now();
-  // log_0 is the newest.
+  const auto log_name = [](int i) {
+    return "PPSA04264_2026-11-19_07-05-" + std::string(i < 10 ? "0" : "") +
+           std::to_string(i) + ".log";
+  };
+  // log 0 is the newest; all are older than SESSION_LOG_MIN_PRUNE_AGE.
   for (int i = 0; i < 22; i++) {
-    const auto path = folder / ("log_" + std::to_string(i) + ".log");
+    const auto path = folder / log_name(i);
     std::ofstream(path) << i;
-    fs::last_write_time(path, now - std::chrono::hours(i), error);
+    fs::last_write_time(path, now - std::chrono::hours(i + 1), error);
     Check(!error, "set a modification time");
   }
-  std::ofstream(folder / "notes.txt") << "kept";
-  fs::last_write_time(folder / "notes.txt", now - std::chrono::hours(100), error);
+  // Older than every session log, but not named like one.
+  for (const char *name : {"notes.txt", "notes.log"}) {
+    std::ofstream(folder / name) << "kept";
+    fs::last_write_time(folder / name, now - std::chrono::hours(100), error);
+  }
 
   Log::PruneSessionLogs(folder, Log::SESSION_LOGS_KEPT - 1);
   for (int i = 0; i < 22; i++) {
-    const bool exists =
-        fs::exists(folder / ("log_" + std::to_string(i) + ".log"), error);
+    const bool exists = fs::exists(folder / log_name(i), error);
     Check(exists == (i < 19), "prune kept the wrong logs");
   }
   Check(fs::exists(folder / "notes.txt", error), "prune removed a file that is not a log");
+  Check(fs::exists(folder / "notes.log", error), "prune removed a log it did not name");
   Log::PruneSessionLogs(folder, 50);
-  Check(fs::exists(folder / "log_18.log", error), "prune below the limit removed a log");
+  Check(fs::exists(folder / log_name(18), error), "prune below the limit removed a log");
+
+  // A log written recently may be a running session's: kept even past the limit.
+  fs::last_write_time(folder / log_name(18), now, error);
+  Log::PruneSessionLogs(folder, 0);
+  Check(fs::exists(folder / log_name(18), error), "prune removed a recently written log");
+  Check(!fs::exists(folder / log_name(0), error), "prune to 0 kept an old log");
   fs::remove_all(folder, error);
 }
 
@@ -207,6 +233,7 @@ int main() {
   TestGpuMemorySummary();
   TestGpuIdentityLine();
   TestSessionLogFileName();
+  TestIsSessionLogFileName();
   TestPruneSessionLogs();
   TestMutexTryLock();
   std::printf("DiagTests: ok\n");

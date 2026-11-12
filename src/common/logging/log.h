@@ -3,6 +3,7 @@
 
 #include "common/common.h"
 
+#include <chrono>
 #include <ctime>
 #include <filesystem>
 #include <fmt/color.h>
@@ -44,7 +45,15 @@ void OpenAutoSessionLog(std::string_view title_id);
 // "<title>_<yyyy-MM-dd_HH-mm-ss>.log"; characters other than A-Z a-z 0-9 _ . - become '_', and an
 // empty title is "unknown".
 [[nodiscard]] std::string SessionLogFileName(std::string_view title_id, const std::tm& time);
-// Deletes the oldest *.log files of `folder` (by modification time) until at most `keep` remain.
+// Whether `file_name` has the shape SessionLogFileName() gives, with an optional "_<n>" copy
+// number before ".log": "<title>_<yyyy-MM-dd_HH-mm-ss>[_<n>].log". Only those are pruned.
+[[nodiscard]] bool IsSessionLogFileName(std::string_view file_name);
+// A session log modified this recently may belong to a session that is still running (another
+// emulator instance, a launcher session): never pruned.
+inline constexpr auto SESSION_LOG_MIN_PRUNE_AGE = std::chrono::minutes(10);
+// Deletes the oldest session logs of `folder` (IsSessionLogFileName, by modification time) until at
+// most `keep` remain, skipping those modified in the last SESSION_LOG_MIN_PRUNE_AGE. Other files,
+// such as a user's own *.log, are never touched.
 void PruneSessionLogs(const std::filesystem::path& folder, size_t keep);
 
 namespace Color {
