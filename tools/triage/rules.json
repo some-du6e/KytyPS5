@@ -1,0 +1,1160 @@
+{
+ "version": 1,
+ "about": "kyty-triage rules. scope: fatal = matched against the message of a fatal report (with 'file' as a basename condition), line = matched against every log line (needs a literal ^prefix in 'regex', or 'prefix'/'contains'), meta = used by the tool's own extractors (no regex). Fatal rules are tried in file order; the first match wins. severity 0-100 ranks fix areas. See README.md.",
+ "rules": [
+  {
+   "id": "strict-import-exit",
+   "category": "UNRESOLVED_IMPORT",
+   "title": "Unresolved import called with --strict-imports",
+   "scope": "fatal",
+   "severity": 90,
+   "regex": "^Unresolved import called: (?P<symbol>\\S+) from (?P<program>.+)$",
+   "fix_area": [
+    "src/libs/",
+    "src/loader/runtimeLinker.cpp",
+    "src/loader/symbolDatabase.cpp"
+   ],
+   "next_step": "Implement the named function (LIB_FUNC in the library's src/libs file, or a new LIB_VERSION block). Rerun without --strict-imports to see how far the game gets with the offline-style stub result.",
+   "known": [
+    "log-contract: HLE workstream --strict-imports"
+   ]
+  },
+  {
+   "id": "shader-opcode",
+   "category": "SHADER_OPCODE",
+   "title": "Unsupported shader instruction (fatal)",
+   "scope": "fatal",
+   "severity": 85,
+   "regex": "unsupported decoded instruction|shader CFG build failed|unknown RDNA2 instruction family|unsupported scalar (?:source|destination) operand|opcode \\S+ at pc 0x[0-9a-f]+ has unsupported|shader function needs nested calls|unsupported family=\\w+ opcode=",
+   "fix_area": [
+    "src/graphics/shader/recompiler/frontend/decode/OpcodeTable.h",
+    "src/graphics/shader/recompiler/frontend/decode/ShaderDecoder.cpp",
+    "src/graphics/shader/recompiler/frontend/translate/"
+   ],
+   "next_step": "Add the opcode to the decoder table and translate it (frontend/decode/*Ops.cpp, frontend/translate/*.cpp) with a GPU test in tests/ShaderRecompilerComputeTests.cpp. For more shaders, rerun with --shader-log-direction File to dump the program.",
+   "known": [
+    "#281 Missing shader opcodes (upstream aggregate)",
+    "fc86509a DS_WRITE_B8_D16_HI for GTA V (#794)"
+   ]
+  },
+  {
+   "id": "shader-resource-tracking",
+   "category": "SHADER_RESOURCE_TRACKING",
+   "title": "Shader resource tracking failed",
+   "scope": "fatal",
+   "severity": 85,
+   "regex": "shader resource tracking: hash=0x(?P<hash>[0-9a-f]{16}) stage=(?P<stage>\\w+)|indirect image table at pc 0x[0-9a-f]+ has incompatible candidates",
+   "fix_area": [
+    "src/graphics/shader/recompiler/ir/passes/ResourceTracking.cpp",
+    "src/graphics/shader/recompiler/ir/passes/ResourceMaterialization.cpp",
+    "src/graphics/shader/recompiler/ir/passes/SrtWalker.cpp"
+   ],
+   "next_step": "Get the shader dump (--shader-log-direction File) for the hash, find the instruction at pc that loads the descriptor, and teach ResourceTracking where the value comes from (descriptor table index, LoadBufferU32, GPU-selected V#).",
+   "known": [
+    "#507 descriptor indices from LoadBufferU32 (design issue)",
+    "#690 dynamic buffer descriptors (open PR)"
+   ]
+  },
+  {
+   "id": "spirv-failure",
+   "category": "SPIRV",
+   "title": "SPIR-V emission or validation failed",
+   "scope": "fatal",
+   "severity": 75,
+   "regex": "SPIR-V (?:validation|emission) failed|SPIR-V validation failed",
+   "fix_area": [
+    "src/graphics/shader/recompiler/backend/",
+    "src/graphics/host_gpu/renderer/pipeline/pipelineCache.cpp"
+   ],
+   "next_step": "Dump the module (--shader-log-direction File), run spirv-val on it and fix the emitter for the reported opcode.",
+   "known": []
+  },
+  {
+   "id": "pipeline-creation",
+   "category": "PIPELINE_CREATION",
+   "title": "Pipeline creation failed in the driver",
+   "scope": "fatal",
+   "severity": 75,
+   "regex": "vkCreate(?:Graphics|Compute)Pipelines failed|Not implemented \\(result != vk::Result::eSuccess\\)",
+   "file": "^shaders\\.cpp$|^pipelineCache\\.cpp$|^pipelineHelpers\\.cpp$",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/shaders.cpp",
+    "src/graphics/host_gpu/renderer/pipeline/pipelineHelpers.cpp"
+   ],
+   "next_step": "Note the stage hashes, dump them with --shader-log-direction File and run spirv-val; on NVIDIA also try without --shader-cache (#2069).",
+   "known": [
+    "173922b2 names the VkResult and stage hashes (cruz)",
+    "#2069 NVIDIA driver segfault during parallel shader-cache warm-up"
+   ]
+  },
+  {
+   "id": "vram-oom",
+   "category": "VRAM_OOM",
+   "title": "Out of GPU memory",
+   "scope": "fatal",
+   "severity": 85,
+   "regex": "ErrorOutOfDeviceMemory|ErrorOutOfHostMemory|failed to create image: extent=|vmaCreateAllocator failed|out of device memory",
+   "fix_area": [
+    "src/graphics/host_gpu/vma.cpp",
+    "src/graphics/host_gpu/renderer/cache/textureCache.cpp",
+    "src/graphics/host_gpu/renderer/image/image.cpp"
+   ],
+   "next_step": "Rerun with --vram-profile low (and --oom-recovery) on the 8 GB card; attach the 'VRAM:' and 'VRAM spill:' lines. Check the eviction thresholds in renderer/cache/memoryPolicy.h.",
+   "known": [
+    "gta6/vram branch: --vram-limit-mb, --vram-profile low, --oom-recovery"
+   ]
+  },
+  {
+   "id": "device-lost",
+   "category": "DEVICE_LOST",
+   "title": "GPU device lost (named)",
+   "scope": "fatal",
+   "severity": 85,
+   "group": "device-lost",
+   "regex": "ErrorDeviceLost|Device lost|device lost",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/commandScheduler.cpp",
+    "src/graphics/host_gpu/renderer/masterSemaphore.cpp",
+    "src/graphics/host_gpu/vulkanCommon.cpp"
+   ],
+   "next_step": "A GPU hang or TDR. Rerun with --vulkan-validation (on NVIDIA look for VUID-*-06479) and --device-fault-report; on Windows check Event Viewer (nvlddmkm 153 / amdkmdag). Bisect the last draw/dispatch with the shader hashes logged before it.",
+   "known": [
+    "#831 masterSemaphore.cpp:53 device lost on NVIDIA (3090-5090)",
+    "#1476/#1552 R32_SFLOAT depth-compare sampler hangs NVIDIA (VUID-06479)",
+    "#1498 Astro Bot device lost on RTX 5070"
+   ]
+  },
+  {
+   "id": "descriptor-pool",
+   "category": "DESCRIPTOR_POOL",
+   "title": "Descriptor pool exhausted or rejected",
+   "scope": "fatal",
+   "severity": 80,
+   "regex": "descriptor set does not fit a pool|createDescriptorPool|fresh_batch|ErrorOutOfPoolMemory|ErrorFragmentedPool",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/descriptorHeap.cpp"
+   ],
+   "next_step": "Mostly AMD (driver bug #1624 item 11). Compare with cruz fdec6ff6 and upstream PR #1758; log the requested pool sizes.",
+   "known": [
+    "cruz fdec6ff6 descriptor pool rework",
+    "upstream PR #1758 (open)",
+    "#1624 item 11 AMD descriptor-pool OOPM",
+    "#829 GTA V Fidelity/Perf RT on AMD"
+   ]
+  },
+  {
+   "id": "device-lost-disguised",
+   "category": "DEVICE_LOST",
+   "title": "GPU device lost (reported as 'Not implemented (result != eSuccess)')",
+   "scope": "fatal",
+   "severity": 85,
+   "group": "device-lost",
+   "ignore_case": true,
+   "regex": "not implemented|result|failed",
+   "file": "^masterSemaphore\\.cpp$|^commandScheduler\\.cpp$|^swapchain\\.cpp$",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/commandScheduler.cpp",
+    "src/graphics/host_gpu/renderer/masterSemaphore.cpp",
+    "src/graphics/host_gpu/vulkanCommon.cpp"
+   ],
+   "next_step": "A GPU hang or TDR (Windows Event Viewer: nvlddmkm 153 on NVIDIA, amdkmdag on AMD). Rerun with --vulkan-validation (on NVIDIA look for VUID-*-06479) and --device-fault-report; the shader hashes logged just before the report point at the last dispatch.",
+   "known": [
+    "#831 masterSemaphore.cpp:53 on NVIDIA",
+    "#1476 TDR tied to VUID-vkCmdDrawIndexed-None-06479",
+    "#829 commandScheduler.cpp:548 on AMD"
+   ]
+  },
+  {
+   "id": "validation-fatal",
+   "category": "VALIDATION",
+   "title": "Vulkan validation error (fatal with --vulkan-validation)",
+   "scope": "fatal",
+   "severity": 80,
+   "regex": "^\\[Vulkan\\]|VUID-",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/descriptors.cpp",
+    "src/graphics/presentation/window/vulkanWindow.cpp"
+   ],
+   "next_step": "Look up the VUID; the call named before it (vkCmdDraw*/vkCmdDispatch) and the binding identify the resource. Fix the binding, not the validation callback.",
+   "known": [
+    "#1476/#1458 VUID-*-06479 R32_SFLOAT with a depth-compare sampler (NVIDIA)"
+   ]
+  },
+  {
+   "id": "device-selection",
+   "category": "DEVICE_SELECTION",
+   "title": "No usable Vulkan device",
+   "scope": "fatal",
+   "severity": 70,
+   "regex": "Could not find suitable device",
+   "fix_area": [
+    "src/graphics/presentation/window/vulkanWindow.cpp"
+   ],
+   "next_step": "The listed features are missing on this GPU/driver (MoltenVK lacks minLod, shaderBufferInt64Atomics, shaderCullDistance). Update the driver; otherwise make the feature optional with a fallback.",
+   "known": [
+    "#1068/#1133/#1448 macOS MoltenVK"
+   ]
+  },
+  {
+   "id": "render-state-depth-upload",
+   "category": "RENDER_STATE",
+   "title": "Invalid depth upload in the texture cache",
+   "scope": "fatal",
+   "severity": 75,
+   "regex": "TextureCache: invalid depth upload",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/cache/textureCache.cpp"
+   ],
+   "next_step": "Check the image layer count / format of the depth target being uploaded (a 6-layer cube through a view of fewer slices in GTA V).",
+   "known": [
+    "068d7621 preserve stencil view layers (fixes #810/#1029)",
+    "PR #927 (superseded)"
+   ]
+  },
+  {
+   "id": "render-state-feedback-loop",
+   "category": "RENDER_STATE",
+   "title": "Depth attachment feedback loop not supported by the host",
+   "scope": "fatal",
+   "severity": 70,
+   "regex": "depth attachment feedback loop is not supported",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/renderDraw.cpp"
+   ],
+   "next_step": "Sample a pre-draw copy of the depth target instead of exiting.",
+   "known": [
+    "cruz 36d12b0a/07964300 sample a pre-draw copy",
+    "#1123 Intel Arc",
+    "#1187 (open), #1241 (closed)"
+   ]
+  },
+  {
+   "id": "render-state-storage-image",
+   "category": "RENDER_STATE",
+   "title": "Unsupported storage image or texture",
+   "scope": "fatal",
+   "severity": 70,
+   "regex": "unsupported storage color image resource|unsupported storage texture",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/image/imageView.h",
+    "src/graphics/host_gpu/renderer/pipeline/descriptors.cpp"
+   ],
+   "next_step": "Add the view kind/dimension (kind=11 dimension=3 is a 3D storage view in GTA V story load).",
+   "known": [
+    "#166/#229 GTA V kind=11 dimension=3"
+   ]
+  },
+  {
+   "id": "render-state-tiled-rt",
+   "category": "RENDER_STATE",
+   "title": "Unsupported texture-tiled render target view",
+   "scope": "fatal",
+   "severity": 65,
+   "regex": "unsupported 64KB texture-tiled render-target view",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/colorRenderTarget.cpp",
+    "src/graphics/host_gpu/renderer/image/tiler.cpp"
+   ],
+   "next_step": "Support the layered view of the tiled target.",
+   "known": [
+    "#166"
+   ]
+  },
+  {
+   "id": "render-state-depth-target",
+   "category": "RENDER_STATE",
+   "title": "Unsupported depth render state",
+   "scope": "fatal",
+   "severity": 65,
+   "regex": "unsupported render state; details were printed above|Depth target fatal",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/depthRenderTarget.cpp"
+   ],
+   "next_step": "The 'Depth target fatal:' line before the report says which state; support it or fall back.",
+   "known": []
+  },
+  {
+   "id": "render-state-sh-reg",
+   "category": "RENDER_STATE",
+   "title": "Unknown PM4 shader register",
+   "scope": "fatal",
+   "severity": 60,
+   "regex": "unknown sh reg at",
+   "fix_area": [
+    "src/graphics/guest_gpu/"
+   ],
+   "next_step": "Add the register to the PM4 SH register handlers.",
+   "known": []
+  },
+  {
+   "id": "page-manager",
+   "category": "PAGE_MANAGER",
+   "title": "PageManager fatal",
+   "scope": "fatal",
+   "severity": 75,
+   "regex": "^PageManager fatal:",
+   "fix_area": [
+    "src/graphics/host_gpu/pageManager.cpp",
+    "src/graphics/host_gpu/memoryTracker.cpp"
+   ],
+   "next_step": "Write-watch bookkeeping went wrong; the message names the range and mode.",
+   "known": []
+  },
+  {
+   "id": "guest-memory",
+   "category": "GUEST_MEMORY",
+   "title": "Guest memory mapping failure",
+   "scope": "fatal",
+   "severity": 70,
+   "regex": "^Memory: |direct-backing write failed|could not reserve \\d+ MB for guest direct memory|BufferCache: failed to read sparse",
+   "fix_area": [
+    "src/kernel/memory.cpp",
+    "src/kernel/memoryAddressSpace.inc"
+   ],
+   "next_step": "Check the host RAM / commit limit (#829 13824 MB commit) and the mapping that failed.",
+   "known": [
+    "#829 could not reserve 13824 MB"
+   ]
+  },
+  {
+   "id": "guest-abort",
+   "category": "GUEST_ABORT",
+   "title": "Guest called abort()",
+   "scope": "fatal",
+   "severity": 70,
+   "regex": "^Guest abort\\(\\)",
+   "fix_area": [
+    "src/libs/libC.cpp",
+    "src/libs/"
+   ],
+   "next_step": "Read 'Guest abort diagnostics' and the guest stack trace in the printf log; the caller usually checked a return value of an HLE function.",
+   "known": []
+  },
+  {
+   "id": "uncaught-exception",
+   "category": "UNCAUGHT_EXCEPTION",
+   "title": "Uncaught C++ exception (std::terminate)",
+   "scope": "fatal",
+   "severity": 70,
+   "regex": "^terminate",
+   "fix_area": [
+    "src/main.cpp"
+   ],
+   "next_step": "The what() text names the throwing code; on Windows the exit code is 0xC0000409 or 3.",
+   "known": [
+    "cruz dec44817 terminate handler"
+   ]
+  },
+  {
+   "id": "hle-fatal",
+   "category": "HLE",
+   "title": "Fatal error in an HLE library",
+   "scope": "fatal",
+   "severity": 70,
+   "regex": ".",
+   "file": "^(?:lib\\w+|agc|network|audio\\w*|dialog|ngs2|ajm|avPlayer|ime\\w*|controller|padVr|errno|guestPrintf|videoDec2Decoder)\\.(?:cpp|h)$",
+   "fix_area": [
+    "src/libs/"
+   ],
+   "next_step": "Turn the EXIT into a logged soft failure that returns the documented error code (Soft-fail helper on the gta6/hle branch), then see what the game does next.",
+   "known": []
+  },
+  {
+   "id": "kernel-fatal",
+   "category": "KERNEL",
+   "title": "Fatal error in the kernel emulation",
+   "scope": "fatal",
+   "severity": 70,
+   "regex": ".",
+   "file": "^(?:memory|pthread|fileSystem|eventQueue|eventFlag|semaphore|syncOnAddress|guestPause|macosGuestAddressSpace)\\.(?:cpp|h|inc)$|^memoryAddressSpace\\.inc$",
+   "fix_area": [
+    "src/kernel/"
+   ],
+   "next_step": "Turn the EXIT into an error return the guest can handle, or implement the missing case.",
+   "known": []
+  },
+  {
+   "id": "host-fault-guest",
+   "category": "HOST_FAULT_GUEST",
+   "title": "Guest code faulted (unhandled host exception in a guest module)",
+   "scope": "meta",
+   "severity": 75,
+   "fix_area": [
+    "src/loader/runtimeLinker.cpp",
+    "src/libs/",
+    "src/kernel/memory.cpp"
+   ],
+   "next_step": "Resolve the pc to module+offset (done above when the log has the module map) and look at what the guest read before: a stub that returned 0, an unmapped buffer, or a red-zone clobber. Rerun with --printf-direction File so the module map and import calls are in the log.",
+   "known": [
+    "#729/#888 GTA V 01.005 eboot+0x28ab5xx..dxx write fault on NVIDIA",
+    "cruz 76faca70 --redzone default on (car-entry crash)"
+   ]
+  },
+  {
+   "id": "host-fault-bad-jump",
+   "category": "HOST_FAULT_BAD_JUMP",
+   "title": "Guest jumped to a null or bad address",
+   "scope": "meta",
+   "severity": 75,
+   "fix_area": [
+    "src/loader/runtimeLinker.cpp",
+    "src/libs/"
+   ],
+   "next_step": "Usually a function pointer read from an unresolved object import or a zeroed struct an HLE call should have filled. Check the unresolved object imports and the last HLE calls.",
+   "known": [
+    "#166 pc=0xbffe access=3 (Linux, fixed later)"
+   ]
+  },
+  {
+   "id": "host-fault-driver",
+   "category": "HOST_FAULT_DRIVER",
+   "title": "Crash inside the GPU driver",
+   "scope": "meta",
+   "severity": 75,
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/shaders.cpp",
+    "src/graphics/host_gpu/renderer/pipeline/pipelineHelpers.cpp"
+   ],
+   "next_step": "If 'pipeline being created by the driver' names stages, dump and spirv-val those shaders; update the driver; on NVIDIA try without --shader-cache (#2069) and with the pipeline helpers.",
+   "known": [
+    "#2069 libnvidia-glvkspirv.so segfault (ec746622), PR #2132 serial warm-up",
+    "fc3a6c82 names the driver module (cruz)"
+   ]
+  },
+  {
+   "id": "host-fault-emulator",
+   "category": "HOST_FAULT_EMULATOR",
+   "title": "Crash in the emulator or a host library",
+   "scope": "meta",
+   "severity": 75,
+   "fix_area": [
+    "src/"
+   ],
+   "next_step": "Get a symbolized stack (Windows: a .dmp with the matching .pdb; Linux: gdb) for the host pc.",
+   "known": []
+  },
+  {
+   "id": "host-fault-host",
+   "category": "HOST_FAULT_HOST",
+   "title": "Unhandled host exception at a host address (module unknown)",
+   "scope": "meta",
+   "severity": 70,
+   "fix_area": [
+    "src/loader/runtimeLinker.cpp"
+   ],
+   "next_step": "The pc is outside the guest modules. Rerun a build with fc3a6c82 (names the DLL) or attach a debugger; a near-null address is a null dereference in the emulator or driver.",
+   "known": [
+    "#1123 host null read pc=0x7ff9fec0e9cd addr=0x350 on the pause menu"
+   ]
+  },
+  {
+   "id": "fatal-other",
+   "category": "FATAL_OTHER",
+   "title": "Fatal error (no specific rule)",
+   "scope": "meta",
+   "severity": 60,
+   "fix_area": [],
+   "next_step": "Open the file named in the report at that line; add a rule to tools/triage/rules.json once the cause is known.",
+   "known": []
+  },
+  {
+   "id": "unresolved-import-called",
+   "category": "UNRESOLVED_IMPORT",
+   "title": "Unresolved imports called at run time",
+   "scope": "meta",
+   "severity": 70,
+   "fix_area": [
+    "src/libs/",
+    "src/loader/runtimeLinker.cpp"
+   ],
+   "next_step": "Implement the called functions (LIB_FUNC with a plausible result); check what the game does with the stub's return value. 'policy=' shows the stub's current return.",
+   "known": [
+    "gta6/hle: once-per-symbol logging, offline Np/Net returns, --strict-imports"
+   ]
+  },
+  {
+   "id": "unresolved-import-summary",
+   "category": "UNRESOLVED_IMPORT",
+   "title": "Imports left unresolved at load",
+   "scope": "meta",
+   "severity": 20,
+   "fix_area": [
+    "src/libs/"
+   ],
+   "next_step": "Not a failure by itself; the ones that get called matter. Use --dump-imports on the game's eboot to diff against GTA V.",
+   "known": []
+  },
+  {
+   "id": "shader-opcode-skip",
+   "category": "SHADER_OPCODE",
+   "title": "Shader skipped: unsupported instruction",
+   "scope": "meta",
+   "severity": 65,
+   "fix_area": [
+    "src/graphics/shader/recompiler/frontend/decode/OpcodeTable.h",
+    "src/graphics/shader/recompiler/frontend/translate/"
+   ],
+   "next_step": "The draw/dispatch of these shaders is skipped, so their output is missing. Implement the opcode; --strict-shaders restores the old fatal error for a reproducer.",
+   "known": [
+    "#281 Missing shader opcodes",
+    "gta6/shader-alu: skip unsupported programs instead of exiting"
+   ]
+  },
+  {
+   "id": "vulkan-validation-error",
+   "category": "VALIDATION",
+   "title": "Vulkan validation errors",
+   "scope": "meta",
+   "severity": 55,
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/descriptors.cpp",
+    "src/graphics/host_gpu/renderer/"
+   ],
+   "next_step": "Fix the first VUID in the run; later ones are often follow-ons.",
+   "known": [],
+   "group": "validation"
+  },
+  {
+   "id": "vulkan-validation-warning",
+   "category": "VALIDATION",
+   "title": "Vulkan validation warnings",
+   "scope": "meta",
+   "severity": 10,
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/"
+   ],
+   "next_step": "Usually performance hints; ignore unless they name a hazard.",
+   "known": []
+  },
+  {
+   "id": "hack-notice",
+   "category": "WORKAROUND",
+   "title": "Workarounds applied ([HACK])",
+   "scope": "meta",
+   "severity": 12,
+   "fix_area": [],
+   "next_step": "Each [HACK] hides a missing feature; a hack that fires every frame near the failure is a suspect.",
+   "known": [
+    "bb039a0d once-per-key [HACK] notices (cruz)"
+   ]
+  },
+  {
+   "id": "soft-fail",
+   "category": "HLE_SOFT_FAIL",
+   "title": "HLE soft failures (former fatal errors)",
+   "scope": "meta",
+   "severity": 30,
+   "fix_area": [
+    "src/libs/"
+   ],
+   "next_step": "These used to EXIT; the game got an error code instead. Implement the case if the game reacts badly.",
+   "known": [
+    "gta6/hle Soft-fail helper"
+   ]
+  },
+  {
+   "id": "guest-syscall",
+   "category": "GUEST_SYSCALL",
+   "title": "Raw syscall instructions in guest code",
+   "scope": "meta",
+   "severity": 45,
+   "fix_area": [
+    "src/loader/guestInstructionPatcher.cpp",
+    "src/loader/runtimeLinker.cpp"
+   ],
+   "next_step": "Raw syscalls are not emulated; find which syscall numbers the module uses and route them to the kernel HLE.",
+   "known": [
+    "gta6/hle: raw syscall detection at load"
+   ]
+  },
+  {
+   "id": "nvidia-shader-cache-warmup",
+   "category": "HOST_FAULT_DRIVER",
+   "title": "Log ends during the shader cache warm-up (NVIDIA)",
+   "scope": "meta",
+   "severity": 70,
+   "vendor": "nvidia",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/pipelineCache.cpp"
+   ],
+   "next_step": "Known NVIDIA driver segfault in parallel warm-up; rerun without --shader-cache.",
+   "known": [
+    "#2069",
+    "PR #2132 serial warm-up on vendor 0x10DE (open)"
+   ]
+  },
+  {
+   "id": "no-fatal-no-fatal",
+   "category": "NO_FATAL",
+   "title": "No fatal report: hang, kill or crash outside the handler",
+   "scope": "meta",
+   "severity": 40,
+   "fix_area": [],
+   "next_step": "Ask for the console output, the session log (--session-log) and the Windows Event Viewer entry; a hang shows as the last lines repeating.",
+   "known": []
+  },
+  {
+   "id": "no-fatal-truncated",
+   "category": "NO_FATAL",
+   "title": "Log cut off mid-line (killed, hang or still running)",
+   "scope": "meta",
+   "severity": 40,
+   "fix_area": [],
+   "next_step": "The process was killed or hung; ask for the session log, which is flushed per line, and what was on screen.",
+   "known": []
+  },
+  {
+   "id": "vuid-mention",
+   "category": "VALIDATION",
+   "title": "Vulkan validation VUID",
+   "scope": "line",
+   "severity": 55,
+   "group": "validation",
+   "contains": "VUID-",
+   "regex": "(?P<vuid>VUID-[A-Za-z0-9_\\-]+)",
+   "key": [
+    "vuid"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/descriptors.cpp",
+    "src/graphics/host_gpu/renderer/"
+   ],
+   "next_step": "Fix the first VUID of the run; the call and binding in the message identify the resource.",
+   "known": []
+  },
+  {
+   "id": "vk-device-lost",
+   "category": "DEVICE_LOST",
+   "title": "Vulkan call returned ErrorDeviceLost",
+   "scope": "line",
+   "severity": 80,
+   "group": "device-lost",
+   "contains": "ErrorDeviceLost",
+   "regex": "^(?P<op>.*?) failed: (?P<result>ErrorDeviceLost)",
+   "key": [
+    "op"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/commandScheduler.cpp",
+    "src/graphics/host_gpu/renderer/masterSemaphore.cpp"
+   ],
+   "next_step": "See the device-lost rule.",
+   "known": []
+  },
+  {
+   "id": "vk-out-of-memory",
+   "category": "VRAM_OOM",
+   "title": "Vulkan call ran out of memory",
+   "scope": "line",
+   "severity": 80,
+   "contains": "ErrorOutOf",
+   "regex": "^(?P<op>.*?) failed: (?P<result>ErrorOutOf\\w+)",
+   "key": [
+    "op",
+    "result"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/vma.cpp",
+    "src/graphics/host_gpu/renderer/cache/textureCache.cpp"
+   ],
+   "next_step": "Rerun with --vram-profile low --oom-recovery; attach the VRAM lines.",
+   "known": []
+  },
+  {
+   "id": "vk-other-failure",
+   "category": "GPU_ERROR",
+   "title": "Vulkan call failed",
+   "scope": "line",
+   "severity": 50,
+   "contains": " failed: Error",
+   "regex": "^(?P<op>(?!vkCreate(?:Graphics|Compute)Pipelines).*?) failed: (?P<result>Error(?!DeviceLost|OutOf)\\w+)",
+   "key": [
+    "op",
+    "result"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/vulkanCommon.cpp"
+   ],
+   "next_step": "Look up the VkResult for the named call.",
+   "known": []
+  },
+  {
+   "id": "device-fault-detail",
+   "category": "DEVICE_LOST",
+   "title": "VK_EXT_device_fault report",
+   "scope": "line",
+   "severity": 60,
+   "group": "device-lost",
+   "regex": "^Device (?:fault|lost)(?: reports)?: (?P<detail>.*)$",
+   "fix_area": [
+    "src/graphics/host_gpu/vulkanCommon.cpp"
+   ],
+   "next_step": "The fault address / vendor code narrows the dispatch; match the address against the buffer and image ranges.",
+   "known": [
+    "gta6/diag --device-fault-report"
+   ]
+  },
+  {
+   "id": "vram-spill",
+   "category": "VRAM_SPILL",
+   "title": "Allocations spilled out of device-local memory",
+   "scope": "line",
+   "severity": 50,
+   "regex": "^VRAM spill: (?P<kind>images|buffers) allocated outside device-local memory: count=(?P<count>\\d+) bytes=(?P<mib>\\d+) MiB",
+   "key": [
+    "kind"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/vma.cpp",
+    "src/graphics/host_gpu/renderer/cache/textureCache.cpp"
+   ],
+   "next_step": "The working set exceeds VRAM: expect stutter. Try --vram-profile low and compare the 'VRAM:' budget line with the card size; the GC thresholds live in renderer/cache/memoryPolicy.h on the gta6/vram branch.",
+   "known": [
+    "gta6/vram NoteSpill"
+   ]
+  },
+  {
+   "id": "vram-pressure",
+   "category": "VRAM_PRESSURE",
+   "title": "Emergency eviction after an allocation failure",
+   "scope": "line",
+   "severity": 55,
+   "regex": "^VRAM pressure: emergency eviction freed (?P<freed>\\d+) MiB after allocation failure of (?P<mib>\\d+) MiB \\((?P<what>.*?)\\), retry (?P<retry>\\d+)",
+   "fix_area": [
+    "src/graphics/host_gpu/vma.cpp",
+    "src/graphics/host_gpu/renderer/cache/textureCache.cpp"
+   ],
+   "next_step": "Allocation failures were recovered by eviction; lower the texture budget (--vram-profile low, thresholds in renderer/cache/memoryPolicy.h on gta6/vram).",
+   "known": [
+    "gta6/vram --oom-recovery"
+   ]
+  },
+  {
+   "id": "failed-create-image",
+   "category": "VRAM_OOM",
+   "title": "Image creation failed",
+   "scope": "line",
+   "severity": 70,
+   "regex": "^failed to create image: extent=(?P<w>\\d+)x(?P<h>\\d+)x(?P<d>\\d+) format=(?P<format>\\d+)",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/image/image.cpp",
+    "src/graphics/host_gpu/vma.cpp"
+   ],
+   "next_step": "Check the VMA heap lines before it for budget vs usage.",
+   "known": []
+  },
+  {
+   "id": "vma-heap",
+   "category": "VRAM_OOM",
+   "title": "VMA heap budget dump",
+   "scope": "line",
+   "severity": 5,
+   "regex": "^VMA heap (?P<heap>\\d+): usage=(?P<usage>\\d+), budget=(?P<budget>\\d+)",
+   "key": [
+    "heap"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/vma.cpp"
+   ],
+   "next_step": "Context for an allocation failure.",
+   "known": []
+  },
+  {
+   "id": "host-reserve-fail",
+   "category": "GUEST_MEMORY",
+   "title": "Host could not reserve guest direct memory",
+   "scope": "line",
+   "severity": 70,
+   "regex": "^could not reserve (?P<mb>\\d+) MB for guest direct memory",
+   "fix_area": [
+    "src/kernel/memoryAddressSpace.inc",
+    "src/kernel/memory.cpp"
+   ],
+   "next_step": "Host RAM or page-file limit; raise the page file or close other programs.",
+   "known": [
+    "#829"
+   ]
+  },
+  {
+   "id": "descriptor-pool-line",
+   "category": "DESCRIPTOR_POOL",
+   "title": "Descriptor set does not fit its pool",
+   "scope": "line",
+   "severity": 60,
+   "regex": "^descriptor set does not fit a pool sized for it:",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/descriptorHeap.cpp"
+   ],
+   "next_step": "See the descriptor-pool rule.",
+   "known": [
+    "cruz fdec6ff6",
+    "PR #1758"
+   ]
+  },
+  {
+   "id": "pipeline-create-failed-line",
+   "category": "PIPELINE_CREATION",
+   "title": "Pipeline creation failed",
+   "scope": "line",
+   "severity": 70,
+   "regex": "^vkCreate(?P<kind>Graphics|Compute)Pipelines failed: (?P<result>\\w+), (?P<stages>.*)$",
+   "key": [
+    "kind",
+    "result",
+    "stages"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/shaders.cpp"
+   ],
+   "next_step": "Dump the named stage hashes and run spirv-val.",
+   "known": []
+  },
+  {
+   "id": "driver-pipeline-line",
+   "category": "SHADER_COMPILER_DRIVER",
+   "title": "Driver was compiling a pipeline",
+   "scope": "line",
+   "severity": 30,
+   "regex": "^pipeline being created by the driver:(?P<stages>.*)$",
+   "key": [
+    "stages"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/shaders.cpp",
+    "src/graphics/host_gpu/renderer/pipeline/pipelineHelpers.cpp"
+   ],
+   "next_step": "If the crash is in the driver, these are the shaders to dump.",
+   "known": [
+    "fc3a6c82 (cruz)"
+   ]
+  },
+  {
+   "id": "pipeline-helper-line",
+   "category": "SHADER_COMPILER_DRIVER",
+   "title": "Pipeline helper process problem",
+   "scope": "line",
+   "severity": 25,
+   "regex": "^Pipeline helpers?: (?:cs [0-9a-f]{16}: |helper \\d+ returned nothing)",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/pipeline/pipelineHelpers.cpp"
+   ],
+   "next_step": "A helper process failed to compile; the named cs hash is the shader.",
+   "known": []
+  },
+  {
+   "id": "spirv-validation-line",
+   "category": "SPIRV",
+   "title": "SPIR-V validation failed",
+   "scope": "line",
+   "severity": 60,
+   "regex": "^ShaderRecompiler (?P<stage>\\w+) SPIR-V validation failed hash=0x(?P<hash>[0-9a-f]{16})",
+   "key": [
+    "hash"
+   ],
+   "fix_area": [
+    "src/graphics/shader/recompiler/backend/"
+   ],
+   "next_step": "Dump the module and run spirv-val.",
+   "known": []
+  },
+  {
+   "id": "spirv-fail-line",
+   "category": "SPIRV",
+   "title": "SPIR-V emission/validation failed",
+   "scope": "line",
+   "severity": 60,
+   "regex": "^SPIR-V (?:validation|emission) failed: hash=0x(?P<hash>[0-9a-f]{16}) stage=(?P<stage>\\w+)",
+   "key": [
+    "hash"
+   ],
+   "fix_area": [
+    "src/graphics/shader/recompiler/backend/"
+   ],
+   "next_step": "Dump the module and run spirv-val.",
+   "known": []
+  },
+  {
+   "id": "srt-specialization",
+   "category": "SHADER_RESOURCE_TRACKING",
+   "title": "Shader resource specialization failed",
+   "scope": "line",
+   "severity": 35,
+   "regex": "^shader resource specialization failed: (?P<why>.*)$",
+   "fix_area": [
+    "src/graphics/shader/recompiler/ir/passes/ResourceMaterialization.cpp"
+   ],
+   "next_step": "Non-fatal; the draw used a generic path. Frequent lines near a crash point at the shader.",
+   "known": []
+  },
+  {
+   "id": "indirect-image-table",
+   "category": "SHADER_RESOURCE_TRACKING",
+   "title": "Indirect image table with incompatible candidates",
+   "scope": "line",
+   "severity": 40,
+   "regex": "^indirect image table at pc 0x(?P<pc>[0-9a-f]+) has incompatible candidates",
+   "fix_area": [
+    "src/graphics/shader/recompiler/ir/passes/ResourceMaterialization.cpp"
+   ],
+   "next_step": "The bindless table mixes image kinds.",
+   "known": []
+  },
+  {
+   "id": "gpu-feature-warning",
+   "category": "DEVICE_SELECTION",
+   "title": "GPU missing an optional feature",
+   "scope": "line",
+   "severity": 25,
+   "regex": "^WARNING: Your GPU is not fully supported \\((?P<what>[^)]*)\\)",
+   "fix_area": [
+    "src/graphics/presentation/window/vulkanWindow.cpp"
+   ],
+   "next_step": "Rendering that needs the feature falls back or is wrong.",
+   "known": []
+  },
+  {
+   "id": "storage-format-warning",
+   "category": "RENDER_STATE",
+   "title": "Format lacks storage support",
+   "scope": "line",
+   "severity": 10,
+   "regex": "^Warning: format (?P<format>\\w+) does not support storage access",
+   "key": [
+    "format"
+   ],
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/image/image.cpp"
+   ],
+   "next_step": "Block-compressed textures written by the guest will not render.",
+   "known": []
+  },
+  {
+   "id": "depth-target-fatal-line",
+   "category": "RENDER_STATE",
+   "title": "Depth target fatal detail",
+   "scope": "line",
+   "severity": 50,
+   "regex": "^Depth target fatal: (?P<why>.*)$",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/depthRenderTarget.cpp"
+   ],
+   "next_step": "The reason for the following 'unsupported render state' report.",
+   "known": []
+  },
+  {
+   "id": "depth-feedback-line",
+   "category": "RENDER_STATE",
+   "title": "Depth feedback loop notice",
+   "scope": "line",
+   "severity": 20,
+   "regex": "^depth attachment feedback loop is not supported by the host",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/renderDraw.cpp"
+   ],
+   "next_step": "Non-fatal in current builds; may show as wrong depth effects.",
+   "known": [
+    "cruz 36d12b0a"
+   ]
+  },
+  {
+   "id": "non-gpu-cached-access",
+   "category": "GPU_PAGE_FAULT",
+   "title": "GPU accessed memory that is not GPU-cached",
+   "scope": "line",
+   "severity": 15,
+   "regex": "^Accessed non-GPU cached memory at 0x",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/cache/faultManager.cpp",
+    "src/graphics/host_gpu/renderer/cache/bufferCache.cpp"
+   ],
+   "next_step": "A shader read memory no buffer covers; it read zeros.",
+   "known": [
+    "#925 DMA bases (cruz 82ca24cb)"
+   ]
+  },
+  {
+   "id": "guest-memory-line",
+   "category": "GUEST_MEMORY",
+   "title": "Guest memory access problem",
+   "scope": "line",
+   "severity": 45,
+   "regex": "^Memory: (?P<what>attempted to access invalid address|required direct-backing write failed)",
+   "key": [
+    "what"
+   ],
+   "fix_area": [
+    "src/kernel/memory.cpp"
+   ],
+   "next_step": "The guest touched unmapped memory; check the mapping calls before it.",
+   "known": []
+  },
+  {
+   "id": "buffercache-sparse",
+   "category": "GUEST_MEMORY",
+   "title": "Sparse guest buffer read failed",
+   "scope": "line",
+   "severity": 30,
+   "regex": "^BufferCache: failed to read sparse guest buffer memory",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/cache/bufferCache.cpp"
+   ],
+   "next_step": "A GPU buffer covers unmapped guest pages.",
+   "known": [
+    "cruz 666e9d72"
+   ]
+  },
+  {
+   "id": "unknown-sh-reg-line",
+   "category": "RENDER_STATE",
+   "title": "Unknown PM4 shader register",
+   "scope": "line",
+   "severity": 25,
+   "regex": "^unknown sh reg at (?P<reg>[0-9a-f]{5})",
+   "key": [
+    "reg"
+   ],
+   "fix_area": [
+    "src/graphics/guest_gpu/"
+   ],
+   "next_step": "Add the register.",
+   "known": []
+  },
+  {
+   "id": "indirect-draw-offset",
+   "category": "RENDER_STATE",
+   "title": "Indirect draw ignores GE_INDX_OFFSET",
+   "scope": "line",
+   "severity": 20,
+   "regex": "^GPU: indirect draw ignores GE_INDX_OFFSET",
+   "fix_area": [
+    "src/graphics/host_gpu/renderer/renderDraw.cpp"
+   ],
+   "next_step": "Geometry of indirect indexed draws may be wrong.",
+   "known": []
+  },
+  {
+   "id": "session-log-open-fail",
+   "category": "LOGGING",
+   "title": "Session log could not be opened",
+   "scope": "line",
+   "severity": 5,
+   "regex": "^Session log: cannot open the file",
+   "fix_area": [
+    "src/common/logging/log.cpp"
+   ],
+   "next_step": "Check the --session-log path is writable.",
+   "known": []
+  }
+ ],
+ "known_signatures": [
+  {
+   "field": "hash",
+   "match": "^0x5e3e42fe237d3e16$",
+   "note": "GTA V compute shader, pc 0x93c GetBufferResource dword 0 (PPSA04263 1.010.002 and PPSA04264); no fix upstream",
+   "refs": [
+    "#507",
+    "#548",
+    "#1029"
+   ]
+  },
+  {
+   "field": "hash",
+   "match": "^0x6a53456e7ef5d1b0$",
+   "note": "GTA V Fidelity skinning compute feeding the RT BVH, pc 0x86c; fixed in cruz 0490d330 (PR #931, IndirectWriteTables)",
+   "refs": [
+    "#229",
+    "#810",
+    "PR #931",
+    "cruz 0490d330"
+   ]
+  },
+  {
+   "field": "hash",
+   "match": "^0xf6b18542ea0e938a$",
+   "note": "GTA V pixel shader, pc 0xc8 GetSamplerResource dword 3 (sampler border color word); fixed in cruz 3df1cd6b (PR #1226)",
+   "refs": [
+    "#1835",
+    "PR #1226",
+    "cruz 3df1cd6b"
+   ]
+  },
+  {
+   "field": "hash",
+   "match": "^0xa016c19e423c6efb$",
+   "note": "GTA V BVH compute shader behind the RADV ring gfx timeout",
+   "refs": [
+    "#229",
+    "#810"
+   ]
+  },
+  {
+   "field": "hash",
+   "match": "^0xe9e4f0b919d80844$",
+   "note": "GTA V glyph atlas compute (FLAT_LOAD_UBYTE from DMA bases); cruz 82ca24cb caches DMA bases",
+   "refs": [
+    "PR #925",
+    "cruz 82ca24cb"
+   ]
+  },
+  {
+   "field": "guest_pc",
+   "match": "^eboot\\.bin\\+0x28ab[0-9a-f]{3}$",
+   "note": "GTA V 01.005 prologue guest write fault family on NVIDIA 8 GB cards (plausible, unconfirmed: red-zone clobber)",
+   "refs": [
+    "#729",
+    "#888",
+    "cruz 76faca70 (--redzone default)"
+   ]
+  },
+  {
+   "field": "symbol",
+   "match": "^Fc8qxlKINYQ\\[VideoRecording",
+   "note": "VideoRecording call seen in every GTA V log; harmless",
+   "refs": [
+    "#1835"
+   ],
+   "harmless": true
+  },
+  {
+   "field": "vuid",
+   "match": "^VUID-vkCmd\\w+-None-06479$",
+   "note": "depth-compare sampler on an R32_SFLOAT view; NVIDIA does not support it and hangs (TDR)",
+   "refs": [
+    "#1476",
+    "#1552",
+    "#1458"
+   ]
+  },
+  {
+   "field": "message",
+   "match": "kind=11 dimension=3",
+   "note": "GTA V story-mode load storage image",
+   "refs": [
+    "#166",
+    "#229"
+   ]
+  }
+ ],
+ "harmless_symbols": [],
+ "library_hints": {
+  "NpManager": "PSN sign-in and account state; offline answers (not signed in, no account) keep games going (HLE policy np-offline).",
+  "NpEntitlementAccess": "DLC / entitlement checks; GTA V-style legacy labels are profile-gated on gta6/config.",
+  "NpWebApi2": "PSN web API; return a network error so the game takes its offline path.",
+  "NpCppWebApi": "PSN web API (C++); offline error.",
+  "NpUniversalDataSystem": "PSN telemetry/activities; can return success and drop data.",
+  "NpCommerce": "PS Store dialogs; return 'not available'.",
+  "NpAuth": "PSN auth codes; offline error.",
+  "NpTrophy2": "Trophies; usually implemented as a local no-op.",
+  "Http": "HTTP client; http-down policy.",
+  "Http2": "HTTP/2 client; http-down policy.",
+  "Ssl": "TLS; return an error so the game stays offline.",
+  "Net": "Sockets; net-down policy.",
+  "NetCtl": "Network state; report disconnected.",
+  "VideoRecordingP": "Harmless in GTA V.",
+  "ContentExport": "Share/export dialog; not needed to boot.",
+  "WebBrowserDialog": "In-game browser; return 'not available'.",
+  "PlayerInvitationDialog": "PSN invitations; not needed to boot.",
+  "SystemService": "System events and parameters; check what the game reads.",
+  "Json2": "JSON library used by Np web APIs."
+ }
+}
