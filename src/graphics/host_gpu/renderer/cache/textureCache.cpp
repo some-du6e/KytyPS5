@@ -11,6 +11,7 @@
 #include "graphics/guest_gpu/tile.h"
 #include "graphics/host_gpu/graphicContext.h"
 #include "graphics/host_gpu/renderer/cache/bufferCache.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 #include "graphics/host_gpu/renderer/commandScheduler.h"
 #include "graphics/host_gpu/renderer/image/imageView.h"
 #include "graphics/host_gpu/renderer/image/textureCommon.h"
@@ -39,6 +40,8 @@ constexpr uint64_t NumFramesBeforeRemoval = 16;
 // Images a depth/color conversion replaced are kept for a conversion back (see ParkImage()).
 constexpr size_t   MaxParkedImages  = 8;
 constexpr uint64_t ParkedImageTicks = 2048;
+// gta6-prep: vram: the bound comes from Config::GetVramSettings() (4 with --vram-profile low).
+static_assert(MaxParkedImages == Config::VramSettings {}.max_parked_images);
 // Largest GPU-written tiled image (in texels) that is written back to guest memory on submit.
 constexpr uint64_t SmallTiledReadbackTexels = 64 * 64;
 // Smallest GPU-written linear image (in bytes) that is only written back to guest memory once
@@ -139,15 +142,13 @@ TextureCache::TextureCache(GraphicContext& graphics, CommandScheduler& scheduler
       m_readback_tiled_images(Config::ReadbackTiledImagesEnabled()),
       m_readback_storage_images(Config::ReadbackStorageImagesEnabled()) {
 	if (m_graphics.CanReportMemoryUsage()) {
-		constexpr int64_t GiB = 1024ll * 1024 * 1024;
-		const auto        budget =
-		    static_cast<int64_t>(std::min<uint64_t>(m_graphics.GetTotalMemoryBudget(), INT64_MAX));
-		const auto threshold = std::min<int64_t>(budget, 8 * GiB);
-		m_pressure_gc_memory = static_cast<uint64_t>(
-		    std::max<int64_t>(std::min(budget - 6 * threshold / 10, budget - GiB), GiB + GiB / 2));
-		m_critical_gc_memory = static_cast<uint64_t>(
-		    std::max<int64_t>(std::min(budget - 2 * threshold / 10, budget - GiB / 2), 3 * GiB));
-		m_trigger_gc_memory = static_cast<uint64_t>(std::max<int64_t>((budget - threshold) / 2, 0));
+		// gta6-prep: vram: --vram-gc (MemoryPolicy::LegacyGcThresholds() is the formula that was
+		// here).
+		const auto thresholds = MemoryPolicy::ComputeGcThresholds(
+		    m_graphics.GetTotalMemoryBudget(), Config::GetVramSettings().gc_policy);
+		m_pressure_gc_memory = thresholds.texture_pressure;
+		m_critical_gc_memory = thresholds.texture_critical;
+		m_trigger_gc_memory  = thresholds.texture_trigger;
 	}
 }
 
@@ -1783,7 +1784,7 @@ void TextureCache::ParkImage(ImageId id) {
 	image.binding.needs_rebind = true;
 	image.StateChanged();
 	m_parked_images.emplace_back(id, m_scheduler.CurrentTick());
-	if (m_parked_images.size() > MaxParkedImages) {
+	if (m_parked_images.size() > Config::GetVramSettings().max_parked_images) {
 		DiscardParkedImage(m_parked_images.front().first);
 		m_parked_images.erase(m_parked_images.begin());
 	}
@@ -2908,22 +2909,36 @@ void TextureCache::UnmapMemory(uint64_t address, uint64_t size) {
 	}
 }
 
-void TextureCache::RunGarbageCollector() {
+void TextureCache::RunGarbageCollector(MemoryPolicy::GcPressure request) {
 	std::scoped_lock lock {m_lock};
 	const uint64_t   tick = m_gc_tick++;
 	DiscardParkedImages(0, 0);
 	if (m_graphics.CanReportMemoryUsage()) {
 		m_total_used_memory = m_graphics.GetDeviceMemoryUsage();
 	}
-	if (m_total_used_memory < m_trigger_gc_memory) {
+	// gta6-prep: vram: a spill (proportional policy) runs the collection pressured; a failed
+	// allocation (--oom-recovery) runs it aggressive, down to images unused for a few frames. No
+	// request: the thresholds alone, as before.
+	const bool out_of_memory = request == MemoryPolicy::GcPressure::OutOfMemory;
+	const bool requested     = request != MemoryPolicy::GcPressure::None;
+	// --vram-profile low: images kept for reuse go first once memory is tight.
+	if (Config::GetVramSettings().trim_recycle_pool &&
+	    (requested || m_total_used_memory >= m_pressure_gc_memory)) {
+		(void)m_graphics.TrimRecycledImages();
+	}
+	if (!requested && m_total_used_memory < m_trigger_gc_memory) {
 		return;
 	}
 	const auto collect = [&](bool allow_aggressive) {
-		bool     pressured  = m_total_used_memory >= m_pressure_gc_memory;
-		bool     aggressive = allow_aggressive && m_total_used_memory >= m_critical_gc_memory;
-		uint64_t age        = 16;
-		size_t   deletions  = 10;
-		if (aggressive) {
+		bool pressured  = requested || m_total_used_memory >= m_pressure_gc_memory;
+		bool aggressive =
+		    allow_aggressive && (out_of_memory || m_total_used_memory >= m_critical_gc_memory);
+		uint64_t age       = 16;
+		size_t   deletions = 10;
+		if (aggressive && out_of_memory) {
+			age       = 4;
+			deletions = 64;
+		} else if (aggressive) {
 			age       = 160;
 			deletions = 40;
 		} else if (pressured) {
@@ -2964,18 +2979,18 @@ void TextureCache::RunGarbageCollector() {
 			--deletions;
 			FreeImage(id);
 			Common::DebugCounters::Add(Common::DebugCounters::Counter::TextureEvictions);
-			if (m_total_used_memory < m_critical_gc_memory && aggressive) {
+			if (!out_of_memory && m_total_used_memory < m_critical_gc_memory && aggressive) {
 				deletions >>= 2;
 				aggressive = false;
 			}
-			if (m_total_used_memory < m_pressure_gc_memory && pressured) {
+			if (!requested && m_total_used_memory < m_pressure_gc_memory && pressured) {
 				deletions >>= 1;
 				pressured = false;
 			}
 		}
 	};
 	collect(false);
-	if (m_total_used_memory >= m_critical_gc_memory) {
+	if (out_of_memory || m_total_used_memory >= m_critical_gc_memory) {
 		collect(true);
 	}
 }

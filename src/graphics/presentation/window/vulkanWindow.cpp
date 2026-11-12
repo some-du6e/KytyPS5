@@ -476,10 +476,10 @@ static vk::Device VulkanCreateDevice(GraphicContext&          graphics,
 	    vk::PhysicalDeviceProperties2, vk::PhysicalDeviceFloatControlsProperties,
 	    vk::PhysicalDeviceRobustness2PropertiesEXT, vk::PhysicalDeviceVulkan11Properties,
 	    vk::PhysicalDeviceSubgroupSizeControlProperties, vk::PhysicalDevicePushDescriptorProperties,
-	    vk::PhysicalDeviceMeshShaderPropertiesEXT>
+	    vk::PhysicalDeviceMeshShaderPropertiesEXT, vk::PhysicalDeviceMaintenance4Properties>
 	    properties;
 	auto& [properties2, float_controls, robustness2_props, properties11, subgroup_control,
-	       push_descriptor, mesh_properties] = properties;
+	       push_descriptor, mesh_properties, maintenance4] = properties;
 	if (!graphics.mesh_shader_enabled) {
 		properties.unlink<vk::PhysicalDeviceMeshShaderPropertiesEXT>();
 	}
@@ -488,6 +488,9 @@ static vk::Device VulkanCreateDevice(GraphicContext&          graphics,
 	graphics.physical_device_properties = properties2.properties;
 	graphics.max_push_descriptors       = push_descriptor.maxPushDescriptors;
 	graphics.mesh_shader_properties     = mesh_properties;
+	// gta6-prep: vram: the limits merged guest buffers are checked against.
+	graphics.max_memory_allocation_size = properties11.maxMemoryAllocationSize;
+	graphics.max_buffer_size            = maintenance4.maxBufferSize;
 	LOGF("Select device: %s\n", graphics.physical_device_properties.deviceName.data());
 
 	const auto subgroup_stages = subgroup_control.requiredSubgroupSizeStages;

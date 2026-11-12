@@ -4,12 +4,14 @@
 #include "gpu_tiler_shaders/buffer_scatter_spv.h"
 #include "common/assert.h"
 #include "common/debugCounters.h"
+#include "common/emulatorConfig.h"
 #include "common/hackNotice.h"
 #include "common/logging/log.h"
 #include "common/profiler.h"
 #include "common/spscQueue.h"
 #include "graphics/guest_gpu/graphicsRun.h"
 #include "graphics/host_gpu/graphicContext.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 #include "graphics/host_gpu/renderer/cache/textureCache.h"
 #include "graphics/host_gpu/renderer/commandScheduler.h"
 #include "graphics/host_gpu/renderer/render.h"
@@ -18,9 +20,11 @@
 #include "kernel/memory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <cinttypes>
 #include <cstring>
+#include <fmt/format.h>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -293,15 +297,11 @@ BufferCache::BufferCache(GraphicContext& graphics, CommandScheduler& scheduler,
 	if (!m_graphics.CanReportMemoryUsage()) {
 		return;
 	}
-	constexpr int64_t GiB              = 1024ll * 1024 * 1024;
-	constexpr int64_t target_threshold = 8 * GiB;
-	const auto        budget =
-	    static_cast<int64_t>(std::min<uint64_t>(m_graphics.GetTotalMemoryBudget(), INT64_MAX));
-	const auto threshold = std::min(budget, target_threshold);
-	const auto expected  = std::min(budget - 6 * threshold / 10, budget - GiB);
-	const auto critical  = std::min(budget - 2 * threshold / 10, budget - GiB / 2);
-	m_trigger_gc_memory  = static_cast<uint64_t>(std::max<int64_t>(expected, GiB));
-	m_critical_gc_memory = static_cast<uint64_t>(std::max<int64_t>(critical, 2 * GiB));
+	// gta6-prep: vram: --vram-gc (MemoryPolicy::LegacyGcThresholds() is the formula that was here).
+	const auto thresholds = MemoryPolicy::ComputeGcThresholds(m_graphics.GetTotalMemoryBudget(),
+	                                                          Config::GetVramSettings().gc_policy);
+	m_trigger_gc_memory  = thresholds.buffer_trigger;
+	m_critical_gc_memory = thresholds.buffer_critical;
 }
 
 BufferCache::~BufferCache() {
@@ -748,7 +748,8 @@ void BufferCache::CacheFaultedMemory(uint64_t vaddr, uint64_t size) {
 	}
 }
 
-BufferCache::OverlapResult BufferCache::ResolveOverlaps(uint64_t vaddr, uint64_t size) {
+BufferCache::OverlapResult BufferCache::ResolveOverlaps(uint64_t vaddr, uint64_t size,
+                                                        bool stream_leap) {
 	static constexpr int      StreamLeapThreshold = 16;
 	static constexpr uint64_t StreamLeapSize      = CACHING_PAGESIZE * 128;
 
@@ -777,7 +778,8 @@ BufferCache::OverlapResult BufferCache::ResolveOverlaps(uint64_t vaddr, uint64_t
 		const bool  expands_right = buffer_end > end;
 		begin                     = std::min(begin, buffer_begin);
 		end                       = std::max(end, buffer_end);
-		if (!has_stream_leap && (stream_score += buffer.StreamScore()) > StreamLeapThreshold) {
+		if (stream_leap && !has_stream_leap &&
+		    (stream_score += buffer.StreamScore()) > StreamLeapThreshold) {
 			has_stream_leap = true;
 			// Reserve space in the incoming stream's direction of growth.
 			// The old buffer extending left of the request predicts growth to the right, and vice versa.
@@ -817,8 +819,36 @@ void BufferCache::JoinOverlap(BufferId new_id, BufferId overlap_id, bool accumul
 BufferId BufferCache::CreateBuffer(uint64_t vaddr, uint64_t size) {
 	const auto end = Common::AlignUp(vaddr + size, CACHING_PAGESIZE);
 	vaddr = Common::AlignDown(vaddr, CACHING_PAGESIZE);
-	size               = end - vaddr;
-	const auto overlap = ResolveOverlaps(vaddr, size);
+	size         = end - vaddr;
+	auto overlap = ResolveOverlaps(vaddr, size);
+	// gta6-prep: vram: a merge past the device limits gets a message before VMA fails opaquely,
+	// and loses its stream reserve only when the reserve is what passes a limit (without it the
+	// buffer passes fewer limits; MemoryPolicy::PlanMergedBuffer()).
+	if (MemoryPolicy::FitMergedBuffer(overlap.end - overlap.begin,
+	                                  m_graphics.max_memory_allocation_size,
+	                                  m_graphics.max_buffer_size) != MemoryPolicy::MergedBufferFit::Fits) {
+		const auto plain = overlap.has_stream_leap ? ResolveOverlaps(vaddr, size, false) : overlap;
+		const auto plan  = MemoryPolicy::PlanMergedBuffer(
+		    overlap.end - overlap.begin, plain.end - plain.begin,
+		    m_graphics.max_memory_allocation_size, m_graphics.max_buffer_size);
+		if (plan.drop_stream_leap) {
+			overlap = plain;
+		}
+		if (plan.fit != MemoryPolicy::MergedBufferFit::Fits) {
+			static std::atomic<uint32_t> reported {0};
+			if (reported.fetch_add(1, std::memory_order_relaxed) < 8) {
+				const bool buffer_limit = plan.fit == MemoryPolicy::MergedBufferFit::OverBufferSize;
+				Log::WriteToConsoleAndLog(fmt::format(
+				    "BufferCache: merged guest buffer 0x{:016x}-0x{:016x} ({} MiB) exceeds {} ({} "
+				    "MiB); its allocation may fail\n",
+				    overlap.begin, overlap.end, (overlap.end - overlap.begin) >> 20u,
+				    buffer_limit ? "maxBufferSize" : "maxMemoryAllocationSize",
+				    (buffer_limit ? m_graphics.max_buffer_size
+				                  : m_graphics.max_memory_allocation_size) >>
+				        20u));
+			}
+		}
+	}
 
 	const auto id = m_slot_buffers.insert(
 	    m_graphics, m_scheduler, MemoryUsage::DeviceLocal, overlap.begin,
@@ -1907,24 +1937,31 @@ void BufferCache::CollectStaleBuffers(uint64_t tick) {
 	}
 }
 
-void BufferCache::RunGarbageCollector() {
+void BufferCache::RunGarbageCollector(MemoryPolicy::GcPressure request) {
 	const auto tick = m_gc_tick++;
 	CollectStaleBuffers(tick);
 	if (m_graphics.CanReportMemoryUsage()) {
 		m_total_used_memory = m_graphics.GetDeviceMemoryUsage();
 	}
-	if (m_total_used_memory < m_trigger_gc_memory) {
+	// gta6-prep: vram: after a failed allocation (--oom-recovery) the collection runs aggressive,
+	// down to buffers unused for 16 frames, but leaves the buffers device-address accesses keep
+	// (their uses are seen only every UseScanPeriod collections). No request: as before.
+	const bool out_of_memory = request == MemoryPolicy::GcPressure::OutOfMemory;
+	if (!out_of_memory && m_total_used_memory < m_trigger_gc_memory) {
 		return;
 	}
 
-	const bool     aggressive = m_total_used_memory >= m_critical_gc_memory;
-	const uint64_t age        = std::min<uint64_t>(aggressive ? 80 : 160, tick);
-	const size_t   limit      = aggressive ? 64 : 32;
+	const bool     aggressive = out_of_memory || m_total_used_memory >= m_critical_gc_memory;
+	const uint64_t age = std::min<uint64_t>(out_of_memory ? 16 : (aggressive ? 80 : 160), tick);
+	const size_t   limit      = out_of_memory ? 128 : (aggressive ? 64 : 32);
 
 	std::vector<BufferId> dirty_buffers;
 	size_t                retire_count = 0;
 	m_lru_cache.ForEachItemBelow(tick - age, [&](BufferId id) {
 		auto& buffer = m_slot_buffers[id];
+		if (out_of_memory && buffer.device_address_pinned) {
+			return false;
+		}
 		m_memory_tracker.ValidateGpuDirtyOwnership(m_gpu_modified_ranges, buffer.CpuAddress(),
 		                                           buffer.Size(), "garbage collection");
 		const bool dirty = m_memory_tracker.IsRegionGpuModified(buffer.CpuAddress(), buffer.Size());

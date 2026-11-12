@@ -111,6 +111,7 @@ public:
 	void TriggerInterrupt(int event_id, uint32_t context_id);
 
 private:
+	void LogVramBreakdown(); // gta6-prep: vram
 	// CacheDmaBases() for the guest TLAS of a program (see NativeRayTracing::FindGuestTlasSource()),
 	// with m_mapped_ranges_mutex held.
 	void CacheTlasMemory(const ShaderStageRuntime& runtime);

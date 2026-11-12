@@ -3,6 +3,7 @@
 #include "common/assert.h"
 #include "common/emulatorConfig.h"
 #include "common/hackNotice.h"
+#include "common/logging/log.h"
 #include "graphics/guest_gpu/graphicsRun.h"
 #include "graphics/presentation/videoOut.h"
 #include "graphics/shader/shaderBindings.h"
@@ -24,6 +25,41 @@ RenderContext::RenderContext(GraphicContext& graphics, const std::filesystem::pa
       m_texture_cache(graphics, m_command_scheduler, m_page_manager, m_buffer_cache),
       m_image_heap(*this, m_page_manager) {
 	EXIT_NOT_IMPLEMENTED(!Common::Thread::IsMainThread());
+	// gta6-prep: vram: --vram-profile low keeps a smaller recycled-image pool.
+	const auto& settings = Config::GetVramSettings();
+	m_graphics.SetRecycledImageBudget(MemoryPolicy::RecycledImageBytes(
+	    m_graphics.GetTotalMemoryBudget(), settings.small_recycle_pool));
+	LogVramBreakdown();
+}
+
+// gta6-prep: vram: the "VRAM:" line of the log contract, once the caches exist: what the
+// renderer holds before the game allocates anything and where collection starts.
+void RenderContext::LogVramBreakdown() {
+	const auto& settings = Config::GetVramSettings();
+	const auto  texture  = m_texture_cache.GcThresholdsInUse();
+	const auto  buffer   = m_buffer_cache.GcThresholdsInUse();
+	MemoryPolicy::VramBreakdown breakdown;
+	breakdown.budget       = m_graphics.GetTotalMemoryBudget();
+	// "off" unless CreateAllocator() limited some heap (host heaps, device-local heaps of 1 GiB or
+	// less and heaps no larger than the limit stay whole).
+	breakdown.limit_mb     = m_graphics.vram_limit_applied_mb;
+	breakdown.profile      = settings.profile;
+	breakdown.gc_policy    = settings.gc_policy;
+	breakdown.bda_table    = BufferCache::BDA_PAGETABLE_SIZE;
+	breakdown.fault_buffer = BufferCache::FAULT_BUFFER_SIZE;
+	// The rings in video memory (the upload and download rings are in host memory).
+	breakdown.rings = m_buffer_cache.GetUtilityBuffer(MemoryUsage::Stream).Size() +
+	                  m_buffer_cache.GetUtilityBuffer(MemoryUsage::DeviceLocal).Size();
+	breakdown.recycle_cap = m_graphics.RecycledImageBudget();
+	if (m_native_ray_tracing.Enabled()) {
+		breakdown.rt_arena = m_native_ray_tracing.BlasBudget();
+	}
+	breakdown.thresholds = {.texture_trigger  = texture.texture_trigger,
+	                        .texture_pressure = texture.texture_pressure,
+	                        .texture_critical = texture.texture_critical,
+	                        .buffer_trigger   = buffer.buffer_trigger,
+	                        .buffer_critical  = buffer.buffer_critical};
+	Log::WriteToConsoleAndLog(MemoryPolicy::FormatVramBreakdown(breakdown));
 }
 
 RenderContext::~RenderContext() {
@@ -548,8 +584,10 @@ void RenderContext::RunGarbageCollector() {
 		});
 	}
 	m_texture_cache.ProcessDownloadImages();
-	m_texture_cache.RunGarbageCollector();
-	m_buffer_cache.RunGarbageCollector();
+	// gta6-prep: vram: what allocations asked for since the last collection.
+	const auto pressure = m_graphics.TakeGcPressure();
+	m_texture_cache.RunGarbageCollector(pressure);
+	m_buffer_cache.RunGarbageCollector(pressure);
 }
 
 void RenderContext::AddInterruptEq(LibKernel::EventQueue::KernelEqueue eq, int event_id) {

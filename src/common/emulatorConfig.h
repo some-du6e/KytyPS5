@@ -3,6 +3,7 @@
 
 #include "common/common.h"
 #include "common/titleProfile.h"
+#include "common/vramOptions.h"
 
 #include <cstddef>
 #include <array>
@@ -192,6 +193,24 @@ struct ConfigOptions {
 	// Func, then Object, export (HLE or loaded module). Off: it stays on the stub, as upstream.
 	// Imports without lib/module metadata always try it (they used to abort).
 	bool                  notype_import_fallback = false;
+
+	// gta6-prep: vram
+	// --vram-gc legacy|proportional; unset: the profile's (legacy without one).
+	std::optional<VramGcPolicy> vram_gc;
+	// --vram-limit-mb: device-local heaps above 1 GiB are limited to this many MiB; 0 is off.
+	uint32_t                    vram_limit_mb = 0;
+	// --oom-recovery / --no-oom-recovery (the off form wins); neither: the profile's (off).
+	bool                        oom_recovery    = false;
+	bool                        no_oom_recovery = false;
+	// --vram-profile auto|low; see VramSettings for what Low sets.
+	VramProfile                 vram_profile = VramProfile::Auto;
+	// --rt-arena-mb: the BLAS memory of native ray tracing in MiB (0: no limit); unset: the
+	// profile's share of the largest device-local heap. KYTY_RT_ARENA_MB still wins.
+	std::optional<uint32_t>     rt_arena_mb;
+	// --video-out-resolution auto|1080p|4k: what VideoOutGetOutputStatus reports.
+	VideoOutResolution          video_out_resolution = VideoOutResolution::Auto;
+	// --skip-unsupported-image-atomics: see SkipUnsupportedImageAtomics().
+	bool                        skip_unsupported_image_atomics = false;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -378,6 +397,19 @@ bool UnresolvedOfflineReturnsEnabled();
 bool RebindImportsEnabled();
 const std::filesystem::path& GetDumpImportsFile();
 bool NoTypeImportFallbackEnabled();
+
+// gta6-prep: vram
+// The video memory settings in effect (ResolveVramSettings() of the loaded options). The Auto
+// profile's built-in values without a loaded configuration.
+const VramSettings& GetVramSettings();
+// --vram-limit-mb, 0 (off) without a loaded configuration.
+uint32_t GetVramLimitMb();
+// --video-out-resolution, Auto without a loaded configuration.
+VideoOutResolution GetVideoOutResolution();
+// [HACK] On a host without shaderImageInt64Atomics, draws and dispatches whose programs use 64-bit
+// image atomics are skipped with a notice instead of closing the emulator. Off without a loaded
+// configuration.
+bool SkipUnsupportedImageAtomics();
 
 } // namespace Config
 

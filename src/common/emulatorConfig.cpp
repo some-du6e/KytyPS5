@@ -18,6 +18,19 @@ static std::unique_ptr<ConfigOptions> g_config;
 // gta6-prep: config
 static std::atomic<Common::QuirkMask> g_title_quirks {0};
 
+// gta6-prep: vram
+static VramSettings g_vram_settings;
+
+static VramRequest VramRequestOf(const ConfigOptions& cfg) {
+	VramRequest request;
+	request.gc_policy       = cfg.vram_gc;
+	request.oom_recovery    = cfg.oom_recovery;
+	request.no_oom_recovery = cfg.no_oom_recovery;
+	request.profile         = cfg.vram_profile;
+	request.rt_arena_mb     = cfg.rt_arena_mb;
+	return request;
+}
+
 void Initialize() {
 	EXIT_IF(g_config != nullptr);
 
@@ -28,6 +41,7 @@ void Shutdown() {
 	Common::DebugCounters::SetEnabled(false);
 	g_config.reset();
 	g_title_quirks = 0;
+	g_vram_settings = {}; // gta6-prep: vram
 }
 
 void Load(const ConfigOptions& cfg) {
@@ -38,6 +52,7 @@ void Load(const ConfigOptions& cfg) {
 	EXIT_IF(cfg.keyboard_player > static_cast<uint32_t>(MAX_PLAYERS));
 
 	*g_config = cfg;
+	g_vram_settings = ResolveVramSettings(VramRequestOf(cfg)); // gta6-prep: vram
 	Common::DebugCounters::SetEnabled(cfg.perf_overlay_enabled);
 }
 
@@ -457,6 +472,23 @@ const std::filesystem::path& GetDumpImportsFile() {
 
 bool NoTypeImportFallbackEnabled() {
 	return g_config != nullptr && g_config->notype_import_fallback;
+}
+
+// gta6-prep: vram
+const VramSettings& GetVramSettings() {
+	return g_vram_settings;
+}
+
+uint32_t GetVramLimitMb() {
+	return g_config != nullptr ? g_config->vram_limit_mb : 0;
+}
+
+VideoOutResolution GetVideoOutResolution() {
+	return g_config != nullptr ? g_config->video_out_resolution : VideoOutResolution::Auto;
+}
+
+bool SkipUnsupportedImageAtomics() {
+	return g_config != nullptr && g_config->skip_unsupported_image_atomics;
 }
 
 } // namespace Config

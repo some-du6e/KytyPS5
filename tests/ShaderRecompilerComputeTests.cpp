@@ -2464,6 +2464,136 @@ public:
     std::printf("[host]    %-32s ok\n", name);
   }
 
+  // gta6-prep: vram: --vram-limit-mb limits the device-local heaps VMA sees (pHeapSizeLimit):
+  // the reported budget follows the limit, an allocation past it fails in the limited heap, and
+  // one within it still succeeds. Then --oom-recovery's retries of a failed image.
+  void CheckVramHeapLimit() {
+    constexpr const char *name = "VramHeapLimit";
+    constexpr uint32_t limit_mb = 64;
+    auto &base = RuntimeContext();
+    GraphicContext limited;
+    limited.instance = base.instance;
+    limited.physical_device = base.physical_device;
+    limited.device = base.device;
+    limited.physical_device_properties = base.physical_device_properties;
+    limited.physical_device_memory_properties = base.physical_device_memory_properties;
+    limited.memory_budget_ext_enabled = false;
+
+    Config::ConfigOptions options;
+    options.printf_direction = Config::LogDirection::Silent;
+    options.gpu_pipeline_stages = 0;
+    options.async_pipelines_enabled = false;
+    options.vram_limit_mb = limit_mb;
+    Config::Load(options);
+    Require(name, "allocator", limited.CreateAllocator(),
+            "could not create the limited allocator");
+    options.vram_limit_mb = 0;
+    Config::Load(options);
+
+    const auto &original = base.physical_device_memory_properties;
+    uint32_t limited_heap = UINT32_MAX;
+    for (uint32_t heap = 0; heap < original.memoryHeapCount; heap++) {
+      const auto &properties = original.memoryHeaps[heap];
+      const bool device_local = static_cast<bool>(
+          properties.flags & vk::MemoryHeapFlagBits::eDeviceLocal);
+      const bool expect_limit = device_local &&
+                                properties.size > (uint64_t{1} << 30u) &&
+                                properties.size > (uint64_t{limit_mb} << 20u);
+      const auto size = limited.physical_device_memory_properties.memoryHeaps[heap].size;
+      Require(name, "heap sizes",
+              size == (expect_limit ? uint64_t{limit_mb} << 20u : properties.size),
+              "heap " + std::to_string(heap) + " was not limited as --vram-limit-mb asks");
+      if (expect_limit && limited_heap == UINT32_MAX) {
+        limited_heap = heap;
+      }
+    }
+    if (limited_heap == UINT32_MAX) {
+      vmaDestroyAllocator(limited.allocator);
+      limited.allocator = nullptr;
+      std::printf("[host]    %-32s skipped (no device-local heap above 1 GiB)\n", name);
+      return;
+    }
+    VmaBudget budgets[VK_MAX_MEMORY_HEAPS]{};
+    vmaGetHeapBudgets(limited.allocator, budgets);
+    Require(name, "budget", budgets[limited_heap].budget <= (uint64_t{limit_mb} << 20u),
+            "the limited heap reports a budget past the limit");
+
+    uint32_t heap_types = 0;
+    for (uint32_t type = 0; type < original.memoryTypeCount; type++) {
+      if (original.memoryTypes[type].heapIndex == limited_heap) {
+        heap_types |= 1u << type;
+      }
+    }
+    const auto allocate = [&](uint64_t size, VkBuffer &buffer, VmaAllocation &allocation) {
+      vk::BufferCreateInfo buffer_info{};
+      buffer_info.size = size;
+      buffer_info.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+      VmaAllocationCreateInfo allocation_info{};
+      allocation_info.usage = VMA_MEMORY_USAGE_UNKNOWN;
+      allocation_info.memoryTypeBits = heap_types;
+      allocation_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+      return static_cast<vk::Result>(vmaCreateBuffer(
+          limited.allocator, static_cast<const VkBufferCreateInfo *>(buffer_info),
+          &allocation_info, &buffer, &allocation, nullptr));
+    };
+    VkBuffer small_buffer = VK_NULL_HANDLE;
+    VmaAllocation small_allocation = nullptr;
+    RequireVk(name, "allocation within the limit",
+              allocate(uint64_t{16} << 20u, small_buffer, small_allocation),
+              "vmaCreateBuffer of 16 MiB");
+    VkBuffer large_buffer = VK_NULL_HANDLE;
+    VmaAllocation large_allocation = nullptr;
+    const auto large = allocate(uint64_t{2 * limit_mb} << 20u, large_buffer, large_allocation);
+    if (large == vk::Result::eSuccess) {
+      vmaDestroyBuffer(limited.allocator, large_buffer, large_allocation);
+    }
+    Require(name, "allocation past the limit", large != vk::Result::eSuccess,
+            "a dedicated allocation past --vram-limit-mb succeeded in the limited heap");
+    vmaDestroyBuffer(limited.allocator, small_buffer, small_allocation);
+
+    // --oom-recovery: an image past the limit retries once past the budget (CreateImage already
+    // freed the recycled images; logs "VRAM pressure: ... retry 1") and
+    // asks the next collection of the caches to run aggressively; the caller still sees the
+    // failure. Without the option nothing is asked. Only where the limited heap is the only one
+    // (lavapipe): elsewhere VMA may place the image in another heap.
+    if (original.memoryHeapCount == 1) {
+      vk::ImageCreateInfo create{};
+      create.imageType = vk::ImageType::e2D;
+      create.format = vk::Format::eR8G8B8A8Unorm;
+      create.extent = vk::Extent3D{8192, 4096, 1};
+      create.mipLevels = 1;
+      create.arrayLayers = 1;
+      create.samples = vk::SampleCountFlagBits::e1;
+      create.tiling = vk::ImageTiling::eOptimal;
+      create.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+      create.initialLayout = vk::ImageLayout::eUndefined;
+      for (const bool recovery : {true, false}) {
+        options.oom_recovery = recovery;
+        Config::Load(options);
+        (void)limited.TakeGcPressure();
+        VulkanImage image;
+        const bool created = limited.CreateImage(create, image);
+        if (created) {
+          vmaDestroyImage(limited.allocator, image.image, image.allocation);
+        }
+        Require(name, "image past the limit", !created,
+                "a 128 MiB image was created past a 64 MiB --vram-limit-mb");
+        Require(name, "collection request",
+                limited.TakeGcPressure() == (recovery ? MemoryPolicy::GcPressure::OutOfMemory
+                                                      : MemoryPolicy::GcPressure::None),
+                recovery ? "--oom-recovery did not ask for an aggressive collection"
+                         : "a failed allocation asked for a collection without --oom-recovery");
+      }
+      options.oom_recovery = false;
+      Config::Load(options);
+    }
+    // Not DestroyAllocator(): the recycled-image pool is process-wide and holds the base
+    // allocator's images.
+    vmaDestroyAllocator(limited.allocator);
+    limited.allocator = nullptr;
+    std::printf("[host]    %-32s ok\n", name);
+  }
+
   // The video-out layer shader converts PQ and linear-nit main-bus frames for an SDR swapchain.
   void CheckVideoOutHdr10ToSdr() {
     constexpr const char *name = "VideoOutHdr10ToSdr";
@@ -57860,6 +57990,12 @@ int main(int argc, char **argv) {
   if (argc == 2 && std::strcmp(argv[1], "--host-image-allocation-only") == 0) {
     VulkanHarness vulkan;
     vulkan.CheckHostImageAllocation();
+    return 0;
+  }
+  // gta6-prep: vram
+  if (argc == 2 && std::strcmp(argv[1], "--vram-limit-only") == 0) {
+    VulkanHarness vulkan;
+    vulkan.CheckVramHeapLimit();
     return 0;
   }
   if (argc == 2 && std::strcmp(argv[1], "--occlusion-dump-only") == 0) {

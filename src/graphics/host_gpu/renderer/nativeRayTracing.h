@@ -76,6 +76,8 @@ public:
 
 	// Whether the device supports host ray tracing and it is enabled.
 	[[nodiscard]] bool Enabled() const noexcept { return m_enabled; }
+	// The BLAS memory budget in bytes (0: no limit); see the constructor (gta6-prep: vram).
+	[[nodiscard]] uint64_t BlasBudget() const noexcept { return m_budget; }
 	// Whether shader compilation applies the traversal patches (set once at startup).
 	[[nodiscard]] static bool PatchShaders() noexcept;
 	// The device was created with the ray tracing extensions (before any shader compiles).

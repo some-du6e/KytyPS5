@@ -631,6 +631,12 @@ add_executable(bit_array_tests EXCLUDE_FROM_ALL
 )
 target_include_directories(bit_array_tests PRIVATE ${inc_headers})
 
+# gta6-prep: vram
+add_executable(vram_policy_tests EXCLUDE_FROM_ALL
+	"${KYTY_TESTS_DIR}/VramPolicyTests.cpp"
+)
+target_include_directories(vram_policy_tests PRIVATE ${inc_headers})
+
 add_executable(lru_cache_tests EXCLUDE_FROM_ALL
 	"${KYTY_TESTS_DIR}/LruCacheTests.cpp"
 )
@@ -990,6 +996,7 @@ if(BUILD_TESTING)
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --strict-imports --unresolved-offline-returns
 	                 --no-rebind-imports --notype-import-fallback --nid-names names.txt --dump-imports imports.txt)
 	add_test(NAME lru_cache COMMAND $<TARGET_FILE:lru_cache_tests>)
+	add_test(NAME vram_policy COMMAND $<TARGET_FILE:vram_policy_tests>) # gta6-prep: vram
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)
 	add_test(NAME resource_materialization COMMAND $<TARGET_FILE:resource_materialization_tests>)
@@ -1096,6 +1103,29 @@ if(BUILD_TESTING)
 	add_test(NAME buffer_cache_ranges
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --buffer-cache-range-only)
 
+	# gta6-prep: vram
+	add_test(NAME vram_heap_limit
+		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --vram-limit-only)
+	add_test(NAME emulator_vram_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc proportional --vram-gc legacy
+	                 --vram-limit-mb 8192 --vram-limit-mb 0 --oom-recovery --no-oom-recovery
+	                 --vram-profile low --vram-profile auto --rt-arena-mb 768 --rt-arena-mb 0
+	                 --video-out-resolution 1080p --video-out-resolution 4k
+	                 --video-out-resolution auto --skip-unsupported-image-atomics)
+	add_test(NAME emulator_vram_gc_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-gc aggressive)
+	add_test(NAME emulator_vram_limit_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-limit-mb 8G)
+	add_test(NAME emulator_vram_profile_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --vram-profile 8gb)
+	add_test(NAME emulator_rt_arena_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --rt-arena-mb -1)
+	add_test(NAME emulator_video_out_resolution_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --video-out-resolution 1440p)
+	set_tests_properties(emulator_vram_gc_invalid emulator_vram_limit_invalid
+	                     emulator_vram_profile_invalid emulator_rt_arena_invalid
+	                     emulator_video_out_resolution_invalid PROPERTIES WILL_FAIL TRUE)
+
 	add_custom_target(kyty_tests DEPENDS
 		ime_dialog_tests
 		shader_cfg_tests
@@ -1111,6 +1141,7 @@ if(BUILD_TESTING)
 		bit_array_tests
 		title_profile_tests
 		lru_cache_tests
+		vram_policy_tests
 		common_tests
 		shader_vertex_metadata_tests
 		resource_materialization_tests

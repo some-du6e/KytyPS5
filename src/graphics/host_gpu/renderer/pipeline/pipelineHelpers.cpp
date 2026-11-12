@@ -749,7 +749,10 @@ uint32_t PipelineHelperProcesses(const GraphicContext& graphics) {
 	// 10 on 24 logical processors (measured with Demon's Souls), and fewer on smaller processors,
 	// where the game needs the rest.
 	const auto processors = static_cast<uint32_t>(std::popcount(process_mask));
-	return processors / 2u > 2u ? processors / 2u - 2u : 1u;
+	const auto automatic  = processors / 2u > 2u ? processors / 2u - 2u : 1u;
+	// gta6-prep: vram: --vram-profile low keeps at most 2 (each helper has a device of its own).
+	return MemoryPolicy::BoundPipelineHelpers(automatic,
+	                                          Config::GetVramSettings().max_pipeline_helpers);
 }
 
 uint32_t PipelineHelperProcessesAlone(uint32_t processes) {
@@ -770,7 +773,9 @@ uint32_t PipelineHelperProcessesAlone(uint32_t processes) {
 		const auto extra = static_cast<uint32_t>(memory.ullAvailPhys / 2u / (512ull << 20u));
 		alone            = std::min(alone, processes + extra);
 	}
-	return alone;
+	// gta6-prep: vram: as PipelineHelperProcesses().
+	return std::max(processes, MemoryPolicy::BoundPipelineHelpers(
+	                               alone, Config::GetVramSettings().max_pipeline_helpers));
 }
 
 // The helper process.

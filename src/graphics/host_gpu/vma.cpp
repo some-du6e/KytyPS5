@@ -15,14 +15,21 @@
 #endif
 
 #include "common/assert.h"
+#include "common/emulatorConfig.h"
 #include "common/logging/log.h"
 #include "common/profiler.h"
 #include "graphics/host_gpu/graphicContext.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cinttypes>
 #include <condition_variable>
+#include <fmt/format.h>
 #include <mutex>
+#include <span>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -39,10 +46,13 @@ struct RecycledImage {
 	VkImage             image      = VK_NULL_HANDLE;
 	VmaAllocation       allocation = nullptr;
 	uint64_t            size       = 0;
+	// gta6-prep: vram: the allocator that owns it (a test can create a second one).
+	VmaAllocator        allocator  = nullptr;
 };
 
-constexpr size_t   RecycledImagesMax     = 32;
-constexpr uint64_t RecycledImageBytesMax = 256ull * 1024 * 1024;
+constexpr size_t RecycledImagesMax = 32;
+// gta6-prep: vram: GraphicContext::SetRecycledImageBudget() (--vram-profile low).
+std::atomic<uint64_t> g_recycled_bytes_max {MemoryPolicy::DefaultRecycledImageBytes};
 
 std::mutex                 g_recycled_mutex;
 std::vector<RecycledImage> g_recycled;
@@ -139,14 +149,48 @@ ImageGraveyard& Graveyard() {
 	return graveyard;
 }
 
+// gta6-prep: vram: allocations that landed outside device-local memory (see NoteSpill()).
+struct SpillStats {
+	std::atomic<uint64_t> count {0};
+	std::atomic<uint64_t> bytes {0};
+	std::mutex            first_mutex;
+	std::string           first;
+};
+
+SpillStats g_image_spills;
+SpillStats g_buffer_spills;
+
+// The memory an image needs, for the "VRAM pressure:" line of a failed allocation; 0 unknown.
+uint64_t ImageAllocationBytes(vk::Device device, const vk::ImageCreateInfo& image_info) {
+	if (device == nullptr || VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceImageMemoryRequirements == nullptr) {
+		return 0;
+	}
+	const vk::DeviceImageMemoryRequirements requirements {.pCreateInfo = &image_info};
+	return device.getImageMemoryRequirements(requirements).memoryRequirements.size;
+}
+
+// Bytes of device memory blocks VMA holds, over every heap.
+uint64_t AllocatedBlockBytes(VmaAllocator allocator, uint32_t heap_count) {
+	VmaBudget budgets[VK_MAX_MEMORY_HEAPS] {};
+	vmaGetHeapBudgets(allocator, budgets);
+	uint64_t bytes = 0;
+	for (uint32_t heap = 0; heap < heap_count && heap < VK_MAX_MEMORY_HEAPS; heap++) {
+		bytes += budgets[heap].statistics.blockBytes;
+	}
+	return bytes;
+}
+
 void DestroyRecycledImages(VmaAllocator allocator) {
 	Graveyard().Flush();
 	std::lock_guard lock(g_recycled_mutex);
-	for (const auto& entry: g_recycled) {
+	std::erase_if(g_recycled, [allocator](const RecycledImage& entry) {
+		if (entry.allocator != allocator) {
+			return false;
+		}
 		vmaDestroyImage(allocator, entry.image, entry.allocation);
-	}
-	g_recycled.clear();
-	g_recycled_bytes = 0;
+		g_recycled_bytes -= entry.size;
+		return true;
+	});
 }
 
 } // namespace
@@ -171,10 +215,48 @@ bool GraphicContext::CreateAllocator() {
 		info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 	}
 
+	// gta6-prep: vram: --vram-limit-mb makes VMA see smaller device-local heaps, as a smaller
+	// card would have: allocations past the limit spill to host memory, then fail.
+	auto& memory = physical_device_memory_properties;
+	std::array<MemoryPolicy::HeapInfo, MemoryPolicy::MaxMemoryHeaps> heaps {};
+	for (uint32_t heap = 0; heap < memory.memoryHeapCount && heap < heaps.size(); heap++) {
+		heaps[heap] = {.size         = memory.memoryHeaps[heap].size,
+		               .device_local = static_cast<bool>(memory.memoryHeaps[heap].flags &
+		                                                 vk::MemoryHeapFlagBits::eDeviceLocal)};
+	}
+	const auto limits = MemoryPolicy::BuildHeapSizeLimits(
+	    std::span(heaps.data(), std::min<size_t>(memory.memoryHeapCount, heaps.size())),
+	    uint64_t {Config::GetVramLimitMb()} * MemoryPolicy::MiB);
+	static_assert(MemoryPolicy::NoHeapLimit == VK_WHOLE_SIZE &&
+	              MemoryPolicy::MaxMemoryHeaps == VK_MAX_MEMORY_HEAPS);
+	std::array<VkDeviceSize, VK_MAX_MEMORY_HEAPS> heap_size_limits {};
+	if (limits.any) {
+		std::copy(limits.limits.begin(), limits.limits.end(), heap_size_limits.begin());
+		info.pHeapSizeLimit = heap_size_limits.data();
+	}
+
 	const auto result = static_cast<vk::Result>(vmaCreateAllocator(&info, &allocator));
 	if (result != vk::Result::eSuccess) {
 		LOGF("vmaCreateAllocator failed: %s\n", vk::to_string(result).c_str());
 		return false;
+	}
+	vram_limit_applied_mb = limits.any ? Config::GetVramLimitMb() : 0;
+	if (limits.any) {
+		// The budget, the cache thresholds and the BLAS arena follow the limited heaps.
+		for (uint32_t heap = 0; heap < memory.memoryHeapCount; heap++) {
+			if (limits.limits[heap] == MemoryPolicy::NoHeapLimit) {
+				continue;
+			}
+			Log::WriteToConsoleAndLog(fmt::format(
+			    "VRAM limit: heap {} limited to {} MiB of {} MiB (--vram-limit-mb)\n", heap,
+			    limits.limits[heap] >> 20u, memory.memoryHeaps[heap].size >> 20u));
+			memory.memoryHeaps[heap].size = limits.limits[heap];
+		}
+	} else if (Config::GetVramLimitMb() != 0) {
+		Log::WriteToConsoleAndLog(fmt::format(
+		    "VRAM limit: --vram-limit-mb {} limits no heap (none is device-local, above 1 GiB and "
+		    "larger than the limit)\n",
+		    Config::GetVramLimitMb()));
 	}
 	return true;
 }
@@ -287,7 +369,7 @@ bool GraphicContext::CreateImage(const vk::ImageCreateInfo& image_info, VulkanIm
 		std::lock_guard lock(g_recycled_mutex);
 		const auto      found =
 		    std::find_if(g_recycled.begin(), g_recycled.end(), [&](const auto& entry) {
-			    return SameCreateInfo(entry.create, image_info);
+			    return entry.allocator == allocator && SameCreateInfo(entry.create, image_info);
 		    });
 		if (found != g_recycled.end()) {
 			native_image     = found->image;
@@ -307,10 +389,37 @@ bool GraphicContext::CreateImage(const vk::ImageCreateInfo& image_info, VulkanIm
 			    allocator, static_cast<const vk::ImageCreateInfo::NativeType*>(image_info),
 			    &alloc_info, &native_image, &image.allocation, nullptr));
 		}
+		// gta6-prep: vram: --oom-recovery retries before the caller's EXIT.
+		if (result != vk::Result::eSuccess) {
+			const auto what = fmt::format("image {}x{}x{} {} layers={} mips={}",
+			                              image_info.extent.width, image_info.extent.height,
+			                              image_info.extent.depth, vk::to_string(image_info.format),
+			                              image_info.arrayLayers, image_info.mipLevels);
+			const auto bytes = ImageAllocationBytes(device, image_info);
+			// The recycled images were just freed above: only the past-the-budget retry is left.
+			for (uint32_t attempt = 1;
+			     result != vk::Result::eSuccess &&
+			     RecoverFromAllocationFailure(bytes, what, attempt, alloc_info.flags, true);
+			     attempt++) {
+				result = static_cast<vk::Result>(vmaCreateImage(
+				    allocator, static_cast<const vk::ImageCreateInfo::NativeType*>(image_info),
+				    &alloc_info, &native_image, &image.allocation, nullptr));
+			}
+		}
 		if (result != vk::Result::eSuccess) {
 			image.image = native_image;
 			LogMemoryBudget();
 			return false;
+		}
+		// gta6-prep: vram: spill telemetry (recycled images were counted when created).
+		if (SpilledOutOfDeviceMemory(image.allocation)) {
+			VmaAllocationInfo allocation_info {};
+			vmaGetAllocationInfo(allocator, image.allocation, &allocation_info);
+			NoteSpill(true, allocation_info.size,
+			          fmt::format("image {}x{}x{} {} layers={} mips={}", image_info.extent.width,
+			                      image_info.extent.height, image_info.extent.depth,
+			                      vk::to_string(image_info.format), image_info.arrayLayers,
+			                      image_info.mipLevels));
 		}
 	}
 	image.image = native_image;
@@ -351,11 +460,13 @@ void GraphicContext::DeleteImage(VulkanImage& image) {
 		VmaAllocationInfo allocation_info {};
 		vmaGetAllocationInfo(allocator, image.allocation, &allocation_info);
 		std::lock_guard lock(g_recycled_mutex);
-		g_recycled.push_back({create, image.image, image.allocation, allocation_info.size});
+		g_recycled.push_back(
+		    {create, image.image, image.allocation, allocation_info.size, allocator});
 		g_recycled_bytes += allocation_info.size;
-		while (g_recycled.size() > RecycledImagesMax || g_recycled_bytes > RecycledImageBytesMax) {
+		const auto bytes_max = g_recycled_bytes_max.load(std::memory_order_relaxed);
+		while (g_recycled.size() > RecycledImagesMax || g_recycled_bytes > bytes_max) {
 			const auto& oldest = g_recycled.front();
-			Graveyard().Push(allocator, oldest.image, oldest.allocation);
+			Graveyard().Push(oldest.allocator, oldest.image, oldest.allocation);
 			g_recycled_bytes -= oldest.size;
 			g_recycled.erase(g_recycled.begin());
 		}
@@ -364,6 +475,94 @@ void GraphicContext::DeleteImage(VulkanImage& image) {
 	}
 	image.image      = nullptr;
 	image.allocation = nullptr;
+}
+
+// gta6-prep: vram
+bool GraphicContext::SpilledOutOfDeviceMemory(VmaAllocation allocation) const {
+	if (allocation == nullptr || allocator == nullptr ||
+	    physical_device_properties.deviceType != vk::PhysicalDeviceType::eDiscreteGpu) {
+		return false;
+	}
+	VkMemoryPropertyFlags properties = 0;
+	vmaGetAllocationMemoryProperties(allocator, allocation, &properties);
+	return (properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0;
+}
+
+void GraphicContext::SetRecycledImageBudget(uint64_t bytes) {
+	g_recycled_bytes_max.store(bytes, std::memory_order_relaxed);
+}
+
+uint64_t GraphicContext::RecycledImageBudget() const {
+	return g_recycled_bytes_max.load(std::memory_order_relaxed);
+}
+
+uint64_t GraphicContext::TrimRecycledImages() {
+	std::lock_guard lock(g_recycled_mutex);
+	const auto      bytes = g_recycled_bytes;
+	for (const auto& entry: g_recycled) {
+		Graveyard().Push(entry.allocator, entry.image, entry.allocation);
+	}
+	g_recycled.clear();
+	g_recycled_bytes = 0;
+	return bytes;
+}
+
+bool GraphicContext::RecoverFromAllocationFailure(uint64_t bytes, std::string_view what,
+                                                  uint32_t                  attempt,
+                                                  VmaAllocationCreateFlags& flags,
+                                                  bool                      idle_memory_freed) {
+	constexpr uint32_t Steps = 2;
+	// The step this retry takes: the caller that already freed the idle memory starts past it.
+	const uint32_t step = idle_memory_freed ? attempt + 1 : attempt;
+	if (!Config::GetVramSettings().oom_recovery || attempt == 0 || step > Steps ||
+	    allocator == nullptr) {
+		return false;
+	}
+	const auto heap_count = physical_device_memory_properties.memoryHeapCount;
+	const auto before     = AllocatedBlockBytes(allocator, heap_count);
+	RequestGcPressure(MemoryPolicy::GcPressure::OutOfMemory);
+	// A new frame index makes VMA fetch the driver's budget again instead of its cached one.
+	static std::atomic<uint32_t> frame_index {0};
+	vmaSetCurrentFrameIndex(allocator, frame_index.fetch_add(1, std::memory_order_relaxed) + 1);
+	if (step == 1) {
+		// Idle memory first: the recycled images and the queued image destructions.
+		DestroyRecycledImages(allocator);
+	} else {
+		// Past the budget: the driver may still place it (WDDM pages other memory out), which is
+		// slow but beats closing the emulator.
+		flags &= ~static_cast<VmaAllocationCreateFlags>(VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT);
+	}
+	const auto after = AllocatedBlockBytes(allocator, heap_count);
+	Log::WriteToConsoleAndLog(fmt::format(
+	    "VRAM pressure: emergency eviction freed {} MiB after allocation failure of {} MiB ({}), "
+	    "retry {}\n",
+	    (before > after ? before - after : 0) >> 20u, bytes >> 20u, what, attempt));
+	return true;
+}
+
+void GraphicContext::NoteSpill(bool image, uint64_t bytes, std::string_view what) {
+	// Under the proportional policy a spill runs the next texture collection pressured.
+	if (Config::GetVramSettings().gc_policy == Config::VramGcPolicy::Proportional) {
+		RequestGcPressure(MemoryPolicy::GcPressure::Spill);
+	}
+	auto&      stats = image ? g_image_spills : g_buffer_spills;
+	const auto total = stats.bytes.fetch_add(bytes, std::memory_order_relaxed) + bytes;
+	const auto count = stats.count.fetch_add(1, std::memory_order_relaxed) + 1;
+	if (!MemoryPolicy::LogSpillAt(count)) {
+		return;
+	}
+	std::string first;
+	{
+		std::lock_guard lock(stats.first_mutex);
+		if (stats.first.empty()) {
+			stats.first = what;
+		}
+		first = stats.first;
+	}
+	Log::WriteToConsoleAndLog(
+	    fmt::format("VRAM spill: {} allocated outside device-local memory: count={} bytes={} MiB "
+	                "(first: {})\n",
+	                image ? "images" : "buffers", count, total >> 20u, first));
 }
 
 } // namespace Libs::Graphics

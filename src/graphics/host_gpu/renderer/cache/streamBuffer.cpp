@@ -7,6 +7,7 @@
 #include "graphics/host_gpu/renderer/commandScheduler.h"
 
 #include <cstring>
+#include <fmt/format.h>
 #include <numeric>
 #include <vk_mem_alloc.h>
 
@@ -87,15 +88,33 @@ Buffer::Buffer(GraphicContext& graphics, CommandScheduler& scheduler, MemoryUsag
 
 	VmaAllocationInfo allocation_result {};
 	VkBuffer          native_buffer = VK_NULL_HANDLE;
-	const auto        result        = static_cast<vk::Result>(vmaCreateBuffer(
-	    graphics.allocator, static_cast<const VkBufferCreateInfo*>(buffer_info), &allocation_info,
-	    &native_buffer, &m_allocation, &allocation_result));
+	const auto        create        = [&] {
+		return static_cast<vk::Result>(vmaCreateBuffer(
+		    graphics.allocator, static_cast<const VkBufferCreateInfo*>(buffer_info),
+		    &allocation_info, &native_buffer, &m_allocation, &allocation_result));
+	};
+	auto result = create();
+	// gta6-prep: vram: --oom-recovery retries before the EXIT.
+	if (result != vk::Result::eSuccess) {
+		const auto what = fmt::format("buffer guest=0x{:x} size=0x{:x}", cpu_address, size);
+		for (uint32_t attempt = 1;
+		     result != vk::Result::eSuccess &&
+		     graphics.RecoverFromAllocationFailure(size, what, attempt, allocation_info.flags);
+		     attempt++) {
+			result = create();
+		}
+	}
 	if (result != vk::Result::eSuccess) {
 		graphics.LogMemoryBudget();
 	}
 	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess);
 
 	m_buffer = native_buffer;
+	// gta6-prep: vram: spill telemetry for the buffers that should live in video memory.
+	if (usage == MemoryUsage::DeviceLocal && graphics.SpilledOutOfDeviceMemory(m_allocation)) {
+		graphics.NoteSpill(false, allocation_result.size,
+		                   fmt::format("buffer guest=0x{:x} size=0x{:x}", cpu_address, size));
+	}
 	if (with_bda) {
 		vk::BufferDeviceAddressInfo address_info {};
 		address_info.buffer = m_buffer;

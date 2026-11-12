@@ -8,6 +8,7 @@
 #include "graphics/host_gpu/memoryTracker.h"
 #include "graphics/host_gpu/rangeSet.h"
 #include "graphics/host_gpu/renderer/cache/faultManager.h"
+#include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 #include "graphics/host_gpu/renderer/cache/multiLevelPageTable.h"
 #include "graphics/host_gpu/renderer/cache/streamBuffer.h"
 
@@ -220,7 +221,12 @@ public:
 		}
 		return epoch;
 	}
-	void               RunGarbageCollector();
+	// `request`: see GraphicContext::RequestGcPressure() (gta6-prep: vram).
+	void RunGarbageCollector(MemoryPolicy::GcPressure request = MemoryPolicy::GcPressure::None);
+	// The buffer thresholds of the collection (the texture ones stay 0), for the "VRAM:" line.
+	[[nodiscard]] MemoryPolicy::GcThresholds GcThresholdsInUse() const noexcept {
+		return {.buffer_trigger = m_trigger_gc_memory, .buffer_critical = m_critical_gc_memory};
+	}
 	// Execution thread, after each operation: the GPU writes the operation recorded get the
 	// tick of the command buffer that holds them (see DownloadOnReadbackQueue()). True when the
 	// operation wrote memory that readbacks keep waiting for: submitting its command buffer now
@@ -269,7 +275,9 @@ private:
 	static_assert(CACHING_PAGESIZE == (uint64_t {1} << PageTable::kPageBits));
 	void WriteDataBuffer(Buffer& buffer, uint64_t address, const void* source, uint64_t size);
 	void TouchBuffer(const Buffer& buffer);
-	[[nodiscard]] OverlapResult ResolveOverlaps(uint64_t vaddr, uint64_t size);
+	// `stream_leap`: a streaming buffer grows by a reserve in its direction (gta6-prep: vram turns
+	// it off where it would pass a device limit).
+	[[nodiscard]] OverlapResult ResolveOverlaps(uint64_t vaddr, uint64_t size, bool stream_leap = true);
 	void JoinOverlap(BufferId new_id, BufferId overlap_id, bool accumulate_stream_score);
 	[[nodiscard]] BufferId CreateBuffer(uint64_t vaddr, uint64_t size);
 	void                   Register(BufferId id);

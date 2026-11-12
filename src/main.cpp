@@ -70,6 +70,38 @@ static void StartPgoDumps() {
 }
 #endif
 
+// gta6-prep: vram
+static void PrintVramUsage() {
+	::printf("\nVideo memory (8 GB cards):\n");
+	::printf("  --vram-gc <legacy|proportional>      Texture and buffer collection thresholds: the\n"
+	         "                                       built-in formulas (legacy, default) or fixed\n"
+	         "                                       shares of the memory budget.\n");
+	::printf("  --vram-limit-mb <MiB>                Limit the GPU's video memory heaps to <MiB>, as a\n"
+	         "                                       smaller card would have; 0 is off (default).\n");
+	::printf("  --oom-recovery                       When an image or buffer allocation fails, free the\n"
+	         "                                       recycled images, retry (the second time past the\n"
+	         "                                       budget) and collect both caches aggressively at\n"
+	         "                                       the next frame, instead of closing at once.\n"
+	         "                                       --no-oom-recovery turns it off (and wins).\n");
+	::printf("  --vram-profile <auto|low>            low: the settings for an 8 GB card (proportional\n"
+	         "                                       collection, --oom-recovery, a smaller recycled-\n"
+	         "                                       image pool dropped under pressure, 4 parked images,\n"
+	         "                                       a BLAS arena of heap/8 within 512 MiB-1 GiB, at\n"
+	         "                                       most 2 pipeline helpers). Options given explicitly\n"
+	         "                                       win. Default: auto (built-in values).\n");
+	::printf("  --rt-arena-mb <MiB>                  BLAS memory of --native-raytracing; 0 is no limit.\n"
+	         "                                       Default: a share of the largest video memory heap.\n"
+	         "                                       The KYTY_RT_ARENA_MB variable overrides it.\n");
+	::printf("  --video-out-resolution <auto|1080p|4k> Output resolution the game is told. auto\n"
+	         "                                       (default): 4K unless the title detects the\n"
+	         "                                       resolution and the window is smaller. A game\n"
+	         "                                       that sizes its targets by it uses less memory\n"
+	         "                                       at 1080p.\n");
+	::printf("  --skip-unsupported-image-atomics     [HACK] Without 64-bit image atomics on the GPU,\n"
+	         "                                       skip the draws and dispatches that use them\n"
+	         "                                       (their effect is missing) instead of closing.\n");
+}
+
 static void PrintUsage() {
 	::printf("%s, %s, ver = %s, git = %s, date = %s\n",
 	         KYTY_BUILD == KYTY_BUILD_DEBUG ? "Debug" : "Release", KYTY_TOOLCHAIN, KYTY_VERSION,
@@ -178,6 +210,7 @@ static void PrintUsage() {
 	::printf("  --gpu-pipeline <0|1|mask>            Emulated GPU stages on their own threads.\n"
 	         "                                       0: all inline, 1: all (default). The\n"
 	         "                                       KYTY_GPU_PIPELINE variable overrides it.\n");
+	PrintVramUsage(); // gta6-prep: vram
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 	::printf("  --redzone                            Protect the guest SysV red zone (default).\n");
 	::printf("  --no-redzone                         Do not protect the guest SysV red zone.\n");
@@ -323,6 +356,56 @@ static bool ParseUserId(const std::string& value, int32_t& out) {
 
 using Config::ConfigOptions;
 
+// gta6-prep: vram
+// The video memory options that take a value. nullopt: not one of them.
+static std::optional<bool> ParseVramOption(const std::string& arg, const std::string& value,
+                                           ConfigOptions& config) {
+	if (arg == "--vram-gc") {
+		const auto policy = Config::ParseVramGcPolicy(value);
+		if (!policy.has_value()) {
+			::printf("invalid VRAM collection policy (legacy or proportional): %s\n", value.c_str());
+			return false;
+		}
+		config.vram_gc = *policy;
+		return true;
+	}
+	if (arg == "--vram-profile") {
+		const auto profile = Config::ParseVramProfile(value);
+		if (!profile.has_value()) {
+			::printf("invalid VRAM profile (auto or low): %s\n", value.c_str());
+			return false;
+		}
+		config.vram_profile = *profile;
+		return true;
+	}
+	if (arg == "--rt-arena-mb") {
+		uint32_t megabytes = 0;
+		if (!ParseUint32(value, megabytes)) {
+			::printf("invalid BLAS arena size in MiB: %s\n", value.c_str());
+			return false;
+		}
+		config.rt_arena_mb = megabytes;
+		return true;
+	}
+	if (arg == "--video-out-resolution") {
+		const auto resolution = Config::ParseVideoOutResolution(value);
+		if (!resolution.has_value()) {
+			::printf("invalid video out resolution (auto, 1080p or 4k): %s\n", value.c_str());
+			return false;
+		}
+		config.video_out_resolution = *resolution;
+		return true;
+	}
+	if (arg == "--vram-limit-mb") {
+		if (!ParseUint32(value, config.vram_limit_mb)) {
+			::printf("invalid VRAM limit in MiB: %s\n", value.c_str());
+			return false;
+		}
+		return true;
+	}
+	return std::nullopt;
+}
+
 struct Flag {
 	std::string_view name;
 	bool ConfigOptions::* field;
@@ -411,6 +494,11 @@ static constexpr Flag FLAGS[] = {
     {"--unresolved-offline-returns", &ConfigOptions::unresolved_offline_returns},
     {"--no-rebind-imports", &ConfigOptions::rebind_imports, false},
     {"--notype-import-fallback", &ConfigOptions::notype_import_fallback},
+
+    // gta6-prep: vram
+    {"--oom-recovery", &ConfigOptions::oom_recovery},
+    {"--no-oom-recovery", &ConfigOptions::no_oom_recovery},
+    {"--skip-unsupported-image-atomics", &ConfigOptions::skip_unsupported_image_atomics},
 };
 
 // gta6-prep: config
@@ -554,6 +642,14 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 
 		if (arg == "--gpu-pipeline") {
 			options.config.gpu_pipeline_stages = Config::ParseGpuPipelineStages(value.c_str());
+			continue;
+		}
+
+		// gta6-prep: vram
+		if (const auto parsed = ParseVramOption(arg, value, options.config); parsed.has_value()) {
+			if (!*parsed) {
+				return false;
+			}
 			continue;
 		}
 
