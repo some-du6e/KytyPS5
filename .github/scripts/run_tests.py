@@ -48,9 +48,11 @@ def main() -> int:
     names = {"host": [], "gpu": []}
     skipped = []
     for test in info.get("tests", []):
-        command = test.get("command") or [""]
-        if command[0] and not os.path.exists(command[0]):
-            skipped.append(test["name"])  # target not built on this platform (e.g. vdecsw on clang-cl)
+        # A target not built on this platform (vdecsw on clang-cl): ctest leaves out "command" when
+        # it cannot find the executable, or names a path that does not exist.
+        command = test.get("command") or []
+        if not command or not command[0] or not os.path.exists(command[0]):
+            skipped.append(test["name"])
             continue
         exe = os.path.basename(command[0])
         exe = exe[:-4] if exe.endswith(".exe") else exe
