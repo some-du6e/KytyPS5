@@ -92,6 +92,7 @@ private:
 
 struct SystemContent {
 	bool                  trinity_mode = false;
+	bool                  title_supports_trinity = false; // gta6-prep: config
 	std::filesystem::path psf_path;
 	Psf                   psf;
 	std::filesystem::path playgo_path;
@@ -621,7 +622,8 @@ void SystemContentLoadParamSfo(const std::filesystem::path& file_name) {
 	int32_t attribute3 = 0;
 	const bool title_supports_trinity = sc->psf.GetParamInt("ATTRIBUTE3", &attribute3) &&
 	                                    (static_cast<uint32_t>(attribute3) & (1u << 22u)) != 0;
-	sc->trinity_mode = Config::Ps5ProEnabled() && title_supports_trinity;
+	sc->title_supports_trinity = title_supports_trinity;
+	sc->trinity_mode           = Config::Ps5ProEnabled() && title_supports_trinity;
 	if (Config::Ps5ProEnabled()) {
 		Log::WriteToConsoleAndLog(fmt::format("[PS5] title Trinity support={}\n",
 		                                    title_supports_trinity ? "yes" : "no"));
@@ -655,6 +657,17 @@ const Common::TitleInfo& SystemContentTitle() {
 
 bool SystemContentIsTrinityMode() {
 	return Common::Singleton<SystemContent>::Instance()->trinity_mode;
+}
+
+// gta6-prep: config
+void SystemContentRefreshTrinityMode() {
+	auto*      sc       = Common::Singleton<SystemContent>::Instance();
+	const bool previous = sc->trinity_mode;
+	sc->trinity_mode    = Config::Ps5ProEnabled() && sc->title_supports_trinity;
+	if (sc->trinity_mode != previous) {
+		Log::WriteToConsoleAndLog(fmt::format("[PS5] Trinity mode {} by the title's default preset\n",
+		                                      sc->trinity_mode ? "on" : "off"));
+	}
 }
 
 bool SystemContentParamSfoGetInt(const char* name, int32_t* value) {

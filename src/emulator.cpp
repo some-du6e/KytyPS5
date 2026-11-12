@@ -116,6 +116,8 @@ static Config::ConfigOptions ApplyTitleProfile(const RunOptions& options) {
 			Log::WriteToConsoleAndLog(
 			    fmt::format("Preset: {} -> {}\n", preset->name, Config::PresetTokenList(*preset)));
 			Config::Load(effective);
+			// The param.json was loaded with the options before the preset.
+			Loader::SystemContentRefreshTrinityMode();
 		} else {
 			effective = cfg;
 			LOGF("Title profile: the default preset %.*s does not apply\n",
