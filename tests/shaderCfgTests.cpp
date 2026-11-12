@@ -17,6 +17,7 @@
 #include "graphics/shader/recompiler/backend/spirv/SpirvForwarding.h"
 #include "graphics/shader/recompiler/backend/spirv/spirvEmitterInternal.h"
 #include "graphics/shader/recompiler/frontend/cfg/ShaderCFG.h"
+#include "graphics/shader/recompiler/frontend/decode/ImageOps.h"
 #include "graphics/shader/recompiler/frontend/decode/RayTracingPatch.h"
 #include "graphics/shader/recompiler/frontend/decode/ShaderDecoder.h"
 #include "graphics/shader/recompiler/frontend/decode/ShaderFunctions.h"

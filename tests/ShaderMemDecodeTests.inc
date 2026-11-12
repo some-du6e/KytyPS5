@@ -254,7 +254,173 @@ void TestShaderMemFlatModifiersAndD16() {
   CheckSpirvBinaryValidates(glc_result.spirv);
 }
 
+// image_msaa_load decodes as LLVM 18 assembles it for gfx10.3: VDATA has one VGPR per DMASK bit
+// and the address is x, y, [slice,] fragment.
+void TestShaderMemImageMsaaLoad() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  using ShaderRecompiler::Decoder::ImageDimension;
+  struct Case {
+    const char *assembly;
+    std::array<uint32_t, 2> words;
+    ImageDimension dimension;
+    uint32_t address_components, data_dwords, dst;
+  };
+  const Case cases[] = {
+      {"image_msaa_load v5, v[0:2], s[8:15] dmask:0x1 dim:SQ_RSRC_IMG_2D_MSAA unorm",
+       {0xf0001131u, 0x00020500u}, ImageDimension::Dim2DMsaa, 3u, 1u, 5u},
+      {"image_msaa_load v[4:7], v[0:3], s[8:15] dmask:0xf dim:SQ_RSRC_IMG_2D_MSAA_ARRAY unorm",
+       {0xf0001f39u, 0x00020400u}, ImageDimension::Dim2DMsaaArray, 4u, 4u, 4u},
+      {"image_msaa_load v[4:5], v[0:2], s[8:15] dmask:0x5 dim:SQ_RSRC_IMG_2D_MSAA unorm",
+       {0xf0001531u, 0x00020400u}, ImageDimension::Dim2DMsaa, 3u, 2u, 4u},
+  };
+  for (const auto &test : cases) {
+    ShaderRecompiler::Decoder::Instruction decoded;
+    ShaderRecompiler::Decoder::DecodeInstruction(test.words, 0u, decoded);
+    if (decoded.opcode != O::IMAGE_MSAA_LOAD || decoded.image_dimension != test.dimension ||
+        decoded.image_address_components != test.address_components ||
+        decoded.data_dwords != test.data_dwords || decoded.dst.reg != test.dst ||
+        decoded.src0.reg != 0u ||
+        ShaderRecompiler::Decoder::InstructionToString(decoded).find("IMAGE_MSAA_LOAD") ==
+            std::string::npos) {
+      std::fprintf(stderr, "ShaderCfgTests: %s decoded incorrectly\n", test.assembly);
+      std::abort();
+    }
+  }
+}
+
+// The *_g16 samples (opcodes from llvm-mc 18, gfx1030) decode as derivative samples with packed
+// 16-bit derivatives; the address size matches the VGPR count llvm-mc requires for every
+// opcode and dimension.
+void TestShaderMemImageSampleG16() {
+  using namespace ShaderRecompiler::Decoder;
+  struct Case {
+    const char *assembly;
+    std::array<uint32_t, 2> words;
+    ImageDimension dimension;
+    uint32_t address_dwords;
+  };
+  const Case cases[] = {
+      {"image_sample_d_g16 dim:SQ_RSRC_IMG_1D", {0xf0880f01u, 0x00820000u}, ImageDimension::Dim1D, 3u},
+      {"image_sample_d_g16 dim:SQ_RSRC_IMG_2D", {0xf0880f09u, 0x00820000u}, ImageDimension::Dim2D, 4u},
+      {"image_sample_d_g16 dim:SQ_RSRC_IMG_3D", {0xf0880f11u, 0x00820000u}, ImageDimension::Dim3D, 7u},
+      {"image_sample_d_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0880f29u, 0x00820000u}, ImageDimension::Dim2DArray, 5u},
+      {"image_sample_d_cl_g16 dim:SQ_RSRC_IMG_1D", {0xf08c0f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_d_cl_g16 dim:SQ_RSRC_IMG_2D", {0xf08c0f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_d_cl_g16 dim:SQ_RSRC_IMG_3D", {0xf08c0f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_d_cl_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf08c0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_c_d_g16 dim:SQ_RSRC_IMG_1D", {0xf0a80f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_c_d_g16 dim:SQ_RSRC_IMG_2D", {0xf0a80f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_c_d_g16 dim:SQ_RSRC_IMG_3D", {0xf0a80f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_c_d_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0a80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_c_d_cl_g16 dim:SQ_RSRC_IMG_1D", {0xf0ac0f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_c_d_cl_g16 dim:SQ_RSRC_IMG_2D", {0xf0ac0f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_c_d_cl_g16 dim:SQ_RSRC_IMG_3D", {0xf0ac0f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_c_d_cl_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0ac0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_d_o_g16 dim:SQ_RSRC_IMG_1D", {0xf0c80f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_d_o_g16 dim:SQ_RSRC_IMG_2D", {0xf0c80f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_d_o_g16 dim:SQ_RSRC_IMG_3D", {0xf0c80f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_d_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0c80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_d_cl_o_g16 dim:SQ_RSRC_IMG_1D", {0xf0cc0f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_d_cl_o_g16 dim:SQ_RSRC_IMG_2D", {0xf0cc0f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_d_cl_o_g16 dim:SQ_RSRC_IMG_3D", {0xf0cc0f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_d_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0cc0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_c_d_o_g16 dim:SQ_RSRC_IMG_1D", {0xf0e80f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_c_d_o_g16 dim:SQ_RSRC_IMG_2D", {0xf0e80f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_c_d_o_g16 dim:SQ_RSRC_IMG_3D", {0xf0e80f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_c_d_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0e80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_c_d_cl_o_g16 dim:SQ_RSRC_IMG_1D", {0xf0ec0f01u, 0x00820000u}, ImageDimension::Dim1D, 6u},
+      {"image_sample_c_d_cl_o_g16 dim:SQ_RSRC_IMG_2D", {0xf0ec0f09u, 0x00820000u}, ImageDimension::Dim2D, 7u},
+      {"image_sample_c_d_cl_o_g16 dim:SQ_RSRC_IMG_3D", {0xf0ec0f11u, 0x00820000u}, ImageDimension::Dim3D, 10u},
+      {"image_sample_c_d_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0ec0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 8u},
+      {"image_sample_cd_g16 dim:SQ_RSRC_IMG_1D", {0xf1a00f01u, 0x00820000u}, ImageDimension::Dim1D, 3u},
+      {"image_sample_cd_g16 dim:SQ_RSRC_IMG_2D", {0xf1a00f09u, 0x00820000u}, ImageDimension::Dim2D, 4u},
+      {"image_sample_cd_g16 dim:SQ_RSRC_IMG_3D", {0xf1a00f11u, 0x00820000u}, ImageDimension::Dim3D, 7u},
+      {"image_sample_cd_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1a00f29u, 0x00820000u}, ImageDimension::Dim2DArray, 5u},
+      {"image_sample_cd_cl_g16 dim:SQ_RSRC_IMG_1D", {0xf1a40f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_cd_cl_g16 dim:SQ_RSRC_IMG_2D", {0xf1a40f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_cd_cl_g16 dim:SQ_RSRC_IMG_3D", {0xf1a40f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_cd_cl_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1a40f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_c_cd_g16 dim:SQ_RSRC_IMG_1D", {0xf1a80f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_c_cd_g16 dim:SQ_RSRC_IMG_2D", {0xf1a80f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_c_cd_g16 dim:SQ_RSRC_IMG_3D", {0xf1a80f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_c_cd_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1a80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_c_cd_cl_g16 dim:SQ_RSRC_IMG_1D", {0xf1ac0f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_c_cd_cl_g16 dim:SQ_RSRC_IMG_2D", {0xf1ac0f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_c_cd_cl_g16 dim:SQ_RSRC_IMG_3D", {0xf1ac0f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_c_cd_cl_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1ac0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_cd_o_g16 dim:SQ_RSRC_IMG_1D", {0xf1b00f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_cd_o_g16 dim:SQ_RSRC_IMG_2D", {0xf1b00f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_cd_o_g16 dim:SQ_RSRC_IMG_3D", {0xf1b00f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_cd_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1b00f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_cd_cl_o_g16 dim:SQ_RSRC_IMG_1D", {0xf1b40f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D", {0xf1b40f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_cd_cl_o_g16 dim:SQ_RSRC_IMG_3D", {0xf1b40f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1b40f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_c_cd_o_g16 dim:SQ_RSRC_IMG_1D", {0xf1b80f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_c_cd_o_g16 dim:SQ_RSRC_IMG_2D", {0xf1b80f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_c_cd_o_g16 dim:SQ_RSRC_IMG_3D", {0xf1b80f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_c_cd_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1b80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_1D", {0xf1bc0f01u, 0x00820000u}, ImageDimension::Dim1D, 6u},
+      {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D", {0xf1bc0f09u, 0x00820000u}, ImageDimension::Dim2D, 7u},
+      {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_3D", {0xf1bc0f11u, 0x00820000u}, ImageDimension::Dim3D, 10u},
+      {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1bc0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 8u},
+  };
+  for (const auto &test : cases) {
+    Instruction decoded;
+    DecodeInstruction(test.words, 0u, decoded);
+    const auto dwords = ImageAddressDwordCount(decoded.image_sample_flags, decoded.image_dimension,
+                                               decoded.image_address_components);
+    if (decoded.opcode != Opcode::IMAGE_SAMPLE || decoded.image_dimension != test.dimension ||
+        (decoded.image_sample_flags & ImageSampleFlagG16) == 0u ||
+        (decoded.image_sample_flags & ImageSampleFlagDerivative) == 0u ||
+        dwords != test.address_dwords ||
+        MimgSampledOpcodeName(decoded.opcode_id) == nullptr ||
+        std::string_view(test.assembly).find(MimgSampledOpcodeName(decoded.opcode_id)) != 0u) {
+      std::fprintf(stderr, "ShaderCfgTests: %s: decoded %u address DWORDs, expected %u\n",
+                   test.assembly, dwords, test.address_dwords);
+      std::abort();
+    }
+  }
+
+  // 3D image_sample_d_g16: dx.xy | dx.z | dy.xy | dy.z, then 32-bit x, y, z.
+  const uint32_t flags = ImageSampleFlagDerivative | ImageSampleFlagG16;
+  const ImageAddressComponent expected[] = {{0, 16},  {16, 16}, {32, 16}, {64, 16},
+                                            {80, 16}, {96, 16}, {128, 32}, {160, 32},
+                                            {192, 32}};
+  for (uint32_t component = 0; component < std::size(expected); component++) {
+    const auto layout = ImageAddressComponentLayout(flags, ImageDimension::Dim3D, component);
+    Check(layout.bit_offset == expected[component].bit_offset &&
+              layout.bit_width == expected[component].bit_width,
+          "G16 3D derivative layout is not the packed per-vector layout");
+  }
+  // With A16 the existing all-16-bit layout applies unchanged.
+  for (const auto dimension : {ImageDimension::Dim1D, ImageDimension::Dim2D, ImageDimension::Dim3D}) {
+    for (uint32_t component = 0; component < 12; component++) {
+      const auto a16 = ImageAddressComponentLayout(
+          ImageSampleFlagDerivative | ImageSampleFlagA16 | ImageSampleFlagCompare, dimension,
+          component);
+      const auto both = ImageAddressComponentLayout(
+          ImageSampleFlagDerivative | ImageSampleFlagA16 | ImageSampleFlagCompare |
+              ImageSampleFlagG16,
+          dimension, component);
+      Check(a16.bit_offset == both.bit_offset && a16.bit_width == both.bit_width,
+            "G16 changed the A16 address layout");
+    }
+  }
+  // Without the G16 opcodes nothing changes: image_sample_d keeps 32-bit derivatives.
+  const uint32_t sample_d[] = {0xf0880f08u, 0x00820000u};
+  Instruction decoded;
+  DecodeInstruction(sample_d, 0u, decoded);
+  Check(decoded.opcode == Opcode::IMAGE_SAMPLE &&
+            (decoded.image_sample_flags & ImageSampleFlagG16) == 0u &&
+            ImageAddressDwordCount(decoded.image_sample_flags, decoded.image_dimension,
+                                   decoded.image_address_components) == 6u,
+        "image_sample_d must keep 32-bit derivatives");
+}
+
 void RunShaderMemDecodeTests() {
+  TestShaderMemImageMsaaLoad();
+  TestShaderMemImageSampleG16();
   TestShaderMemFlatModifiersAndD16();
   TestShaderMemIncDecAtomics();
   TestShaderMemDsAtomics32();

@@ -482,7 +482,49 @@ TestCase ShaderMemGlobalByteD16Loads() {
   return ShaderMemSingleThread(std::move(test));
 }
 
+// image_sample_d_g16 (0xa2) packs each derivative vector into one VGPR of halves. A 0.5 texture
+// derivative over 4 texels selects mip 1 (8.0); read as 32-bit floats the same VGPRs would be
+// near-zero derivatives and select mip 0 (1.0). Zero derivatives select mip 0.
+TestCase ShaderMemImageSampleDerivativeG16() {
+  using O = ShaderOpcode;
+  std::vector<u32> code;
+  AppendVMovLiteral(&code, 20, 0x00003800u); // dx = (0.5h, 0)
+  AppendVMovLiteral(&code, 21, 0x38000000u); // dy = (0, 0.5h)
+  AppendVMovLiteral(&code, 22, 0x3f000000u); // x = 0.5
+  AppendVMovLiteral(&code, 23, 0x3f000000u); // y = 0.5
+  code.push_back(EncodeMimg0(0xa2, 0x1));
+  code.push_back(EncodeMimg1(0, 20, 0, 2));
+  AppendVMovU32(&code, 20, 0);
+  AppendVMovU32(&code, 21, 0);
+  code.push_back(EncodeMimg0(0xa2, 0x1));
+  code.push_back(EncodeMimg1(1, 20, 0, 2));
+  AppendStoreVgpr(&code, 0, 0);
+  AppendStoreVgpr(&code, 1, 1);
+  AppendEnd(&code);
+
+  TestCase test;
+  test.name = "ShaderMemImageSampleDerivativeG16";
+  test.code = std::move(code);
+  test.opcodes = {O::V_MOV_B32, O::IMAGE_SAMPLE, O::BUFFER_STORE_DWORD, O::S_ENDPGM};
+  test.expected = {0x41000000u, 0x3f800000u};
+  test.sampled_image_rgba_mips = {std::vector<u32>(4 * 4 * 4, 0x3f800000u),
+                                  std::vector<u32>(2 * 2 * 4, 0x41000000u)};
+  test.user_data = MakeSampledTextureData(Prospero::BufferFormat::k32_32_32_32Float);
+  test.user_data[1] |= 3u << 30u;
+  test.user_data[2] = 3u << 14u;
+  test.user_data[3] |= 1u << 16u;
+  test.user_data[8] = 0x92u;
+  test.user_data[9] = 0xfff000u;
+  test.user_data[10] = 0x05000000u; // point sampler, as ImageSampleLodClamp
+  test.user_data[50] = test.expected.size() * sizeof(u32);
+  test.user_data[51] = 3u << 28u;
+  test.has_user_data = true;
+  test.required_spirv = {"OpImageSampleExplicitLod", "Grad"};
+  return test;
+}
+
 void AppendShaderMemCases(std::vector<TestCase> &cases) {
+  cases.push_back(ShaderMemImageSampleDerivativeG16());
   cases.push_back(ShaderMemGlobalByteD16Loads());
   cases.push_back(ShaderMemBufferAtomicsWrap());
   for (const auto &atomic : ShaderMemImageAtomicCases) {

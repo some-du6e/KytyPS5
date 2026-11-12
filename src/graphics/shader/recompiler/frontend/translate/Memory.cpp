@@ -1335,7 +1335,10 @@ void Translator::EmitMemory(const Decoder::Instruction& inst) {
 		case Decoder::Opcode::IMAGE_GET_RESINFO: return IMAGE_GET_RESINFO(inst);
 		case Decoder::Opcode::IMAGE_GET_LOD: return IMAGE_GET_LOD(inst);
 		case Decoder::Opcode::IMAGE_LOAD:
-		case Decoder::Opcode::IMAGE_LOAD_MIP: return IMAGE_LOAD(inst);
+		case Decoder::Opcode::IMAGE_LOAD_MIP:
+		// gta6-prep: shader-mem: read as LLVM 18 assembles it for gfx10.3 (DMASK selects the
+		// components of fragment FRAGID), which is an MSAA image_load. Speculative.
+		case Decoder::Opcode::IMAGE_MSAA_LOAD: return IMAGE_LOAD(inst);
 		case Decoder::Opcode::IMAGE_STORE:
 		case Decoder::Opcode::IMAGE_STORE_MIP: return IMAGE_STORE(inst);
 		case Decoder::Opcode::IMAGE_SAMPLE: return IMAGE_SAMPLE(inst);

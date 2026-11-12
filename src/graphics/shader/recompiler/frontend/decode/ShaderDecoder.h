@@ -829,6 +829,7 @@ enum class Opcode {
 	FLAT_LOAD_SBYTE_D16_HI,
 	FLAT_STORE_BYTE_D16_HI,
 	FLAT_STORE_SHORT_D16_HI,
+	IMAGE_MSAA_LOAD,
 	COUNT
 };
 
@@ -868,6 +869,8 @@ enum ImageSampleFlag : uint32_t {
 	ImageSampleFlagGatherHorizontal = 1u << 9u,
 	ImageSampleFlagAdjust           = 1u << 10u,
 	ImageSampleFlagUnnormalized     = 1u << 11u,
+	// gta6-prep: shader-mem: *_g16 samples pack their derivatives as 16-bit halves.
+	ImageSampleFlagG16 = 1u << 12u,
 };
 
 enum class ImageDimension : uint32_t {
