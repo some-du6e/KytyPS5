@@ -32,8 +32,8 @@ void        RequireVulkanSuccess(vk::Result result, const char* operation);
 // created with the deviceFault feature (--device-fault-report).
 void        EnableDeviceFaultReports(vk::Device device);
 // For the report of a fatal `result`: empty unless it is ErrorDeviceLost, else lines that start
-// with "Device fault: " (from VK_EXT_device_fault, first caller only) or "Device lost: ", each
-// ending in a newline.
+// with "Device fault: " (from VK_EXT_device_fault, read once and the same text for every caller)
+// or "Device lost: ", each ending in a newline.
 [[nodiscard]] std::string DeviceLostDetails(vk::Result result);
 vk::ShaderModule CompileSPV(std::span<const uint32_t> code, vk::Device device);
 vk::Pipeline     CreateComputePipeline(vk::Device device, std::span<const uint32_t> code,

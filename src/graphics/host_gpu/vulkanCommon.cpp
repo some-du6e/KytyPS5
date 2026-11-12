@@ -6,7 +6,11 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstring>
+#include <mutex>
+#include <optional>
+#include <string>
 #include <vector>
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -123,8 +127,14 @@ vk::Format VulkanFormat(Prospero::BufferFormat guest_format) {
 namespace {
 
 std::atomic<VkDevice> g_fault_device {VK_NULL_HANDLE};
-// The first thread that sees the device lost reads the fault report; the driver may not keep it.
-std::atomic_flag g_fault_reported = ATOMIC_FLAG_INIT;
+// The device fault report is read from the driver once (it may not keep it) and the text is given
+// to every caller: several threads see the loss together and any one of them may be the report
+// that reaches the log first, or be inside a SoftExitScope that drops its report. The others wait
+// for the first reader up to FAULT_REPORT_WAIT, so a driver stuck in the query cannot hold every
+// fatal report back.
+std::timed_mutex           g_fault_report_mutex;
+std::optional<std::string> g_fault_report;
+constexpr auto             FAULT_REPORT_WAIT = std::chrono::seconds(2);
 
 std::string_view DescriptionText(const char* text, size_t capacity) {
 	return {text, strnlen(text, capacity)};
@@ -179,10 +189,14 @@ std::string DeviceLostDetails(vk::Result result) {
 		return "Device lost: no VK_EXT_device_fault report (--device-fault-report enables it on "
 		       "drivers that support it)\n";
 	}
-	if (g_fault_reported.test_and_set(std::memory_order_acq_rel)) {
-		return "Device lost: the device fault report is in the first report of this session\n";
+	std::unique_lock lock(g_fault_report_mutex, std::defer_lock);
+	if (!lock.try_lock_for(FAULT_REPORT_WAIT)) {
+		return "Device lost: another thread is still reading the device fault report\n";
 	}
-	return DeviceFaultReport(vk::Device(device));
+	if (!g_fault_report.has_value()) {
+		g_fault_report = DeviceFaultReport(vk::Device(device));
+	}
+	return *g_fault_report;
 }
 
 void RequireVulkanSuccess(vk::Result result, const char* operation) {
