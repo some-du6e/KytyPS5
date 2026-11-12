@@ -11,7 +11,7 @@ vkAllocateMemory failed: ErrorOutOfDeviceMemory (-2)
 expect-line: vk-other-failure
 vkCreateSwapchainKHR failed: ErrorSurfaceLostKHR (-1000000000)
 expect-line: device-fault-detail
-Device fault reports: 1
+Device lost: no VK_EXT_device_fault report (--device-fault-report enables it on drivers that support it)
 expect-line: vram-spill
 VRAM spill: buffers allocated outside device-local memory: count=4 bytes=128 MiB (first: GameBuffer 0x0000001000000000 size 32 MiB)
 expect-line: vram-pressure
@@ -25,7 +25,7 @@ could not reserve 13824 MB for guest direct memory: The paging file is too small
 expect-line: descriptor-pool-line
 descriptor set does not fit a pool sized for it: StorageBuffer=8192 SampledImage=262144 StorageImage=1024 Sampler=1024
 expect-line: pipeline-create-failed-line
-vkCreateComputePipelines failed: ErrorUnknown, cs 0xa016c19e423c6efb
+vkCreateComputePipelines failed: ErrorUnknown (-13), cs 0xa016c19e423c6efb
 expect-line: driver-pipeline-line
 pipeline being created by the driver: cs 0xa016c19e423c6efb
 expect-line: pipeline-helper-line
@@ -54,6 +54,8 @@ expect-line: buffercache-sparse
 BufferCache: failed to read sparse guest buffer memory at 0x0000001000000000 size 0x10000
 expect-line: unknown-sh-reg-line
 unknown sh reg at 02e40: 0x00000001
+expect-line: shader-formatted-raw-fallback
+Shader: formatted buffer load with unsupported format 13 falls back to raw DWORDs (first in shader 0x0123456789abcdef)
 expect-line: indirect-draw-offset
 GPU: indirect draw ignores GE_INDX_OFFSET=0x00000010; geometry may be incorrect.
 expect-line: session-log-open-fail

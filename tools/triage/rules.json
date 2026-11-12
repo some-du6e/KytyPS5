@@ -685,7 +685,7 @@
    "scope": "line",
    "severity": 60,
    "group": "device-lost",
-   "regex": "^Device (?:fault|lost)(?: reports)?: (?P<detail>.*)$",
+   "regex": "^Device (?:fault|lost): (?P<detail>.*)$",
    "fix_area": [
     "src/graphics/host_gpu/vulkanCommon.cpp"
    ],
@@ -797,7 +797,7 @@
    "title": "Pipeline creation failed",
    "scope": "line",
    "severity": 70,
-   "regex": "^vkCreate(?P<kind>Graphics|Compute)Pipelines failed: (?P<result>\\w+), (?P<stages>.*)$",
+   "regex": "^vkCreate(?P<kind>Graphics|Compute)Pipelines failed: (?P<result>\\w+)(?: \\(-?\\d+\\))?, (?P<stages>.*)$",
    "key": [
     "kind",
     "result",
@@ -927,6 +927,25 @@
    ],
    "next_step": "Block-compressed textures written by the guest will not render.",
    "known": []
+  },
+  {
+   "id": "shader-formatted-raw-fallback",
+   "category": "RENDER_STATE",
+   "title": "Formatted buffer access read or written as raw DWORDs",
+   "scope": "line",
+   "severity": 15,
+   "regex": "^Shader: formatted buffer (?P<dir>load|store) with unsupported format (?P<format>\\d+) falls back to raw DWORDs \\(first in shader 0x(?P<hash>[0-9a-f]{16})\\)",
+   "key": [
+    "dir",
+    "format"
+   ],
+   "fix_area": [
+    "src/graphics/shader/recompiler/backend/spirv/spirvEmitterMemory.cpp"
+   ],
+   "next_step": "The shader moves untranslated bytes for this V# format; wrong colours or geometry from that buffer point here. Add the format to the formatted buffer conversion.",
+   "known": [
+    "log-contract: gta6/shader-mem LogFormattedRawFallback"
+   ]
   },
   {
    "id": "depth-target-fatal-line",

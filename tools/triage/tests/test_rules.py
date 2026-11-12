@@ -131,6 +131,28 @@ class RuleCoverageTests(unittest.TestCase):
         line_rules = [r.id for r in u.RULES.line_rules]
         self.assertEqual(n, len(line_rules), "one expect-line per line rule")
 
+    def test_vulkan_failure_lines_of_both_formats(self):
+        # gta6/diag's VulkanFailureText() adds the VkResult value; older builds did not.
+        rule = u.RULES.rule("pipeline-create-failed-line")
+        for line in ("vkCreateGraphicsPipelines failed: ErrorUnknown (-13), vs 0x1111111111111111, "
+                     "hs 0x0000000000000000, ds 0x0000000000000000, ps 0x2222222222222222",
+                     "vkCreateGraphicsPipelines failed: ErrorUnknown, vs 0x1111111111111111, "
+                     "hs 0x0000000000000000, ds 0x0000000000000000, ps 0x2222222222222222"):
+            with self.subTest(line=line):
+                m = rule.regex.match(line)
+                self.assertIsNotNone(m)
+                self.assertEqual((m.group("kind"), m.group("result")), ("Graphics", "ErrorUnknown"))
+                self.assertTrue(m.group("stages").startswith("vs 0x1111111111111111"))
+
+    def test_device_fault_report_startup_line_is_not_a_fault(self):
+        # --device-fault-report prints this once at device creation, lost device or not.
+        for state in ("on", "not supported by the driver"):
+            text = ("--- Session 2026-11-19 10:00:00 ---\nOfficial build KytyPS5-2026-11-19-abcdef1\n"
+                    "Device fault reports: %s\n" % state)
+            rep = kt.triage(["-"], rules=u.RULES, stdin=u_bytes(text))
+            with self.subTest(state=state):
+                self.assertNotIn("device-fault-detail", [f["rule_id"] for f in rep["findings"]])
+
     def test_nvidia_shader_cache_hint(self):
         text = ("--- Session 2026-11-19 10:00:00 ---\nOfficial build KytyPS5-2026-11-19-abcdef1\n"
                 "GPU: NVIDIA GeForce RTX 3050 vendor=0x10de device=0x2507 driver=581.42.0.0 api=1.4.312 "

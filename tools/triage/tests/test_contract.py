@@ -34,8 +34,11 @@ class ContractSessionTests(unittest.TestCase):
         tp = ident["title_profile"]
         self.assertEqual((tp["key"], tp["id"], tp["ver"], tp["name"], tp["quirks"], tp["preset"]),
                          ("none", "PPSA00001", "01.000.000", "SYNTHETIC TITLE", [], "none"))
-        self.assertEqual([p["name"] for p in ident["presets"]], ["low-vram", "nvidia-safe"])
-        self.assertEqual(ident["presets"][0]["tokens"], "--vram-profile low --oom-recovery")
+        self.assertEqual([p["name"] for p in ident["presets"]], ["low-vram", "safe"])
+        self.assertEqual(ident["presets"][0]["tokens"],
+                         "--no-native-raytracing --no-trinity --no-readback-tiled-images "
+                         "--no-readback-storage-images --no-keep-small-layer-targets "
+                         "--vram-profile low --vram-gc proportional --oom-recovery")
         vram = ident["vram_config"]
         self.assertEqual((vram["budget"], vram["limit"], vram["profile"], vram["gc"]), ("7168", "off", "low", "proportional"))
         self.assertEqual(ident["session_start"], "2026-11-19 20:05:11")
@@ -84,6 +87,12 @@ class ContractSessionTests(unittest.TestCase):
         self.assertEqual(spill["fields"]["kind"], "images")
         self.assertIn(("vram-spill", "buffers"), f)
         self.assertTrue(any(k[0] == "vram-pressure" for k in f))
+
+    def test_formatted_buffer_fallback_line(self):
+        f = [x for x in self.rep["findings"] if x["rule_id"] == "shader-formatted-raw-fallback"]
+        self.assertEqual(len(f), 1)
+        self.assertEqual((f[0]["fields"]["dir"], f[0]["fields"]["format"], f[0]["fields"]["hash"]),
+                         ("store", "13", "1122334455667788"))
 
     def test_guest_pc_and_stack(self):
         exc = self.rep["primary"]["host_exception"]

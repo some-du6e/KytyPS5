@@ -6,8 +6,8 @@ Fork build some-du6e/KytyPS5 1234abc
 GPU: NVIDIA GeForce RTX 3050 vendor=0x10de device=0x2507 driver=581.42.0.0 api=1.4.312 driverID=NvidiaProprietary vram=8192 MiB bar=256 MiB
 Host: cpu=AMD Ryzen 5 5600 6-Core Processor threads=12 ram=16304 MiB os=Windows 11 (10.0.26100)
 Title profile: none (none) id=PPSA00001 version=01.000.000 name="SYNTHETIC TITLE" quirks=none preset=none
-Preset: low-vram -> --vram-profile low --oom-recovery
-Preset: nvidia-safe -> --no-shader-cache
+Preset: low-vram -> --no-native-raytracing --no-trinity --no-readback-tiled-images --no-readback-storage-images --no-keep-small-layer-targets --vram-profile low --vram-gc proportional --oom-recovery
+Preset: safe -> --no-async-pipelines --no-overlap-dispatches --no-defer-draw-barriers --no-masked-select-elimination --no-spirv-forwarding --no-uniform-buffers --no-lod-stats --no-keep-small-layer-targets --no-tlas-cache --pipeline-helpers 0 --gpu-thread-cpus off
 VRAM: budget=7168 MiB limit=off profile=low gc=proportional fixed: bda_table=64 fault=16 rings=96 recycle_cap=256 rt_arena=off thresholds: tex_trigger=4096 tex_pressure=5120 tex_critical=6144 buf_trigger=1024 buf_critical=1536
 Title ID: PPSA00001
 PS5 NID fallback: zr094EQ39Ww -> zr094EQ39Ww[libc_v1][libc_v1.1][Func] (type)
@@ -26,6 +26,7 @@ Soft-fail: sceAudio3dPortOpen: unknown port type 7, returning SCE_AUDIO3D_ERROR_
 [HACK] skip unsupported shader instruction: first at PipelineCache::GetProgram, shader=0x1122334455667788, where=0x120, 0x00000120: unsupported family=VOP3 opcode=0x344 raw=[0xd7440000 0x00020501] reason=VOP3 opcode is not implemented
 ShaderRecompiler CS phase begin: hash=0x1122334455667788 decode
 Shaders: VS 12 | PS 14 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shader: formatted buffer store with unsupported format 13 falls back to raw DWORDs (first in shader 0x1122334455667788)
 VRAM spill: images allocated outside device-local memory: count=1 bytes=64 MiB (first: render target 3840x2160 R16G16B16A16Sfloat)
 VRAM spill: images allocated outside device-local memory: count=2 bytes=96 MiB (first: render target 3840x2160 R16G16B16A16Sfloat)
 VRAM spill: buffers allocated outside device-local memory: count=1 bytes=32 MiB (first: GameBuffer 0x0000001000000000 size 32 MiB)
