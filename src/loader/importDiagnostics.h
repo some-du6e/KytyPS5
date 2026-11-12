@@ -37,6 +37,7 @@ const char* PolicyName(UnresolvedPolicy policy);
 // - Np* (NpManager, NpWebApi2, NpSessionSignaling, NpMatching2, NpAuth, ...): signed out,
 //   0x80550006, the code Kyty's own Np functions return while PSN emulation is off.
 //   NpTrophy* and NpEntitlementAccess* are left at 0: they work offline on hardware.
+//   NpCppWebApi* is left at 0: a C++ API whose functions mostly do not return an int.
 // - Net, NetCtl*: NET_ERROR_ENETDOWN 0x80410132.
 // - Http*: HTTP_ERROR_NETWORK 0x80431063.
 // - Ssl*, Rudp: NET_ERROR_ENETDOWN (neither library has a network-down code of its own).

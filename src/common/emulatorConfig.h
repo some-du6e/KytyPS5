@@ -141,11 +141,12 @@ struct ConfigOptions {
 	// --nid-names: symbol names, one per line, hashed to name the NIDs of unresolved imports.
 	std::filesystem::path nid_names_file;
 	// --strict-imports: the first call of an unresolved function import is fatal.
-	bool                  strict_imports         = false;
-	// --unresolved-return-zero: unresolved functions return 0 in every library (no offline policy).
-	bool                  unresolved_return_zero = false;
+	bool                  strict_imports             = false;
+	// --unresolved-offline-returns: unresolved Np/Net/Http/Ssl functions return an offline error
+	// instead of 0 (ignored with --emulate-psn). Off: every unresolved function returns 0.
+	bool                  unresolved_offline_returns = false;
 	// --no-rebind-imports: imports stubbed at load stay stubbed when a later module exports them.
-	bool                  rebind_imports         = true;
+	bool                  rebind_imports             = true;
 	// --dump-imports <file>: write the import report of eboot.bin and sce_module/*.prx and exit,
 	// without a GPU and without running guest code. Empty: normal run.
 	std::filesystem::path dump_imports_file;
@@ -271,7 +272,7 @@ const std::vector<std::string>& GetGuestArguments();
 // --nid-names <file>; empty: none.
 const std::filesystem::path& GetNidNamesFile();
 bool StrictImportsEnabled();
-bool UnresolvedReturnZero();
+bool UnresolvedOfflineReturnsEnabled();
 bool RebindImportsEnabled();
 const std::filesystem::path& GetDumpImportsFile();
 

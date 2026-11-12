@@ -101,7 +101,7 @@ void TestUnresolvedPolicy() {
 	    {"NpWebApi2", 0x80550006u, Diag::UnresolvedPolicy::NpOffline},
 	    {"NpSessionSignaling", 0x80550006u, Diag::UnresolvedPolicy::NpOffline},
 	    {"NpMatching2", 0x80550006u, Diag::UnresolvedPolicy::NpOffline},
-	    {"NpCppWebApi", 0x80550006u, Diag::UnresolvedPolicy::NpOffline},
+	    {"NpCppWebApi", 0, Diag::UnresolvedPolicy::Zero},
 	    {"libSceNpAuth", 0x80550006u, Diag::UnresolvedPolicy::NpOffline},
 	    {"NpTrophy2", 0, Diag::UnresolvedPolicy::Zero},
 	    {"NpEntitlementAccess", 0, Diag::UnresolvedPolicy::Zero},

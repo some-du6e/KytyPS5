@@ -184,8 +184,8 @@ static void PrintUsage() {
 	::printf("  --nid-names <file>                   Symbol names, one per line, to name the NIDs\n"
 	         "                                       of unresolved imports in the log.\n");
 	::printf("  --strict-imports                     Stop at the first call of an unresolved import.\n");
-	::printf("  --unresolved-return-zero             Unresolved Np/Net/Http/Ssl functions return 0\n"
-	         "                                       instead of an offline error.\n");
+	::printf("  --unresolved-offline-returns         Unresolved Np/Net/Http/Ssl functions return an\n"
+	         "                                       offline error instead of 0 (not with --emulate-psn).\n");
 	::printf("  --no-rebind-imports                  Keep imports stubbed at boot stubbed when a module\n"
 	         "                                       loaded later exports them.\n");
 	::printf("  --dump-imports <file>                With --game: write which imports of eboot.bin and\n"
@@ -329,7 +329,7 @@ static constexpr Flag FLAGS[] = {
 #endif
     // gta6-prep: hle
     {"--strict-imports", &ConfigOptions::strict_imports},
-    {"--unresolved-return-zero", &ConfigOptions::unresolved_return_zero},
+    {"--unresolved-offline-returns", &ConfigOptions::unresolved_offline_returns},
     {"--no-rebind-imports", &ConfigOptions::rebind_imports, false},
 };
 

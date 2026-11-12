@@ -68,7 +68,10 @@ UnresolvedReturn GetUnresolvedReturn(std::string_view library) {
 	// "Np" followed by an upper-case letter: NpManager, NpWebApi2, NpCppWebApi, ... but not
 	// a hypothetical "Npxyz".
 	if (library.size() > 2 && library.starts_with("Np") && library[2] >= 'A' && library[2] <= 'Z') {
-		if (IsFamily(library, "NpTrophy") || IsFamily(library, "NpEntitlementAccess")) {
+		// NpCppWebApi is a C++ API: its functions mostly return pointers, references or objects,
+		// for which an error code would be a garbage non-null value.
+		if (IsFamily(library, "NpTrophy") || IsFamily(library, "NpEntitlementAccess") ||
+		    IsFamily(library, "NpCppWebApi")) {
 			return {};
 		}
 		return {as_code(NP_ERROR_SIGNED_OUT), UnresolvedPolicy::NpOffline};

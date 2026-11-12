@@ -216,9 +216,10 @@ static uint64_t RegisterStubbedImport(uint32_t index, const Program* program,
 	record->program      = Common::PathToString(program->file_name);
 	record->program_file = Common::PathToString(program->file_name.filename());
 	record->library      = std::string(ImportDiagnostics::LibraryFromGeneratedName(ri.name));
-	// With PSN emulation the Np functions Kyty implements act signed in, so an offline error from
-	// the missing ones would contradict them.
-	if (!Config::UnresolvedReturnZero() && !Config::PsnEmulationEnabled()) {
+	// Opt-in: the stub cannot tell what the function returns, and a pointer or bool result that
+	// was 0 would become a non-zero error code. With PSN emulation the Np functions Kyty implements
+	// act signed in, so an offline error from the missing ones would contradict them.
+	if (Config::UnresolvedOfflineReturnsEnabled() && !Config::PsnEmulationEnabled()) {
 		record->ret = ImportDiagnostics::GetUnresolvedReturn(record->library);
 	}
 	record->thunk_vaddr  = AllocateUnresolvedImportThunk(reinterpret_cast<uint64_t>(record.get()));
