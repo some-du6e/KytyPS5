@@ -51,6 +51,8 @@ public:
 	~Mutex();
 
 	void Lock();
+	// False when another thread holds the mutex; never blocks.
+	bool TryLock();
 	void Unlock();
 
 	KYTY_CLASS_NO_COPY(Mutex);
@@ -60,6 +62,8 @@ private:
 	alignas(8) unsigned char m_cs[40];
 #else
 	void Lock() { m_mutex.lock(); }
+	// False when another thread holds the mutex; never blocks.
+	bool TryLock() { return m_mutex.try_lock(); }
 	void Unlock() { m_mutex.unlock(); }
 
 private:

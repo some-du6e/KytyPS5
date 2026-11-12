@@ -284,6 +284,10 @@ void Mutex::Lock() {
 	EnterCriticalSection(ToCs(m_cs));
 }
 
+bool Mutex::TryLock() {
+	return TryEnterCriticalSection(ToCs(m_cs)) != 0;
+}
+
 void Mutex::Unlock() {
 	LeaveCriticalSection(ToCs(m_cs));
 }

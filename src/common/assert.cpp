@@ -31,8 +31,13 @@ static void ThrowIfSoft([[maybe_unused]] const std::string& text) {
 
 [[noreturn]] static void DbgReport(const char* title, std::string_view text, const char* file,
                                    int line) {
-	Log::WriteToConsoleAndLog(fmt::format("--- Build ---\n{}\n{}\n{} in {}:{}\n", KYTY_BUILD_LABEL,
-	                                      title, text, file, line));
+	auto report = fmt::format("--- Build ---\n{}\n{}\n{} in {}:{}\n", KYTY_BUILD_LABEL, title, text,
+	                          file, line);
+	if (const auto& shader = t_shader_compile_context; shader.stage != nullptr) {
+		report += fmt::format("while compiling shader: stage={} hash=0x{:016x}\n", shader.stage,
+		                      shader.hash);
+	}
+	Log::WriteToConsoleAndLog(report);
 	Subsystems::EmergencyShutdownActive();
 	std::fflush(nullptr);
 	std::_Exit(321);

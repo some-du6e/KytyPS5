@@ -20,6 +20,7 @@
 #include "common/profiler.h"
 #include "graphics/host_gpu/graphicContext.h"
 #include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
+#include "graphics/host_gpu/vulkanDiag.h"
 
 #include <algorithm>
 #include <array>
@@ -278,13 +279,16 @@ void GraphicContext::LogMemoryBudget() const {
 	const auto& properties = physical_device_memory_properties;
 	VmaBudget   budgets[VK_MAX_MEMORY_HEAPS] {};
 	vmaGetHeapBudgets(allocator, budgets);
+	// Only after an allocation failed: kept in the session log, next to the fatal report.
+	std::string text;
 	for (uint32_t i = 0; i < properties.memoryHeapCount; i++) {
-		LOGF("VMA heap %u: usage=%" PRIu64 ", budget=%" PRIu64 ", allocation=%" PRIu64
-		     ", blocks=%" PRIu64 "\n",
-		     i, static_cast<uint64_t>(budgets[i].usage), static_cast<uint64_t>(budgets[i].budget),
-		     static_cast<uint64_t>(budgets[i].statistics.allocationBytes),
-		     static_cast<uint64_t>(budgets[i].statistics.blockBytes));
+		text += fmt::format("VMA heap {}: usage={}, budget={}, allocation={}, blocks={}\n", i,
+		                    static_cast<uint64_t>(budgets[i].usage),
+		                    static_cast<uint64_t>(budgets[i].budget),
+		                    static_cast<uint64_t>(budgets[i].statistics.allocationBytes),
+		                    static_cast<uint64_t>(budgets[i].statistics.blockBytes));
 	}
+	Log::WriteToConsoleAndLog(text);
 }
 
 uint64_t GraphicContext::GetDeviceMemoryUsage() const {
@@ -408,6 +412,12 @@ bool GraphicContext::CreateImage(const vk::ImageCreateInfo& image_info, VulkanIm
 		}
 		if (result != vk::Result::eSuccess) {
 			image.image = native_image;
+			Log::WriteToConsoleAndLog(fmt::format(
+			    "{} for image extent={}x{}x{} format={} layers={} levels={} samples={}\n",
+			    VulkanFailureText("vmaCreateImage", result), image_info.extent.width,
+			    image_info.extent.height, image_info.extent.depth,
+			    static_cast<int>(image_info.format), image_info.arrayLayers, image_info.mipLevels,
+			    static_cast<uint32_t>(image_info.samples)));
 			LogMemoryBudget();
 			return false;
 		}

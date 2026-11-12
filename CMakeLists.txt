@@ -899,6 +899,16 @@ add_executable(gpu_blit_shader_tests EXCLUDE_FROM_ALL
 target_link_libraries(gpu_blit_shader_tests kyty_test_gtest)
 target_include_directories(gpu_blit_shader_tests PRIVATE ${inc_headers})
 
+# gta6-prep: diag
+# Pure checks of the crash-log diagnostics text; no GPU.
+add_executable(diag_tests EXCLUDE_FROM_ALL "${KYTY_TESTS_DIR}/DiagTests.cpp")
+target_link_libraries(diag_tests common fmt::fmt Vulkan::Headers)
+target_include_directories(diag_tests PRIVATE ${inc_headers})
+if(LINUX)
+	# TestMutexTryLock starts a thread.
+	target_link_libraries(diag_tests Threads::Threads)
+endif()
+
 # Common::SoftExitScope turns a fatal error of the current thread into a C++ exception: its
 # thrower and the renderer code that catches it need exceptions where they are off by default.
 if(NOT KYTY_CLANG_CL)
@@ -1178,6 +1188,10 @@ if(BUILD_TESTING)
 		rtc_tests
 		shader_alu_decode_tests
 	)
+
+	# gta6-prep: diag
+	add_test(NAME diag COMMAND $<TARGET_FILE:diag_tests>)
+	add_dependencies(kyty_tests diag_tests)
 endif()
 
 # Test Darwin signal-context restoration for SSE4a instructions.

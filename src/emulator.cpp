@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <thread>
 
 namespace Emulator {
@@ -60,6 +61,10 @@ static void PrintSystemInfo() {
 	     "  threads: %u\n\n",
 	     KYTY_BUILD_LABEL, platform_name, info.ProcessorName.c_str(),
 	     std::thread::hardware_concurrency());
+	// For crash logs: also in the session log (log contract).
+	Log::WriteToConsoleAndLog(fmt::format("Host: cpu={} threads={} ram={} MiB os={}\n",
+	                                      info.ProcessorName, std::thread::hardware_concurrency(),
+	                                      info.TotalMemoryBytes / (1024u * 1024u), info.OsName));
 }
 
 static void KytyClose() {
@@ -155,6 +160,9 @@ static void Init(const RunOptions& options, const std::filesystem::path& param_j
 	if (Common::File::IsFileExisting(param_json)) {
 		Loader::SystemContentLoadParamSfo(param_json);
 	}
+	// gta6-prep: diag. --session-log auto names the file after the title (TITLE_ID, else the
+	// title part of CONTENT_ID), before the title profile lines below.
+	Log::OpenAutoSessionLog(Loader::SystemContentTitle().id);
 	// gta6-prep: config
 	const auto cfg = ApplyTitleProfile(options);
 	if (cfg.splash_enabled) {

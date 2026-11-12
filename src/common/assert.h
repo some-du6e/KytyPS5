@@ -4,6 +4,7 @@
 #include "common/common.h"
 #include "common/logging/log.h"
 
+#include <cstdint>
 #include <stdexcept>
 #include <string_view>
 
@@ -28,6 +29,29 @@ public:
 
 private:
 	bool m_previous;
+};
+
+// The shader this thread is compiling, named in the report of a fatal error (see DbgReport), so
+// that a crash log of a recompiler failure says which shader to look at. Header-only: tools and
+// tests that compile the recompiler without the common library need nothing more.
+struct ShaderCompileContext {
+	const char* stage = nullptr; // null: none
+	uint64_t    hash  = 0;
+};
+inline thread_local ShaderCompileContext t_shader_compile_context;
+
+// Marks the shader being compiled until the end of the scope; nests.
+class ShaderCompileScope {
+public:
+	ShaderCompileScope(const char* stage, uint64_t hash): m_previous(t_shader_compile_context) {
+		t_shader_compile_context = {stage != nullptr ? stage : "?", hash};
+	}
+	~ShaderCompileScope() { t_shader_compile_context = m_previous; }
+	ShaderCompileScope(const ShaderCompileScope&)            = delete;
+	ShaderCompileScope& operator=(const ShaderCompileScope&) = delete;
+
+private:
+	ShaderCompileContext m_previous;
 };
 
 [[noreturn]] void DbgExitHandler(char const* file, int line, std::string_view text);

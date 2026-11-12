@@ -354,6 +354,8 @@ void ConfigurationEditDialog::Init(const Configuration& info) {
 	m_ui->lineEdit_printf_file->setEnabled(info.printf_direction ==
 	                                       Configuration::LogDirection::File);
 	m_ui->checkBox_profiler->setChecked(info.profiler_enabled);
+	// gta6-prep: diag
+	m_ui->checkBox_session_log->setChecked(info.session_log_enabled);
 }
 
 void ConfigurationEditDialog::InitGameDirectories() {
@@ -587,6 +589,8 @@ static void UpdateInfo(Configuration& info, Ui::ConfigurationEditDialog& ui, boo
 	    TextToEnum<Configuration::LogDirection>(ui.comboBox_printf_direction->currentText());
 	info.printf_output_file = ui.lineEdit_printf_file->text();
 	info.profiler_enabled = ui.checkBox_profiler->isChecked();
+	// gta6-prep: diag
+	info.session_log_enabled = ui.checkBox_session_log->isChecked();
 }
 
 void ConfigurationEditDialog::save() {

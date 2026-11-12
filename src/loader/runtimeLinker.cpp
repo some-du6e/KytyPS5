@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -45,6 +46,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <thread>
 #include <vector>
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
@@ -808,6 +810,49 @@ static std::string HostModuleAddress(uint64_t address) {
 #endif
 }
 
+// "<module file name>+0x<offset>" for addresses in loaded guest modules (eboot.bin, a PRX), for
+// the host fault report. Never blocks for long: the linker lock can be held by a thread that is
+// running guest code (a heap callback, a fini function), possibly waiting on the faulting thread.
+// The first lookup waits up to 100 ms for the lock; once that fails, the remaining ones are
+// skipped and Unavailable() is true. A fault inside a lookup (the lists changing under this very
+// thread) re-enters the handler, whose lookups then see the thread-local guard and give up.
+class GuestModuleLookup {
+public:
+	GuestModuleLookup() = default;
+	KYTY_CLASS_NO_COPY(GuestModuleLookup);
+
+	[[nodiscard]] bool Unavailable() const { return m_unavailable; }
+
+	std::string operator()(uint64_t address) {
+		if (address == 0 || m_unavailable) {
+			return {};
+		}
+		if (t_in_lookup) {
+			m_unavailable = true;
+			return {};
+		}
+		t_in_lookup         = true;
+		Program*    program = nullptr;
+		auto*       linker  = Common::Singleton<RuntimeLinker>::Instance();
+		const bool  locked  = linker->TryFindProgramByAddr(address, 100000, &program);
+		std::string where;
+		if (!locked) {
+			m_unavailable = true;
+		} else if (program != nullptr) {
+			where = fmt::format("{}+0x{:x}", Common::PathToString(program->file_name.filename()),
+			                    address - program->base_vaddr);
+		}
+		t_in_lookup = false;
+		return where;
+	}
+
+private:
+	static thread_local bool t_in_lookup;
+	bool                     m_unavailable = false;
+};
+
+thread_local bool GuestModuleLookup::t_in_lookup = false;
+
 static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exception_info) {
 	const auto* info = &exception_info;
 
@@ -883,6 +928,17 @@ static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exc
 		if (const auto where = HostModuleAddress(info->exception_address); !where.empty()) {
 			report += fmt::format("pc: {:016x} ({})\n", info->exception_address, where);
 		}
+		GuestModuleLookup guest_module_address;
+		// A fault in guest code: where in which module, to match against a disassembly.
+		if (const auto where = guest_module_address(info->exception_address); !where.empty()) {
+			report += fmt::format("guest pc: {}\n", where);
+		}
+		if (info->type == Common::HostException::ExceptionType::AccessViolation) {
+			if (const auto where = guest_module_address(info->access_violation_vaddr);
+			    !where.empty()) {
+				report += fmt::format("guest address: {}\n", where);
+			}
+		}
 		Libs::Graphics::DescribeDriverPipelineCreation(report);
 		report += fmt::format("rax={:016x} rbx={:016x} rcx={:016x} rdx={:016x}\n"
 		                      "rsi={:016x} rdi={:016x} rbp={:016x} rsp={:016x}\n"
@@ -907,10 +963,33 @@ static bool KytyExceptionHandler(const Common::HostException::ExceptionInfo& exc
 			}
 			report += "\n";
 			for (int i = 0; i < 32; i++) {
-				if (const auto where = HostModuleAddress(stack[i]); !where.empty()) {
+				auto where = HostModuleAddress(stack[i]);
+				if (where.empty()) {
+					where = guest_module_address(stack[i]);
+				}
+				if (!where.empty()) {
 					report += fmt::format(" [rsp+0x{:02x}] {:016x} ({})\n", i * 8, stack[i], where);
 				}
 			}
+		}
+		// The guest's frame chain, when rbp is a guest frame: WalkGuestStack reads only frames
+		// within 1 MiB above rsp that are readable and return into guest code.
+		{
+			void*     frames[16];
+			const int depth = WalkGuestStack(info->rbp, info->rsp, frames,
+			                                 static_cast<int>(std::size(frames)));
+			if (depth > 0) {
+				report += "guest stack trace:\n";
+				for (int i = 0; i < depth; i++) {
+					const auto address = reinterpret_cast<uint64_t>(frames[i]);
+					const auto where   = guest_module_address(address);
+					report += fmt::format(" #{} {:016x} ({})\n", i, address,
+					                      where.empty() ? std::string("?") : where);
+				}
+			}
+		}
+		if (guest_module_address.Unavailable()) {
+			report += "guest modules: ? (the linker lock is busy; guest addresses not named)\n";
 		}
 		Log::WriteToConsoleAndLog(report);
 	}
@@ -1881,6 +1960,40 @@ std::vector<std::pair<uint64_t, uint64_t>> RuntimeLinker::GetCodeRanges() {
 		}
 	}
 	return ranges;
+}
+
+bool RuntimeLinker::TryFindProgramByAddr(uint64_t vaddr, uint32_t wait_micros, Program** out) {
+	*out                = nullptr;
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(wait_micros);
+	while (!m_mutex.TryLock()) {
+		if (std::chrono::steady_clock::now() >= deadline) {
+			return false;
+		}
+		std::this_thread::yield();
+	}
+	// The same search as FindProgramByAddr, without its EXIT_IF: this runs inside the handler.
+	for (auto* p: m_programs) {
+		const auto* ehdr = p->elf != nullptr ? p->elf->GetEhdr() : nullptr;
+		const auto* phdr = p->elf != nullptr ? p->elf->GetPhdr() : nullptr;
+		if (phdr == nullptr || ehdr == nullptr) {
+			continue;
+		}
+		for (Elf64_Half i = 0; i < ehdr->e_phnum && *out == nullptr; i++) {
+			if (phdr[i].p_memsz != 0 &&
+			    (phdr[i].p_type == PT_LOAD || phdr[i].p_type == PT_OS_RELRO)) {
+				const uint64_t segment_addr = phdr[i].p_vaddr + p->base_vaddr;
+				const uint64_t segment_size = GetAlignedSize(phdr + i);
+				if (vaddr >= segment_addr && vaddr < segment_addr + segment_size) {
+					*out = p;
+				}
+			}
+		}
+		if (*out != nullptr) {
+			break;
+		}
+	}
+	m_mutex.Unlock();
+	return true;
 }
 
 Program* RuntimeLinker::FindProgramByAddr(uint64_t vaddr) {

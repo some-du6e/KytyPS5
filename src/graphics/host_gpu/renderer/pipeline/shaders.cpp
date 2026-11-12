@@ -15,6 +15,7 @@
 #include "graphics/shader/recompiler/ir/ShaderIR.h"
 #include "graphics/shader/rectListShader.h"
 #include "graphics/shader/shader.h"
+#include "graphics/host_gpu/vulkanDiag.h"
 
 #include <algorithm>
 #include <array>
@@ -437,9 +438,10 @@ void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& p
 		                                                 &pipeline.pipeline);
 	}
 	if (result != vk::Result::eSuccess) {
-		EXIT("vkCreateGraphicsPipelines failed: %s, %s 0x%016" PRIx64 ", hs 0x%016" PRIx64
-		     ", ds 0x%016" PRIx64 ", ps 0x%016" PRIx64 "\n",
-		     vk::to_string(result).c_str(), mesh ? "ms" : "vs", hash(0), hash(1), hash(2), hash(3));
+		EXIT("%s, %s 0x%016" PRIx64 ", hs 0x%016" PRIx64 ", ds 0x%016" PRIx64 ", ps 0x%016" PRIx64
+		     "\n%s",
+		     VulkanFailureText("vkCreateGraphicsPipelines", result).c_str(), mesh ? "ms" : "vs",
+		     hash(0), hash(1), hash(2), hash(3), DeviceLostDetails(result).c_str());
 	}
 
 	graphics.device.destroyShaderModule(tess_control_shader_module, nullptr);
@@ -488,8 +490,8 @@ void CreatePipelineInternal(GraphicContext& graphics, PipelineCache::Pipeline& p
                             const ShaderModule& module, vk::PipelineCache driver_cache) {
 	const auto result = CreateComputePipeline(graphics, pipeline, module, driver_cache, false);
 	if (result != vk::Result::eSuccess) {
-		EXIT("vkCreateComputePipelines failed: %s, cs 0x%016" PRIx64 "\n", vk::to_string(result).c_str(),
-		     module.info.shader_hash);
+		EXIT("%s, cs 0x%016" PRIx64 "\n%s", VulkanFailureText("vkCreateComputePipelines", result).c_str(),
+		     module.info.shader_hash, DeviceLostDetails(result).c_str());
 	}
 }
 

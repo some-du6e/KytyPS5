@@ -11,6 +11,7 @@
 #include "graphics/host_gpu/renderer/render.h"
 #include "graphics/host_gpu/renderer/renderContext.h"
 #include "graphics/host_gpu/vulkanCommon.h"
+#include "graphics/host_gpu/vulkanDiag.h"
 #include "graphics/presentation/openxrHeadset.h"
 #include "graphics/presentation/presenter.h"
 #include "graphics/presentation/systemOverlay.h"
@@ -492,6 +493,30 @@ static vk::Device VulkanCreateDevice(GraphicContext&          graphics,
 	graphics.max_memory_allocation_size = properties11.maxMemoryAllocationSize;
 	graphics.max_buffer_size            = maintenance4.maxBufferSize;
 	LOGF("Select device: %s\n", graphics.physical_device_properties.deviceName.data());
+	{
+		// The GPU of a crash log (log contract), also in the session log.
+		const auto& device_properties = graphics.physical_device_properties;
+		vk::StructureChain<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>
+		    driver_query;
+		physical_device.getProperties2(&driver_query.get());
+		const auto& driver    = driver_query.get<vk::PhysicalDeviceDriverProperties>();
+		const bool  has_id    = device_properties.apiVersion >= VK_API_VERSION_1_2;
+		const auto  driver_id = has_id ? vk::to_string(driver.driverID) : std::string("?");
+		const auto  name      = std::string(device_properties.deviceName.data());
+		Log::WriteToConsoleAndLog(GpuIdentityLine(
+		    {.name           = name,
+		     .vendor_id      = device_properties.vendorID,
+		     .device_id      = device_properties.deviceID,
+		     .driver_version = device_properties.driverVersion,
+		     .api_version    = device_properties.apiVersion,
+		     .driver_id      = driver_id,
+		     .memory         = SummarizeGpuMemory(physical_device.getMemoryProperties())}));
+		if (has_id) {
+			Log::WriteToConsoleAndLog(fmt::format(
+			    "GPU driver: name=\"{}\" info=\"{}\"\n", std::string(driver.driverName.data()),
+			    std::string(driver.driverInfo.data())));
+		}
+	}
 
 	const auto subgroup_stages = subgroup_control.requiredSubgroupSizeStages;
 	graphics.subgroup_size     = properties11.subgroupSize;
@@ -633,6 +658,21 @@ static vk::Device VulkanCreateDevice(GraphicContext&          graphics,
 	}
 	LOGF("Vulkan native ray tracing: %s\n", graphics.native_ray_tracing_enabled ? "true" : "false");
 	NativeRayTracing::SetDeviceSupport(graphics.native_ray_tracing_enabled);
+	// --device-fault-report: what the driver knows about a lost device (see DeviceLostDetails()).
+	bool device_fault = false;
+	if (Config::DeviceFaultReportEnabled() &&
+	    HasExtension(available_extensions, VK_EXT_DEVICE_FAULT_EXTENSION_NAME)) {
+		vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceFaultFeaturesEXT> query;
+		physical_device.getFeatures2(&query.get());
+		device_fault = query.get<vk::PhysicalDeviceFaultFeaturesEXT>().deviceFault == VK_TRUE;
+		if (device_fault) {
+			device_extensions.push_back(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
+		}
+	}
+	if (Config::DeviceFaultReportEnabled()) {
+		Log::WriteToConsoleAndLog(fmt::format("Device fault reports: {}\n",
+		                                      device_fault ? "on" : "not supported by the driver"));
+	}
 	const float                              queue_priority = 1.0f;
 	std::array<vk::DeviceQueueCreateInfo, 2> queue_create_infos {};
 	queue_create_infos[0] = {
@@ -675,7 +715,11 @@ static vk::Device VulkanCreateDevice(GraphicContext&          graphics,
 	    // The renderer only uses the Vulkan 1.3 core dynamic states, but RADV (Mesa 26.3) creates
 	    // its PS epilog cache only when this EXT feature is enabled and crashes in vkCmdDraw when
 	    // a depth- or stencil-writing fragment shader needs an epilog.
-	    vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT {.extendedDynamicState = VK_TRUE}};
+	    vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT {.extendedDynamicState = VK_TRUE},
+	    vk::PhysicalDeviceFaultFeaturesEXT {.deviceFault = VK_TRUE}};
+	if (!device_fault) {
+		create.unlink<vk::PhysicalDeviceFaultFeaturesEXT>();
+	}
 	if (!workgroup_layout.workgroupMemoryExplicitLayout) {
 		create.unlink<vk::PhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR>();
 	}
@@ -717,6 +761,9 @@ static vk::Device VulkanCreateDevice(GraphicContext&          graphics,
 	vk::Device device = nullptr;
 	RequireVulkanSuccess(physical_device.createDevice(&create.get(), nullptr, &device),
 	                     "vkCreateDevice");
+	if (device_fault) {
+		EnableDeviceFaultReports(device);
+	}
 	return device;
 }
 

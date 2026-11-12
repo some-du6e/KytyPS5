@@ -3,8 +3,12 @@
 
 #include "common/common.h"
 
+#include <chrono>
+#include <ctime>
+#include <filesystem>
 #include <fmt/color.h>
 #include <fmt/printf.h>
+#include <string>
 #include <string_view>
 
 namespace Log {
@@ -30,6 +34,27 @@ void WriteToConsoleAndLog(std::string_view text);
 // The session log (--session-log): the console messages above and the reports of a fatal error,
 // whatever the log direction and without the printf log. Buffered: Flush() writes it out.
 void WriteToSessionLog(std::string_view text);
+
+// gta6-prep: diag
+// --session-log auto: opens <executable folder>/_Logs/<title>_<yyyy-MM-dd_HH-mm-ss>.log once the
+// title is known (Emulator::Init, after param.json), keeping the SESSION_LOGS_KEPT newest logs of
+// the folder. A program a LoadExec starts continues the same file. Does nothing without the
+// option or when a session log is open.
+inline constexpr size_t SESSION_LOGS_KEPT = 20;
+void OpenAutoSessionLog(std::string_view title_id);
+// "<title>_<yyyy-MM-dd_HH-mm-ss>.log"; characters other than A-Z a-z 0-9 _ . - become '_', and an
+// empty title is "unknown".
+[[nodiscard]] std::string SessionLogFileName(std::string_view title_id, const std::tm& time);
+// Whether `file_name` has the shape SessionLogFileName() gives, with an optional "_<n>" copy
+// number before ".log": "<title>_<yyyy-MM-dd_HH-mm-ss>[_<n>].log". Only those are pruned.
+[[nodiscard]] bool IsSessionLogFileName(std::string_view file_name);
+// A session log modified this recently may belong to a session that is still running (another
+// emulator instance, a launcher session): never pruned.
+inline constexpr auto SESSION_LOG_MIN_PRUNE_AGE = std::chrono::minutes(10);
+// Deletes the oldest session logs of `folder` (IsSessionLogFileName, by modification time) until at
+// most `keep` remain, skipping those modified in the last SESSION_LOG_MIN_PRUNE_AGE. Other files,
+// such as a user's own *.log, are never touched.
+void PruneSessionLogs(const std::filesystem::path& folder, size_t keep);
 
 namespace Color {
 

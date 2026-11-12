@@ -190,9 +190,11 @@ static void PrintUsage() {
 	::printf("  --graphics-debug-dump                Enable graphics debug dumps.\n");
 	::printf("  --printf-direction <value>           Silent, Console, or File.\n");
 	::printf("  --printf-output-file <path>          Guest printf output file.\n");
-	::printf("  --session-log <path>                 Keep the warnings, errors and the report of a\n"
+	::printf("  --session-log <path|auto>            Keep the warnings, errors and the report of a\n"
 	         "                                       fatal error of this session in a file, without\n"
-	         "                                       the printf log.\n");
+	         "                                       the printf log. auto: <emulator folder>/_Logs/\n"
+	         "                                       <TITLE_ID or unknown>_<date>.log, keeping the\n"
+	         "                                       20 newest logs there.\n");
 	::printf("  --profile                            Enable the Tracy profiler.\n");
 	::printf("  --spirv-debug-printf                 Enable SPIR-V debug printf.\n");
 	::printf("  --readback-linear-images             Read back writable linear images on submit.\n");
@@ -281,6 +283,12 @@ static void PrintUsage() {
 	::printf("  --strict-shaders                     Stop at a shader instruction the recompiler does\n"
 	         "                                       not support instead of skipping the draws and\n"
 	         "                                       dispatches of its program.\n");
+
+	// gta6-prep: diag
+	::printf("\nDiagnostics:\n");
+	::printf("  --device-fault-report                Enable VK_EXT_device_fault where the driver\n"
+	         "                                       supports it, so that a lost device reports\n"
+	         "                                       the driver's fault data. Default: off.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -508,6 +516,9 @@ static constexpr Flag FLAGS[] = {
 
     // gta6-prep: shader-alu
     {"--strict-shaders", &ConfigOptions::strict_shaders},
+
+    // gta6-prep: diag
+    {"--device-fault-report", &ConfigOptions::device_fault_report_enabled},
 };
 
 // gta6-prep: config
@@ -843,7 +854,10 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 		} else if (arg == "--printf-output-file") {
 			options.config.printf_output_file = Common::PathFromUtf8(value);
 		} else if (arg == "--session-log") {
-			options.config.session_log_file = Common::PathFromUtf8(value);
+			// gta6-prep: diag. "auto": see Config::SessionLogAuto().
+			options.config.session_log_auto = value == "auto";
+			options.config.session_log_file =
+			    value == "auto" ? std::filesystem::path() : Common::PathFromUtf8(value);
 		} else if (arg == "--keymap") {
 			const auto split = value.find('=');
 			if (split == std::string::npos || split == 0 || split + 1 == value.size()) {
@@ -899,6 +913,7 @@ static bool ApplyTitlePreset(ConfigOptions& config, std::string_view name) {
 	options.config.printf_direction   = config.printf_direction;
 	options.config.printf_output_file = config.printf_output_file;
 	options.config.session_log_file   = config.session_log_file;
+	options.config.session_log_auto   = config.session_log_auto; // gta6-prep: diag
 	config                            = std::move(options.config);
 	return true;
 }

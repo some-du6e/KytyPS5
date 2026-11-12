@@ -518,6 +518,7 @@ RayTracingPrograms GetRayTracingPrograms() {
 }
 
 ShaderSource PrepareShaderSource(std::span<const uint32_t> code, const CompileOptions& options) {
+	const Common::ShaderCompileScope shader_context(StageName(options.stage), options.shader_hash);
 	EXIT_IF(code.empty());
 	ShaderSource source;
 	// gta6-prep: shader-alu. Records the first unsupported instruction; true when the source is
@@ -603,6 +604,7 @@ TranslateResult TranslateProgram(std::span<const uint32_t> code, const CompileOp
 }
 
 TranslateResult TranslateProgram(const Decoder::Program& decoded, const CompileOptions& options) {
+	const Common::ShaderCompileScope shader_context(StageName(options.stage), options.shader_hash);
 	EXIT_IF(decoded.instructions.empty());
 	if (decoded.has_swap_pc) {
 		for (const auto& inst: decoded.instructions) {
@@ -765,6 +767,7 @@ TranslateResult TranslateProgram(const Decoder::Program& decoded, const CompileO
 CompileResult CompileProgram(TranslateResult translated, const CompileOptions& options,
                              const IR::ResourceSpecialization& specialization,
                              uint32_t push_data_start_dword) {
+	const Common::ShaderCompileScope shader_context(StageName(options.stage), options.shader_hash);
 	const auto emit_begin = std::chrono::steady_clock::now();
 	auto& ir = translated.program;
 	const auto* stage = StageName(ir.stage);

@@ -216,6 +216,12 @@ struct ConfigOptions {
 	// --strict-shaders: an unsupported shader instruction closes the emulator (upstream
 	// behaviour) instead of skipping the draws and dispatches of its program.
 	bool strict_shaders = false;
+
+	// gta6-prep: diag
+	// See DeviceFaultReportEnabled().
+	bool device_fault_report_enabled = false;
+	// --session-log auto (see SessionLogAuto()); session_log_file stays empty.
+	bool session_log_auto = false;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -420,6 +426,14 @@ bool SkipUnsupportedImageAtomics();
 // --strict-shaders. Off (default, and without a loaded configuration): a program with an
 // instruction the shader recompiler does not support is skipped and reported once.
 bool StrictShadersEnabled();
+
+// gta6-prep: diag
+// --device-fault-report: the device enables VK_EXT_device_fault where the driver supports it, and
+// the report of a lost device includes the driver's fault addresses and vendor codes.
+bool DeviceFaultReportEnabled();
+// --session-log auto: the session log is <executable folder>/_Logs/<TITLE_ID or unknown>_<date>.log,
+// opened by Log::OpenAutoSessionLog() once param.json is read.
+bool SessionLogAuto();
 
 } // namespace Config
 
