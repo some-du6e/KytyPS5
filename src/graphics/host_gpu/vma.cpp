@@ -240,6 +240,7 @@ bool GraphicContext::CreateAllocator() {
 		LOGF("vmaCreateAllocator failed: %s\n", vk::to_string(result).c_str());
 		return false;
 	}
+	vram_limit_applied_mb = limits.any ? Config::GetVramLimitMb() : 0;
 	if (limits.any) {
 		// The budget, the cache thresholds and the BLAS arena follow the limited heaps.
 		for (uint32_t heap = 0; heap < memory.memoryHeapCount; heap++) {

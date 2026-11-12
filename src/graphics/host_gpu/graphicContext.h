@@ -60,6 +60,8 @@ struct GraphicContext {
 	// gta6-prep: vram: maxMemoryAllocationSize and maxBufferSize (Vulkan 1.3); 0 unknown.
 	uint64_t                           max_memory_allocation_size            = 0;
 	uint64_t                           max_buffer_size                       = 0;
+	// gta6-prep: vram: the --vram-limit-mb that CreateAllocator() applied to some heap; 0 none.
+	uint32_t                           vram_limit_applied_mb                 = 0;
 	vk::DescriptorSetLayout            image_heap_layout                     = nullptr;
 	Common::Mutex                      queue_mutex;
 	uint32_t                           queue_family = static_cast<uint32_t>(-1);

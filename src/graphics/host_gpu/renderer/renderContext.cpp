@@ -40,7 +40,9 @@ void RenderContext::LogVramBreakdown() {
 	const auto  buffer   = m_buffer_cache.GcThresholdsInUse();
 	MemoryPolicy::VramBreakdown breakdown;
 	breakdown.budget       = m_graphics.GetTotalMemoryBudget();
-	breakdown.limit_mb     = Config::GetVramLimitMb();
+	// "off" unless CreateAllocator() limited some heap (host heaps, device-local heaps of 1 GiB or
+	// less and heaps no larger than the limit stay whole).
+	breakdown.limit_mb     = m_graphics.vram_limit_applied_mb;
 	breakdown.profile      = settings.profile;
 	breakdown.gc_policy    = settings.gc_policy;
 	breakdown.bda_table    = BufferCache::BDA_PAGETABLE_SIZE;

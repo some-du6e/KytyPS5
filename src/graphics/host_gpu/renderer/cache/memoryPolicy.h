@@ -221,14 +221,14 @@ constexpr MergedBufferPlan PlanMergedBuffer(uint64_t size, uint64_t size_without
 // bytes; printed in MiB.
 struct VramBreakdown {
 	uint64_t                budget        = 0;
-	uint32_t                limit_mb      = 0; // 0: off
+	uint32_t                limit_mb      = 0; // the --vram-limit-mb applied to a heap; 0: off
 	Config::VramProfile     profile       = Config::VramProfile::Auto;
 	Config::VramGcPolicy    gc_policy     = Config::VramGcPolicy::Legacy;
 	uint64_t                bda_table     = 0;
 	uint64_t                fault_buffer  = 0;
 	uint64_t                rings         = 0;
 	uint64_t                recycle_cap   = 0;
-	std::optional<uint64_t> rt_arena; // nullopt: off; 0: no limit
+	std::optional<uint64_t> rt_arena; // nullopt: off (no native RT); 0: no limit (prints 0)
 	GcThresholds            thresholds;
 };
 
