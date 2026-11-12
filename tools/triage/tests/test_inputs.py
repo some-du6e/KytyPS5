@@ -143,6 +143,36 @@ class InputTests(unittest.TestCase):
         # generous bound: CI runners are slow, but a quadratic or per-line-decode slip shows up here
         self.assertLess(t_full, 60.0)
 
+    def test_small_printf_log_keeps_indented_build_block(self):
+        # Under LENIENT_MAX_BYTES a file is read leniently; the indented printf prefixes must still match.
+        p = self.write("_kyty.txt", b"Build\n  version: Official build KytyPS5-2026-10-02-39e23ac\n"
+                                    b"  os: Windows 10\n  threads: 20\n\t flip_mode = 1\n\t flip_mode = 1\n")
+        rep = self.run_paths(p)
+        self.assertTrue(rep["sources"][0]["lenient"])
+        self.assertEqual(rep["identity"]["build_label"], "Official build KytyPS5-2026-10-02-39e23ac")
+        self.assertEqual(rep["identity"]["host"].get("threads"), "20")
+        self.assertEqual(rep["progress"]["flips"], 2)
+
+    def test_lenient_and_strict_scans_agree_on_log_files(self):
+        # Logs over LENIENT_MAX_BYTES are scanned strictly; the goldens only cover the lenient path.
+        for name in sorted(os.listdir(u.FIXTURES)):
+            if not name.endswith(".txt"):
+                continue
+            lenient = u.report(name)
+            if not all(s["kind"] in ("printf-log", "session-log", "console-capture") for s in lenient["sources"]):
+                continue
+            old = kt.LENIENT_MAX_BYTES
+            kt.LENIENT_MAX_BYTES = 0
+            try:
+                strict = kt.triage([u.fixture(name)], rules=u.RULES)
+            finally:
+                kt.LENIENT_MAX_BYTES = old
+            with self.subTest(case=name):
+                self.assertFalse(strict["sources"][0]["lenient"])
+                self.assertEqual(u.golden_summary(strict), u.golden_summary(lenient))
+                self.assertEqual(strict["identity"].get("host"), lenient["identity"].get("host"))
+                self.assertEqual(strict["progress"]["flips"], lenient["progress"]["flips"])
+
     def test_pasted_markdown_quotes_and_backticks(self):
         text = (b"### GPU\n\nNVIDIA GeForce RTX 3050 8GB\n\n### OS\n\nWindows 11\n\n"
                 b"> `Unhandled host exception: type=1 code=3221225477 pc=0x0000000901c2d3e4 access=1 "

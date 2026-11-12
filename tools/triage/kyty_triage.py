@@ -751,7 +751,9 @@ class Scanner:
                 if self.block_handler(line):
                     continue
             if first in (b"\t", b" "):
-                if lenient:
+                # Lenient: the indented printf prefixes ("  version: ", "  threads:", "\t flip_mode ")
+                # need their whitespace, so only other indented lines are stripped.
+                if lenient and not raw.startswith(indented):
                     raw = raw.lstrip(b" \t")
                     first = raw[:1]
                 elif not raw.startswith(indented):
