@@ -1082,24 +1082,31 @@ void TestLegacyDecodeKeepsCodeTableKeys() {
 } // namespace
 } // namespace Libs::Graphics
 
+// Names each test before it runs: a fatal error inside one (EXIT ends the process with status
+// 321 and no Check message) is then attributed to the right test.
+void Run(const char* name, void (*test)()) {
+	std::fprintf(stderr, "ShaderAluDecodeTests: running %s\n", name);
+	test();
+}
+
 int main() {
 	using namespace Libs::Graphics;
 	EnsureConfigInitialized();
-	TestStrictShadersDefault();
-	TestUnsupportedEncodingsDecodeWithoutExit();
-	TestPrepareShaderSourceRecordsUnsupported();
-	TestTranslateProgramReportsFailures();
-	TestMovesPermSwap();
-	TestSaveexecFamily();
-	TestVop3F16Modifiers();
-	TestDotProducts();
-	TestScalarModeAndHintNops();
-	TestScalarMemoryNops();
-	TestVopcGaps();
-	TestPreciseDivision();
-	TestIntegerLongTail();
-	TestSadAndPackedClamp();
-	TestLegacyDecodeKeepsCodeTableKeys();
+	Run("TestStrictShadersDefault", TestStrictShadersDefault);
+	Run("TestUnsupportedEncodingsDecodeWithoutExit", TestUnsupportedEncodingsDecodeWithoutExit);
+	Run("TestPrepareShaderSourceRecordsUnsupported", TestPrepareShaderSourceRecordsUnsupported);
+	Run("TestTranslateProgramReportsFailures", TestTranslateProgramReportsFailures);
+	Run("TestMovesPermSwap", TestMovesPermSwap);
+	Run("TestSaveexecFamily", TestSaveexecFamily);
+	Run("TestVop3F16Modifiers", TestVop3F16Modifiers);
+	Run("TestDotProducts", TestDotProducts);
+	Run("TestScalarModeAndHintNops", TestScalarModeAndHintNops);
+	Run("TestScalarMemoryNops", TestScalarMemoryNops);
+	Run("TestVopcGaps", TestVopcGaps);
+	Run("TestPreciseDivision", TestPreciseDivision);
+	Run("TestIntegerLongTail", TestIntegerLongTail);
+	Run("TestSadAndPackedClamp", TestSadAndPackedClamp);
+	Run("TestLegacyDecodeKeepsCodeTableKeys", TestLegacyDecodeKeepsCodeTableKeys);
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }

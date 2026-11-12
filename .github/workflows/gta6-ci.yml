@@ -7,6 +7,18 @@ name: gta6-prep CI
 # from parallel work branches. Build other branches with workflow_dispatch.
 on:
   workflow_dispatch:
+    inputs:
+      bisect_shas:
+        description: >-
+          Bisect mode: JSON array of full commit SHAs. Builds only `bisect_targets` at each,
+          one at a time, and runs the ctest names matching `bisect_tests`. Empty: normal CI.
+        default: ""
+      bisect_targets:
+        description: Space-separated build targets for bisect mode (missing ones are skipped)
+        default: ""
+      bisect_tests:
+        description: ctest -R regex for bisect mode
+        default: ""
   push:
     branches: [ gta6-prep ]
 
@@ -22,6 +34,7 @@ env:
 jobs:
   tools:
     name: Triage tools (Python)
+    if: ${{ !inputs.bisect_shas }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +52,7 @@ jobs:
 
   linux:
     name: Build and test (Linux)
+    if: ${{ !inputs.bisect_shas }}
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -136,6 +150,7 @@ jobs:
 
   windows:
     name: Build and test (Windows)
+    if: ${{ !inputs.bisect_shas }}
     runs-on: windows-2025
     steps:
       - name: Checkout repository
@@ -235,3 +250,74 @@ jobs:
           name: KytyPS5-gta6-prep-Windows-x64
           path: _Build/windows/install/**
           if-no-files-found: error
+
+  # Bisect mode (workflow_dispatch with bisect_shas): one job per commit, strictly one at a time,
+  # each building only the requested targets with the Linux job's toolchain and flags.
+  bisect:
+    name: Bisect ${{ matrix.sha }}
+    if: ${{ inputs.bisect_shas }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        sha: ${{ fromJSON(inputs.bisect_shas || '[]') }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.sha }}
+          submodules: recursive
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes \
+            clang glslang-tools libasound2-dev libdbus-1-dev libgl1-mesa-dev \
+            libpulse-dev libudev-dev libwayland-dev libx11-dev libxcursor-dev \
+            libxext-dev libxfixes-dev libxi-dev libxkbcommon-dev libxrandr-dev \
+            libxss-dev libxtst-dev lld pkg-config wayland-protocols
+
+      - name: Install Qt 6.10.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.10.3"
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          cache: true
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B _Build/linux -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
+            -DKYTY_BUILD_ORIGIN="$KYTY_BUILD_ORIGIN" \
+            -DKYTY_BUILD_REPOSITORY="$KYTY_BUILD_REPOSITORY" \
+            -DKYTY_RELEASE_TAG="bisect-${GITHUB_SHA::7}" \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+
+      - name: Build
+        shell: bash
+        env:
+          TARGETS: ${{ inputs.bisect_targets }}
+        run: |
+          known=$(ninja -C _Build/linux -t targets all | cut -d: -f1 | sort -u)
+          present=$(printf '%s\n' $TARGETS | grep -Fxf <(echo "$known") | tr '\n' ' ')
+          echo "building: $present"
+          cmake --build _Build/linux --target $present --parallel -- -k 0
+
+      - name: Test
+        shell: bash
+        env:
+          TESTS: ${{ inputs.bisect_tests }}
+        run: |
+          ctest --test-dir _Build/linux --output-on-failure -R "$TESTS" 2>&1 | tee ctest.log || true
+          echo "::notice title=bisect ${{ matrix.sha }}::$(grep -E 'tests passed|\(Failed\)|\(Subprocess|\(Not Run\)|Exception' ctest.log | tr '\n' ';')"
