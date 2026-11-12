@@ -253,7 +253,9 @@ void DefineDescriptors(EmitterState& state) {
 	// (robustBufferAccess2), where a storage buffer read computes and checks the address.
 	auto& uniform_count = counts[static_cast<size_t>(Kind::UniformBuffers)];
 	for (auto& buffer: info.buffers) {
-		buffer.uniform_index = UniformBuffersEnabled() && state.profile.robust_buffer_access &&
+		// gta6-prep: config: --no-uniform-buffers (Profile::uniform_buffers) as KYTY_UNIFORM_BUFFERS=0.
+		buffer.uniform_index = UniformBuffersEnabled() && state.profile.uniform_buffers &&
+		                               state.profile.robust_buffer_access &&
 		                               buffer.descriptor_index != UINT32_MAX && buffer.constant_only
 		                           ? uniform_count++ : UINT32_MAX;
 	}

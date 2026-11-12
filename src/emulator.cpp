@@ -10,6 +10,8 @@
 #include "common/stringUtils.h"
 #include "common/subsystems.h"
 #include "common/systemInfo.h"
+#include "common/presets.h"
+#include "common/titleProfile.h"
 #include "common/threads.h"
 #include "graphics/presentation/systemOverlay.h"
 #include "graphics/presentation/window.h"
@@ -78,27 +80,78 @@ static void MountOrCreateDir(const std::filesystem::path& dir, const std::string
 }
 
 static void MountSandboxDirs() {
-	std::string title_id;
-	if (!Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id) || title_id.empty()) {
-		title_id = "UNKNOWN";
-	}
+	// Only a TITLE_ID names the sandbox, as before the title resolver: the folders of a dump
+	// without one stay where they were.
+	const auto& title    = Loader::SystemContentTitle();
+	std::string title_id = title.id_from_content_id || title.id.empty() ? "UNKNOWN" : title.id;
 
 	MountOrCreateDir("_DownloadData/" + title_id, "/download0");
 	MountOrCreateDir("_TempData/" + title_id, "/temp0");
 	MountOrCreateDir("_TempData/" + title_id, "/temp");
 }
 
-static void Init(const Config::ConfigOptions& cfg, const std::filesystem::path& param_json,
+// gta6-prep: config
+// Logs the presets of the command line, matches the title to its profile (Common::MatchTitle),
+// applies the profile's default preset where the user set nothing, and sets the quirks in effect.
+// Returns the options in effect, which are loaded.
+static Config::ConfigOptions ApplyTitleProfile(const RunOptions& options) {
+	const auto& cfg = options.config;
+	for (const auto& name: cfg.presets) {
+		if (const auto* preset = Config::FindPreset(name); preset != nullptr) {
+			Log::WriteToConsoleAndLog(
+			    fmt::format("Preset: {} -> {}\n", name, Config::PresetTokenList(*preset)));
+		}
+	}
+	const auto& title    = Loader::SystemContentTitle();
+	const char* gta6_ids = std::getenv("KYTY_GTA6_TITLE_IDS");
+	const auto  match =
+	    Common::MatchTitle(title, cfg.title_profile, gta6_ids != nullptr ? gta6_ids : "");
+	Config::ConfigOptions effective = cfg;
+	std::string_view      preset_name;
+	if (match.profile != nullptr && !match.profile->default_preset.empty()) {
+		const auto* preset = Config::FindPreset(match.profile->default_preset);
+		if (preset != nullptr && options.apply_title_preset != nullptr &&
+		    options.apply_title_preset(effective, preset->name)) {
+			preset_name = preset->name;
+			Log::WriteToConsoleAndLog(
+			    fmt::format("Preset: {} -> {}\n", preset->name, Config::PresetTokenList(*preset)));
+			Config::Load(effective);
+			// The param.json was loaded with the options before the preset.
+			Loader::SystemContentRefreshTrinityMode();
+		} else {
+			effective = cfg;
+			LOGF("Title profile: the default preset %.*s does not apply\n",
+			     static_cast<int>(match.profile->default_preset.size()),
+			     match.profile->default_preset.data());
+		}
+	}
+	const auto quirks = Common::ResolveQuirks(match.profile, cfg.quirks_on, cfg.quirks_off);
+	Config::SetTitleQuirks(quirks);
+	Log::WriteToConsoleAndLog(
+	    Common::FormatTitleProfileLine(title, match.profile, quirks, preset_name) + "\n");
+	const auto reason = Common::TitleMatchReasonName(match.reason);
+	LOGF("Title profile: chosen by %.*s\n", static_cast<int>(reason.size()), reason.data());
+	if (Common::NeedsTitleProfileHint(title, match)) {
+		Log::WriteToConsoleAndLog(
+		    "Title profile hint: the title is named like Grand Theft Auto but matched no profile; "
+		    "if it is GTA V or GTA VI, run it with --title-profile gta5 or --title-profile gta6\n");
+	}
+	return effective;
+}
+
+static void Init(const RunOptions& options, const std::filesystem::path& param_json,
                  Common::Subsystems& subsystems) {
 	EXIT_IF(!Common::Thread::IsMainThread());
 
 	subsystems.Initialize<Config::Lifecycle>();
-	Config::Load(cfg);
+	Config::Load(options.config);
 	subsystems.Initialize<Log::Lifecycle>();
 
 	if (Common::File::IsFileExisting(param_json)) {
 		Loader::SystemContentLoadParamSfo(param_json);
 	}
+	// gta6-prep: config
+	const auto cfg = ApplyTitleProfile(options);
 	if (cfg.splash_enabled) {
 		Libs::Graphics::InitializeSplashScreen(param_json.parent_path());
 	}
@@ -150,18 +203,10 @@ void Run(const RunOptions& options) {
 
 	const auto         param_json = options.app0_dir / "sce_sys" / "param.json";
 	Common::Subsystems subsystems(true);
-	Init(options.config, param_json, subsystems);
+	Init(options, param_json, subsystems);
 
 	PrintSystemInfo();
-	std::string title_id;
-	Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id);
-	if (title_id.empty()) {
-		std::string content_id;
-		if (Loader::SystemContentParamSfoGetString("CONTENT_ID", &content_id) &&
-		    content_id.size() == 36 && content_id[6] == '-' && content_id[16] == '_') {
-			title_id = content_id.substr(7, 9);
-		}
-	}
+	const std::string title_id = Loader::SystemContentTitle().id;
 	if (!title_id.empty()) {
 		Log::WriteToConsoleAndLog(fmt::format("Title ID: {}\n", title_id));
 	}

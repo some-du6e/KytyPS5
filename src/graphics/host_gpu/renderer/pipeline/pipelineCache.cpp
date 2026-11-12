@@ -477,9 +477,10 @@ void AppendNativeRayTracingKey(ShaderType stage, std::vector<uint32_t>& key, boo
 }
 
 std::string PipelineCacheTitleId() {
-	std::string title_id;
-	if ((!Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id) || title_id.empty()) &&
-	    (!Loader::SystemContentParamSfoGetString("CONTENT_ID", &title_id) || title_id.empty())) {
+	// TITLE_ID, else the whole CONTENT_ID (not its title segment): the names of existing caches.
+	const auto& title    = Loader::SystemContentTitle();
+	std::string title_id = title.id.empty() || title.id_from_content_id ? title.content_id : title.id;
+	if (title_id.empty()) {
 		return {};
 	}
 	if (!std::ranges::all_of(title_id, [](unsigned char c) {
@@ -499,7 +500,12 @@ ShaderRecompiler::Spirv::Profile SpirvProfile(const GraphicContext& graphics) {
 	        .robust_buffer_access   = graphics.robust_buffer_access_enabled,
 	        .r8_srgb_views          = graphics.r8_srgb_views,
 	        .r8g8_srgb_views        = graphics.r8g8_srgb_views,
-	        .relaxed_float          = Config::RelaxedShaderFloatEnabled()};
+	        .relaxed_float          = Config::RelaxedShaderFloatEnabled(),
+	        // gta6-prep: config
+	        .masked_select_elimination = Config::MaskedSelectEliminationEnabled(),
+	        .spirv_forwarding          = Config::SpirvForwardingEnabled(),
+	        .uniform_buffers           = Config::UniformBuffersEnabled(),
+	        .mip_stats                 = Config::LodStatsEnabled()};
 }
 
 std::filesystem::path ShaderStorePath() {

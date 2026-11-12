@@ -355,6 +355,11 @@ void RenderContext::CacheTlasMemory(const ShaderStageRuntime& runtime) {
 	// that it rotates through, another for a pass of 64 dispatches in a single frame): the first
 	// walks of each found no TLAS, or a part of it. The BLASes they reference that the CPU wrote
 	// are cached as well.
+	// gta6-prep: config: --no-tlas-cache leaves the guest's own traversals as before b4bee7b8;
+	// native ray tracing needs the TLAS and its instance count, so it keeps the cache.
+	if (!Config::TlasCacheEnabled() && !m_native_ray_tracing.Enabled()) {
+		return;
+	}
 	const auto&                  program = runtime.module->info;
 	NativeRayTracing::TlasSource source;
 	if (!NativeRayTracing::FindGuestTlasSource(program.info, source)) {

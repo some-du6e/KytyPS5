@@ -641,6 +641,14 @@ add_executable(slot_vector_tests EXCLUDE_FROM_ALL
 )
 target_include_directories(slot_vector_tests PRIVATE ${inc_headers})
 
+# gta6-prep: config
+add_executable(title_profile_tests EXCLUDE_FROM_ALL
+	"${KYTY_TESTS_DIR}/TitleProfileTests.cpp"
+	"${KYTY_SOURCE_DIR}/common/presets.cpp"
+	"${KYTY_SOURCE_DIR}/common/titleProfile.cpp"
+)
+target_include_directories(title_profile_tests PRIVATE ${inc_headers})
+
 add_executable(common_tests EXCLUDE_FROM_ALL "${KYTY_TESTS_DIR}/CommonTests.cpp")
 target_link_libraries(common_tests common kyty_test_gtest)
 
@@ -903,6 +911,57 @@ if(BUILD_TESTING)
 	add_test(NAME emulator_present_mode_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --present-mode Invalid)
 	set_tests_properties(emulator_present_mode_invalid PROPERTIES WILL_FAIL TRUE)
+	# gta6-prep: config
+	add_test(NAME emulator_preset_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --preset safe --preset low-vram
+	                 --preset rtx3050)
+	add_test(NAME emulator_preset_unknown
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --preset bogus)
+	add_test(NAME emulator_preset_missing
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --preset)
+	add_test(NAME emulator_title_profile_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --title-profile gta5 --title-profile gta6
+	                 --title-profile none --title-profile auto)
+	add_test(NAME emulator_title_profile_unknown
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --title-profile gta)
+	add_test(NAME emulator_quirk_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --quirk rockstar-legacy-entitlements=on
+	                 --quirk all=off)
+	add_test(NAME emulator_quirk_invalid_state
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --quirk rockstar-legacy-entitlements=yes)
+	add_test(NAME emulator_quirk_unknown
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --quirk rockstar=on)
+	add_test(NAME emulator_no_flags_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --no-native-raytracing --no-trinity
+	                 --no-rt-stats --no-readback-tiled-images --no-readback-storage-images
+	                 --no-sync-raw-image-buffers --no-relaxed-shader-float --no-shader-cache
+	                 --no-perf-overlay --occlusion-queries)
+	add_test(NAME emulator_pipeline_helpers_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --pipeline-helpers 2
+	                 --pipeline-helpers 0 --pipeline-helpers auto)
+	add_test(NAME emulator_pipeline_helpers_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --pipeline-helpers some)
+	set_tests_properties(emulator_pipeline_helpers_invalid PROPERTIES WILL_FAIL TRUE)
+	add_test(NAME emulator_gpu_thread_cpus_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --gpu-thread-cpus 2,4,6
+	                 --gpu-thread-cpus off --gpu-thread-cpus default)
+	add_test(NAME emulator_gpu_thread_cpus_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --gpu-thread-cpus 2,x)
+	set_tests_properties(emulator_gpu_thread_cpus_invalid PROPERTIES WILL_FAIL TRUE)
+	add_test(NAME emulator_kill_switch_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --overlap-dispatches --defer-draw-barriers
+	                 --masked-select-elimination --spirv-forwarding --uniform-buffers --lod-stats
+	                 --keep-small-layer-targets --tlas-cache --no-overlap-dispatches
+	                 --no-defer-draw-barriers --no-masked-select-elimination --no-spirv-forwarding
+	                 --no-uniform-buffers --no-lod-stats --no-keep-small-layer-targets
+	                 --no-tlas-cache)
+	# A preset is expanded where it stands: an option after it still parses and overrides it.
+	add_test(NAME emulator_preset_override_cli
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --preset safe --async-pipelines
+	                 --pipeline-helpers auto --gpu-thread-cpus default)
+	set_tests_properties(emulator_preset_unknown emulator_preset_missing
+	                     emulator_title_profile_unknown emulator_quirk_invalid_state
+	                     emulator_quirk_unknown PROPERTIES WILL_FAIL TRUE)
 	add_test(NAME ime_dialog COMMAND $<TARGET_FILE:ime_dialog_tests>)
 	add_test(NAME shader_cfg COMMAND $<TARGET_FILE:shader_cfg_tests>)
 	add_test(NAME scalar_provenance COMMAND $<TARGET_FILE:scalar_provenance_tests>)
@@ -915,6 +974,7 @@ if(BUILD_TESTING)
 	add_test(NAME avplayer_file COMMAND $<TARGET_FILE:avplayer_file_tests>)
 	add_test(NAME vdecsw COMMAND $<TARGET_FILE:vdecsw_tests>)
 	add_test(NAME bit_array COMMAND $<TARGET_FILE:bit_array_tests>)
+	add_test(NAME title_profile COMMAND $<TARGET_FILE:title_profile_tests>)
 	add_test(NAME lru_cache COMMAND $<TARGET_FILE:lru_cache_tests>)
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)
@@ -1035,6 +1095,7 @@ if(BUILD_TESTING)
 		avplayer_file_tests
 		vdecsw_tests
 		bit_array_tests
+		title_profile_tests
 		lru_cache_tests
 		common_tests
 		shader_vertex_metadata_tests

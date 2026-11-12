@@ -1877,7 +1877,12 @@ void RenderExecutor::ExecutePreparedDraw(CommandBuffer& buffer, const DrawCallIn
 	Common::DebugCounters::Add(Common::DebugCounters::Counter::Draws);
 	Common::DebugCounters::Add(Common::DebugCounters::Counter::DrawInstances, draw.instance_count);
 
-	if (shader_write_stages) {
+	// gta6-prep: config: --no-defer-draw-barriers records the barrier here, as before 2e91a677;
+	// nothing is then pending, so the next writing draw records its hazard barrier again.
+	if (shader_write_stages && !Config::DeferDrawBarriersEnabled()) {
+		buffer.EndRendering();
+		ShaderWriteBarrier(vk_buffer, shader_write_stages);
+	} else if (shader_write_stages) {
 		buffer.DeferShaderWriteBarrier(shader_write_stages);
 		m_shader_write_queue    = m_guest_queue;
 		m_shader_write_deferred = true;

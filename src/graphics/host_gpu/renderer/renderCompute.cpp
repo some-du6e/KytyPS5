@@ -604,8 +604,14 @@ void RenderExecutor::DispatchDirect(CommandBuffer& buffer, uint32_t thread_group
 
 	// The removed host fence also ordered read-only dispatches before later writers. Recorded
 	// before the next operation, unless that is a dispatch the guest did not order after this one.
-	m_deferred_barrier       = true;
-	m_deferred_barrier_queue = m_guest_queue;
+	// gta6-prep: config: --no-overlap-dispatches records it here, as before 39765baa; nothing is
+	// then deferred, so no dispatch is chained.
+	if (Config::OverlapDispatchesEnabled()) {
+		m_deferred_barrier       = true;
+		m_deferred_barrier_queue = m_guest_queue;
+	} else {
+		ShaderAccessBarrier(vk_buffer, vk::PipelineStageFlagBits::eComputeShader);
+	}
 	ResetBindings();
 }
 

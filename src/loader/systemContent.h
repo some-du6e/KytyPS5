@@ -4,6 +4,7 @@
 #include "common/abi.h"
 #include "common/common.h"
 #include "common/stringUtils.h"
+#include "common/titleProfile.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -12,6 +13,13 @@ namespace Loader {
 
 void     SystemContentLoadParamSfo(const std::filesystem::path& file_name);
 bool     SystemContentIsTrinityMode();
+// gta6-prep: config
+// Recomputes the Trinity mode from Config::Ps5ProEnabled() after the options changed (a title
+// profile's default preset reloads them after the param.json was loaded).
+void     SystemContentRefreshTrinityMode();
+// The title's identity (TITLE_ID, else the CONTENT_ID title segment; TITLE; APP_VER; CONTENT_ID),
+// resolved once when the param.json is loaded; empty without one.
+const Common::TitleInfo& SystemContentTitle();
 bool     SystemContentParamSfoGetInt(const char* name, int32_t* value);
 bool     SystemContentParamSfoGetString(const char* name, std::string* value);
 bool     SystemContentParamSfoGetString(const char* name, char* value, size_t value_size);

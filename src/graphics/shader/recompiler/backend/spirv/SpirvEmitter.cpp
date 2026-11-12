@@ -85,7 +85,10 @@ std::vector<uint32_t> EmitProgram(IR::Program& program, ShaderStageInputInfo inp
 	                            "main", state.interface_variables);
 
 	auto module = state.builder.Build();
-	ForwardMaskedSelects(module, ForwardingMinBodyWords, state.fault_buffer_variable);
+	// gta6-prep: config: --no-spirv-forwarding emits the module as built, as before 3a967527.
+	if (profile.spirv_forwarding) {
+		ForwardMaskedSelects(module, ForwardingMinBodyWords, state.fault_buffer_variable);
+	}
 	return module;
 }
 

@@ -92,11 +92,14 @@ private:
 
 struct SystemContent {
 	bool                  trinity_mode = false;
+	bool                  title_supports_trinity = false; // gta6-prep: config
 	std::filesystem::path psf_path;
 	Psf                   psf;
 	std::filesystem::path playgo_path;
 	PlayGo                playgo;
 	std::filesystem::path icon_path;
+	// See SystemContentTitle(); set once the param.json is loaded.
+	Common::TitleInfo     title;
 };
 
 Psf::~Psf() {
@@ -605,10 +608,22 @@ void SystemContentLoadParamSfo(const std::filesystem::path& file_name) {
 
 	sc->psf_path = file_name;
 	sc->psf.DbgPrint();
+	{
+		std::string title_id;
+		std::string content_id;
+		std::string title;
+		std::string version;
+		sc->psf.GetParamString("TITLE_ID", &title_id);
+		sc->psf.GetParamString("CONTENT_ID", &content_id);
+		sc->psf.GetParamString("TITLE", &title);
+		sc->psf.GetParamString("APP_VER", &version);
+		sc->title = Common::MakeTitleInfo(title_id, content_id, title, version);
+	}
 	int32_t attribute3 = 0;
 	const bool title_supports_trinity = sc->psf.GetParamInt("ATTRIBUTE3", &attribute3) &&
 	                                    (static_cast<uint32_t>(attribute3) & (1u << 22u)) != 0;
-	sc->trinity_mode = Config::Ps5ProEnabled() && title_supports_trinity;
+	sc->title_supports_trinity = title_supports_trinity;
+	sc->trinity_mode           = Config::Ps5ProEnabled() && title_supports_trinity;
 	if (Config::Ps5ProEnabled()) {
 		Log::WriteToConsoleAndLog(fmt::format("[PS5] title Trinity support={}\n",
 		                                    title_supports_trinity ? "yes" : "no"));
@@ -636,8 +651,23 @@ void SystemContentLoadParamSfo(const std::filesystem::path& file_name) {
 	}
 }
 
+const Common::TitleInfo& SystemContentTitle() {
+	return Common::Singleton<SystemContent>::Instance()->title;
+}
+
 bool SystemContentIsTrinityMode() {
 	return Common::Singleton<SystemContent>::Instance()->trinity_mode;
+}
+
+// gta6-prep: config
+void SystemContentRefreshTrinityMode() {
+	auto*      sc       = Common::Singleton<SystemContent>::Instance();
+	const bool previous = sc->trinity_mode;
+	sc->trinity_mode    = Config::Ps5ProEnabled() && sc->title_supports_trinity;
+	if (sc->trinity_mode != previous) {
+		Log::WriteToConsoleAndLog(fmt::format("[PS5] Trinity mode {} by the title's default preset\n",
+		                                      sc->trinity_mode ? "on" : "off"));
+	}
 }
 
 bool SystemContentParamSfoGetInt(const char* name, int32_t* value) {

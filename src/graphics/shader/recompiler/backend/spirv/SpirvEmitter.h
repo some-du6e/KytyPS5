@@ -22,6 +22,16 @@ struct Profile {
 	bool r8g8_srgb_views = false;
 	// Native float ops: NaN, signed-zero and denormal results may differ from the guest.
 	bool relaxed_float = false;
+	// gta6-prep: config: switches of the fork's shader optimizations (--no-<name> turns them off).
+	// IR::EliminateMaskedSelects() runs (d50d233e).
+	bool masked_select_elimination = true;
+	// Spirv::ForwardMaskedSelects() runs on large modules (3a967527, 026c34a2).
+	bool spirv_forwarding = true;
+	// Constant-only buffers are read through uniform buffer views (556973e7; with
+	// KYTY_UNIFORM_BUFFERS=0 they are not either way).
+	bool uniform_buffers = true;
+	// Pixel shaders record GET_LOD_STATS mip statistics, with a plain variant (66074f88).
+	bool mip_stats = true;
 };
 
 inline constexpr Profile DefaultProfile {};

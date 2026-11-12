@@ -761,11 +761,15 @@ CompileResult CompileProgram(TranslateResult translated, const CompileOptions& o
 	ir.value_storage.clear();
 	IR::RemoveIdentities(ir);
 	IR::EliminateDeadCode(ir.blocks);
-	if (const auto selects = IR::EliminateMaskedSelects(ir.blocks); selects != 0) {
-		LOGF("ShaderRecompiler %s masked select elimination: selects=%" PRIu32 "\n", stage, selects);
+	// gta6-prep: config: --no-masked-select-elimination skips the pass and its clean-up, as
+	// before d50d233e.
+	if (options.profile->masked_select_elimination) {
+		if (const auto selects = IR::EliminateMaskedSelects(ir.blocks); selects != 0) {
+			LOGF("ShaderRecompiler %s masked select elimination: selects=%" PRIu32 "\n", stage, selects);
+		}
+		IR::RemoveIdentities(ir);
+		IR::EliminateDeadCode(ir.blocks);
 	}
-	IR::RemoveIdentities(ir);
-	IR::EliminateDeadCode(ir.blocks);
 
 	IR::CollectShaderInfo(ir, options.input_info);
 	std::string ir_dump;
@@ -776,8 +780,11 @@ CompileResult CompileProgram(TranslateResult translated, const CompileOptions& o
 
 	LOGF("ShaderRecompiler %s phase begin: hash=0x%016" PRIx64 " SPIR-V EmitProgram\n", stage,
 	     ir.shader_hash);
+	// gta6-prep: config: without mip statistics (--no-lod-stats) the program is emitted once,
+	// without the recording, as before 66074f88.
+	const bool mip_stats = options.profile->mip_stats;
 	auto spirv = Spirv::EmitProgram(ir, options.input_info, push_data_start_dword, *options.profile,
-	                                options.emit_debug_info, true, options.ray_stats);
+	                                options.emit_debug_info, mip_stats, options.ray_stats);
 	LOGF("ShaderRecompiler %s phase end: hash=0x%016" PRIx64 " SPIR-V EmitProgram words=%" PRIu64
 	     " wave_size=%u elapsed_ms=%" PRIu64 "\n",
 	     stage, ir.shader_hash, static_cast<uint64_t>(spirv.size()), ir.wave_size,
@@ -785,7 +792,7 @@ CompileResult CompileProgram(TranslateResult translated, const CompileOptions& o
 	                               std::chrono::steady_clock::now() - emit_begin)
 	                               .count()));
 	CompileResult result;
-	if (options.plain_mip_stats_variant && Spirv::UsesMipStats(ir)) {
+	if (mip_stats && options.plain_mip_stats_variant && Spirv::UsesMipStats(ir)) {
 		result.spirv_plain =
 		    Spirv::EmitProgram(ir, options.input_info, push_data_start_dword, *options.profile,
 		                       options.emit_debug_info, false, options.ray_stats);

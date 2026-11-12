@@ -6,6 +6,7 @@
 #include "common/stringUtils.h"
 
 #include <filesystem>
+#include <string_view>
 
 namespace Emulator {
 
@@ -16,6 +17,10 @@ struct RunOptions {
 	std::filesystem::path                game_patch;
 	std::filesystem::path                addcont_dir;
 	std::vector<Common::AddContentEntry> addcont;
+	// gta6-prep: config
+	// Applies the named preset to the options the user did not set, as the command line would
+	// (main.cpp); false when it does not apply. Null: title profiles apply no preset.
+	bool (*apply_title_preset)(Config::ConfigOptions& config, std::string_view preset) = nullptr;
 };
 
 void Run(const RunOptions& options);

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
@@ -14,6 +15,8 @@
 namespace Config {
 
 static std::unique_ptr<ConfigOptions> g_config;
+// gta6-prep: config
+static std::atomic<Common::QuirkMask> g_title_quirks {0};
 
 void Initialize() {
 	EXIT_IF(g_config != nullptr);
@@ -24,6 +27,7 @@ void Initialize() {
 void Shutdown() {
 	Common::DebugCounters::SetEnabled(false);
 	g_config.reset();
+	g_title_quirks = 0;
 }
 
 void Load(const ConfigOptions& cfg) {
@@ -308,24 +312,16 @@ void ConfigureGpuStageThread(GpuStageThread stage) {
 	// from core 0: the stages share its L3.
 	static const std::array<int, 5> cpus = [] {
 		std::array<int, 5> result {4, 6, 8, 10, 2};
-		const char*        value = std::getenv("KYTY_GPU_THREAD_CPUS");
+		// gta6-prep: config: --gpu-thread-cpus, unless the variable is set.
+		const char* value = std::getenv("KYTY_GPU_THREAD_CPUS");
+		if (value == nullptr && !GetGpuThreadCpus().empty()) {
+			value = GetGpuThreadCpus().c_str();
+		}
 		if (value == nullptr) {
 			return result;
 		}
-		if (std::string_view(value) == "off") {
-			return std::array<int, 5> {-1, -1, -1, -1, -1};
-		}
-		// Stages without a listed CPU keep their default.
-		for (auto& cpu: result) {
-			if (*value == '\0') {
-				break;
-			}
-			char* end = nullptr;
-			cpu       = static_cast<int>(std::strtol(value, &end, 10));
-			if (end == value) {
-				EXIT("invalid KYTY_GPU_THREAD_CPUS: %s\n", std::getenv("KYTY_GPU_THREAD_CPUS"));
-			}
-			value = *end == ',' ? end + 1 : end;
+		if (!ParseGpuThreadCpus(value, result)) {
+			EXIT("invalid KYTY_GPU_THREAD_CPUS: %s\n", value);
 		}
 		return result;
 	}();
@@ -364,6 +360,76 @@ const Keymap& GetKeymap() {
 
 const std::vector<std::string>& GetGuestArguments() {
 	return g_config->guest_arguments;
+}
+
+// gta6-prep: config
+void SetTitleQuirks(Common::QuirkMask quirks) {
+	g_title_quirks = quirks;
+}
+
+bool QuirkEnabled(Common::Quirk quirk) {
+	return (g_title_quirks.load(std::memory_order_relaxed) & Common::QuirkBit(quirk)) != 0;
+}
+
+bool OverlapDispatchesEnabled() {
+	return g_config == nullptr || g_config->overlap_dispatches_enabled;
+}
+
+bool DeferDrawBarriersEnabled() {
+	return g_config == nullptr || g_config->defer_draw_barriers_enabled;
+}
+
+bool MaskedSelectEliminationEnabled() {
+	return g_config == nullptr || g_config->masked_select_elimination_enabled;
+}
+
+bool SpirvForwardingEnabled() {
+	return g_config == nullptr || g_config->spirv_forwarding_enabled;
+}
+
+bool UniformBuffersEnabled() {
+	return g_config == nullptr || g_config->uniform_buffers_enabled;
+}
+
+bool LodStatsEnabled() {
+	return g_config == nullptr || g_config->lod_stats_enabled;
+}
+
+bool KeepSmallLayerTargets() {
+	return g_config == nullptr || g_config->keep_small_layer_targets;
+}
+
+bool TlasCacheEnabled() {
+	return g_config == nullptr || g_config->tlas_cache_enabled;
+}
+
+int32_t GetPipelineHelpers() {
+	return g_config != nullptr ? g_config->pipeline_helpers : -1;
+}
+
+const std::string& GetGpuThreadCpus() {
+	static const std::string none;
+	return g_config != nullptr ? g_config->gpu_thread_cpus : none;
+}
+
+bool ParseGpuThreadCpus(const char* value, std::array<int, 5>& cpus) {
+	if (std::string_view(value) == "off") {
+		cpus.fill(-1);
+		return true;
+	}
+	// Stages without a listed CPU keep their default.
+	for (auto& cpu: cpus) {
+		if (*value == '\0') {
+			break;
+		}
+		char* end = nullptr;
+		cpu       = static_cast<int>(std::strtol(value, &end, 10));
+		if (end == value) {
+			return false;
+		}
+		value = *end == ',' ? end + 1 : end;
+	}
+	return true;
 }
 
 } // namespace Config

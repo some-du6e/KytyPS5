@@ -2,6 +2,7 @@
 #define KYTY_COMMON_EMULATOR_CONFIG_H_
 
 #include "common/common.h"
+#include "common/titleProfile.h"
 
 #include <cstddef>
 #include <array>
@@ -137,6 +138,42 @@ struct ConfigOptions {
 	Keymap keymap;
 	// Ordinary boots need a non-null argv[0]; --guest-exec supplies the caller's arguments.
 	std::vector<std::string> guest_arguments {""};
+
+	// gta6-prep: config
+	// --title-profile: empty picks the profile by the title (Common::MatchTitle), "none" picks none.
+	std::string              title_profile;
+	// --quirk <name>=on|off: quirks added to and removed from the profile's.
+	Common::QuirkMask        quirks_on  = 0;
+	Common::QuirkMask        quirks_off = 0;
+	// --preset: the presets expanded on the command line, in order (logged once the log is up).
+	std::vector<std::string> presets;
+	// Config::OptionKey() of every option the command line set, presets included: the title's
+	// default preset leaves them alone.
+	std::vector<std::string> explicit_options;
+	// --no-overlap-dispatches: every direct dispatch records its barrier after it (39765baa).
+	bool overlap_dispatches_enabled = true;
+	// --no-defer-draw-barriers: a draw that writes memory ends its rendering instance (2e91a677).
+	bool defer_draw_barriers_enabled = true;
+	// --no-masked-select-elimination: the recompiler keeps masked selects (d50d233e).
+	bool masked_select_elimination_enabled = true;
+	// --no-spirv-forwarding: large SPIR-V modules are not post-optimized (3a967527, 026c34a2).
+	bool spirv_forwarding_enabled = true;
+	// --no-uniform-buffers: constant buffers are read through storage buffers (556973e7).
+	bool uniform_buffers_enabled = true;
+	// --no-lod-stats: GET_LOD_STATS reports every counter unsampled, and pixel shaders are compiled
+	// once, without the mip statistics recording (as before 66074f88).
+	bool lod_stats_enabled = true;
+	// --no-keep-small-layer-targets: memory pressure may evict small render targets (17fd75d1).
+	bool keep_small_layer_targets = true;
+	// --no-tlas-cache: without native ray tracing, CPU-written guest TLASes are not cached and
+	// pinned before their dispatches (b4bee7b8).
+	bool tlas_cache_enabled = true;
+	// --pipeline-helpers <n|auto>: helper processes that compile compute pipelines (2b5052fb);
+	// -1 (auto) keeps the built-in choice, 0 turns them off.
+	int32_t pipeline_helpers = -1;
+	// --gpu-thread-cpus <list|off>: the logical processors of the GPU stage threads (82ca24cb);
+	// empty keeps the built-in list.
+	std::string gpu_thread_cpus = {};
 };
 
 void Load(const ConfigOptions& cfg);
@@ -254,6 +291,66 @@ bool RedZoneProtectionEnabled();
 
 const Keymap& GetKeymap();
 const std::vector<std::string>& GetGuestArguments();
+
+// gta6-prep: config
+// The quirks in effect for the running title (see Common::ResolveQuirks()), set once its
+// param.json is loaded. None until then.
+void SetTitleQuirks(Common::QuirkMask quirks);
+bool QuirkEnabled(Common::Quirk quirk);
+
+// Direct dispatches of one guest queue that the guest does not order overlap: the barrier after
+// one is deferred and dropped when the next operation is such a dispatch. Off, each records it.
+// On without a loaded configuration.
+bool OverlapDispatchesEnabled();
+
+// The barrier after a draw whose shaders write memory waits, in the same rendering instance,
+// while draws of its queue that the guest does not order after it follow. Off, each such draw
+// ends rendering and records its barrier. On without a loaded configuration.
+bool DeferDrawBarriersEnabled();
+
+// The shader recompiler replaces select(exec, new, old) by new where every consumer is masked
+// by the same condition again (IR::EliminateMaskedSelects). Part of the SPIR-V profile, so the
+// shader store does not mix programs compiled with and without it. On without a configuration.
+bool MaskedSelectEliminationEnabled();
+
+// Large SPIR-V modules go through Spirv::ForwardMaskedSelects() (select forwarding, bitcast
+// pairs, value numbering, read-only load and pure call merging). Part of the SPIR-V profile.
+// On without a loaded configuration.
+bool SpirvForwardingEnabled();
+
+// Constant-only guest buffers also get a uniform buffer view that their constant reads use
+// (556973e7). KYTY_UNIFORM_BUFFERS=0 still turns it off as well. Part of the SPIR-V profile.
+// On without a loaded configuration.
+bool UniformBuffersEnabled();
+
+// GET_LOD_STATS mip statistics are emulated (66074f88): pixel shaders that sample a T# the
+// draw supplies record them and are compiled a second time without the recording. Off, they
+// are compiled once without it and every report says "no samples", as upstream's default
+// before 66074f88. Part of the SPIR-V profile. On without a loaded configuration.
+bool LodStatsEnabled();
+
+// The texture garbage collector never evicts render targets up to 1024x1024 (cached layers:
+// glyph atlases, UI), so their GPU-only content is never lost (17fd75d1). Off, they are evicted
+// like other images. On without a loaded configuration.
+bool KeepSmallLayerTargets();
+
+// Without native ray tracing, the CPU-written TLAS (and BLASes) of a program whose BVH walk the
+// ray tracing patch recognizes get pinned cached buffers before its dispatch (b4bee7b8). With
+// native ray tracing they always do. On without a loaded configuration.
+bool TlasCacheEnabled();
+
+// --pipeline-helpers: the number of pipeline helper processes, or -1 for the built-in choice
+// (NVIDIA on Windows only; see PipelineHelperProcesses()). KYTY_PIPELINE_HELPERS still wins.
+// -1 without a loaded configuration.
+int32_t GetPipelineHelpers();
+
+// --gpu-thread-cpus: the value KYTY_GPU_THREAD_CPUS would have (see ConfigureGpuStageThread()),
+// empty for the built-in list. The variable wins over it. Empty without a loaded configuration.
+const std::string& GetGpuThreadCpus();
+// Parses a KYTY_GPU_THREAD_CPUS value into `cpus`: "off" leaves every stage unpinned (-1),
+// otherwise up to five numbers separated by commas replace the first entries. False when an entry
+// is not a number.
+bool ParseGpuThreadCpus(const char* value, std::array<int, 5>& cpus);
 
 } // namespace Config
 

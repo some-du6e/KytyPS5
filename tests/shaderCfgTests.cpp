@@ -23,6 +23,7 @@
 #include "graphics/shader/recompiler/frontend/translate/Translate.h"
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 #include "graphics/shader/recompiler/ir/IREmitter.h"
+#include "graphics/shader/recompiler/ir/Serialize.h"
 #include "graphics/shader/recompiler/ir/ShaderIR.h"
 #include "graphics/shader/recompiler/ir/passes/ConstantPropagation.h"
 #include "graphics/shader/recompiler/ir/passes/DeadCodeElimination.h"
@@ -3959,6 +3960,42 @@ void TestUnboundScalarBufferKeepsProgram() {
   Check(with_buffer.spirv == without_buffer.spirv,
         "an unbound scalar-only buffer changed the program");
 }
+// gta6-prep: config: without mip statistics (--no-lod-stats, Profile::mip_stats) a pixel sample is
+// compiled once, without the GET_LOD_STATS recording, and has no plain variant.
+void TestPixelImageSampleWithoutLodStats() {
+  constexpr uint32_t OpImageQueryLod = 105;
+  constexpr uint32_t OpAtomicLoad = 227;
+  constexpr uint32_t OpAtomicIAdd = 234;
+  constexpr uint32_t OpAtomicUMin = 237;
+  const uint32_t shader[] = {
+      EncodeMimg0(0x20, 0xf), // image_sample
+      EncodeMimg1(0, 0, 0, 4),
+      EncodeExp0(0x00, 0xf, true, false, true),
+      EncodeExp1(0, 1, 2, 3),
+      0xbf810000u,
+  };
+  auto ps_info = RegressionPixelInputInfo();
+  auto user_data = ImageTestUserData();
+  ShaderRecompiler::Spirv::Profile profile{};
+  profile.mip_stats = false;
+  auto options = MakeCompileOptions(ShaderType::Pixel);
+  options.input_info.pixel = &ps_info;
+  options.user_data = user_data;
+  options.plain_mip_stats_variant = true;
+  options.profile = &profile;
+  const auto result = RecompileForTest(shader, options);
+  CheckSpirvBinaryValidates(result.spirv);
+  Check(result.spirv_plain.empty(),
+        "a pixel sample without mip statistics has a plain variant");
+  Check(SpirvInstructionOpcodeCount(result.spirv, OpAtomicIAdd) == 0 &&
+            SpirvInstructionOpcodeCount(result.spirv, OpAtomicUMin) == 0 &&
+            SpirvInstructionOpcodeCount(result.spirv, OpAtomicLoad) == 0 &&
+            SpirvInstructionOpcodeCount(result.spirv, OpImageQueryLod) == 0,
+        "a pixel sample without mip statistics recorded them");
+  Check(SpirvInstructionOpcodeCount(result.spirv, 87) == 1, // OpImageSampleImplicitLod
+        "a pixel sample without mip statistics lost its sample");
+}
+
 void TestNewShaderRecompilerPixelImageSampleLodSelection() {
   constexpr uint32_t OpImageSampleImplicitLod = 87;
   constexpr uint32_t OpImageSampleExplicitLod = 88;
@@ -10191,6 +10228,41 @@ void TestMaskedSelectElimination() {
         "masked select elimination dropped an old value another lane reads");
 }
 
+// gta6-prep: config: the switches of the fork's shader optimizations are part of the SPIR-V
+// profile, which the shader store header records, so a store written with one setting is not
+// read with another. Their defaults keep the optimizations on.
+void TestSpirvProfileSwitches() {
+  using ShaderRecompiler::Spirv::Profile;
+  const auto bytes = [](const Profile &profile) {
+    ShaderRecompiler::IR::Writer writer;
+    ShaderRecompiler::IR::IoAll(writer, profile);
+    return writer.bytes;
+  };
+  const Profile defaults{};
+  Check(defaults.masked_select_elimination,
+        "masked select elimination is off by default");
+  Profile masked_off = defaults;
+  masked_off.masked_select_elimination = false;
+  Check(bytes(masked_off) != bytes(defaults),
+        "the shader store header ignores --no-masked-select-elimination");
+  Check(defaults.spirv_forwarding, "SPIR-V forwarding is off by default");
+  Profile forwarding_off = defaults;
+  forwarding_off.spirv_forwarding = false;
+  Check(bytes(forwarding_off) != bytes(defaults) &&
+            bytes(forwarding_off) != bytes(masked_off),
+        "the shader store header ignores --no-spirv-forwarding");
+  Check(defaults.uniform_buffers, "uniform buffer views are off by default");
+  Profile uniform_off = defaults;
+  uniform_off.uniform_buffers = false;
+  Check(bytes(uniform_off) != bytes(defaults),
+        "the shader store header ignores --no-uniform-buffers");
+  Check(defaults.mip_stats, "mip statistics are off by default");
+  Profile mip_stats_off = defaults;
+  mip_stats_off.mip_stats = false;
+  Check(bytes(mip_stats_off) != bytes(defaults),
+        "the shader store header ignores --no-lod-stats");
+}
+
 void TestLaneMaskProjection() {
   using namespace ShaderRecompiler::IR;
   for (const uint32_t wave_size : {32u, 64u}) {
@@ -14567,6 +14639,7 @@ int main() {
   TestDisabledDebugBranches();
   TestOrderedPsDoneEndsProgram();
   TestNewShaderRecompilerPixelImageSampleLodSelection();
+  TestPixelImageSampleWithoutLodStats();
   TestNewShaderRecompilerBranchConditionForms();
   TestNewShaderRecompilerSetpcBranch();
   TestNewShaderRecompilerSetpcLongBranch();
@@ -14593,6 +14666,7 @@ int main() {
   TestValuePhiValidation();
   TestLaneMaskProjection();
   TestMaskedSelectElimination();
+  TestSpirvProfileSwitches();
   TestLateConstantPropagation();
   TestRepeatedBitcastPropagation();
   TestMaskedShiftConstantPropagation();
