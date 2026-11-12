@@ -1160,6 +1160,7 @@ if(BUILD_TESTING)
 		vdecsw_tests
 		bit_array_tests
 		title_profile_tests
+		hle_softfail_tests
 		lru_cache_tests
 		vram_policy_tests
 		common_tests
