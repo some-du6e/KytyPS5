@@ -154,9 +154,11 @@ static void PrintUsage() {
 	::printf("  --graphics-debug-dump                Enable graphics debug dumps.\n");
 	::printf("  --printf-direction <value>           Silent, Console, or File.\n");
 	::printf("  --printf-output-file <path>          Guest printf output file.\n");
-	::printf("  --session-log <path>                 Keep the warnings, errors and the report of a\n"
+	::printf("  --session-log <path|auto>            Keep the warnings, errors and the report of a\n"
 	         "                                       fatal error of this session in a file, without\n"
-	         "                                       the printf log.\n");
+	         "                                       the printf log. auto: <emulator folder>/_Logs/\n"
+	         "                                       <TITLE_ID or unknown>_<date>.log, keeping the\n"
+	         "                                       20 newest logs there.\n");
 	::printf("  --profile                            Enable the Tracy profiler.\n");
 	::printf("  --spirv-debug-printf                 Enable SPIR-V debug printf.\n");
 	::printf("  --readback-linear-images             Read back writable linear images on submit.\n");
@@ -537,7 +539,10 @@ static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_he
 		} else if (arg == "--printf-output-file") {
 			options.config.printf_output_file = Common::PathFromUtf8(value);
 		} else if (arg == "--session-log") {
-			options.config.session_log_file = Common::PathFromUtf8(value);
+			// gta6-prep: diag. "auto": see Config::SessionLogAuto().
+			options.config.session_log_auto = value == "auto";
+			options.config.session_log_file =
+			    value == "auto" ? std::filesystem::path() : Common::PathFromUtf8(value);
 		} else if (arg == "--keymap") {
 			const auto split = value.find('=');
 			if (split == std::string::npos || split == 0 || split + 1 == value.size()) {

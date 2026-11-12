@@ -371,4 +371,8 @@ bool DeviceFaultReportEnabled() {
 	return g_config != nullptr && g_config->device_fault_report_enabled;
 }
 
+bool SessionLogAuto() {
+	return g_config != nullptr && g_config->session_log_auto;
+}
+
 } // namespace Config

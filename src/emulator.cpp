@@ -28,6 +28,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <string>
 #include <thread>
 
 namespace Emulator {
@@ -92,6 +93,20 @@ static void MountSandboxDirs() {
 	MountOrCreateDir("_TempData/" + title_id, "/temp");
 }
 
+// TITLE_ID of param.json, else the title part of CONTENT_ID; empty without either.
+static std::string ReadTitleId() {
+	std::string title_id;
+	Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id);
+	if (title_id.empty()) {
+		std::string content_id;
+		if (Loader::SystemContentParamSfoGetString("CONTENT_ID", &content_id) &&
+		    content_id.size() == 36 && content_id[6] == '-' && content_id[16] == '_') {
+			title_id = content_id.substr(7, 9);
+		}
+	}
+	return title_id;
+}
+
 static void Init(const Config::ConfigOptions& cfg, const std::filesystem::path& param_json,
                  Common::Subsystems& subsystems) {
 	EXIT_IF(!Common::Thread::IsMainThread());
@@ -103,6 +118,8 @@ static void Init(const Config::ConfigOptions& cfg, const std::filesystem::path& 
 	if (Common::File::IsFileExisting(param_json)) {
 		Loader::SystemContentLoadParamSfo(param_json);
 	}
+	// --session-log auto names the file after the title.
+	Log::OpenAutoSessionLog(ReadTitleId());
 	if (cfg.splash_enabled) {
 		Libs::Graphics::InitializeSplashScreen(param_json.parent_path());
 	}
@@ -157,15 +174,7 @@ void Run(const RunOptions& options) {
 	Init(options.config, param_json, subsystems);
 
 	PrintSystemInfo();
-	std::string title_id;
-	Loader::SystemContentParamSfoGetString("TITLE_ID", &title_id);
-	if (title_id.empty()) {
-		std::string content_id;
-		if (Loader::SystemContentParamSfoGetString("CONTENT_ID", &content_id) &&
-		    content_id.size() == 36 && content_id[6] == '-' && content_id[16] == '_') {
-			title_id = content_id.substr(7, 9);
-		}
-	}
+	const std::string title_id = ReadTitleId();
 	if (!title_id.empty()) {
 		Log::WriteToConsoleAndLog(fmt::format("Title ID: {}\n", title_id));
 	}

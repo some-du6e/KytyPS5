@@ -1,12 +1,18 @@
 // Pure checks of the crash-log diagnostics text (gta6-prep log contract): no GPU, no files
 // outside a temporary folder.
+#include "common/logging/log.h"
 #include "graphics/host_gpu/vulkanDiag.h"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 namespace {
 
@@ -117,6 +123,56 @@ void TestGpuIdentityLine() {
              "NvidiaProprietary", "VkDriverId name");
 }
 
+void TestSessionLogFileName() {
+  std::tm time{};
+  time.tm_year = 2026 - 1900;
+  time.tm_mon = 10;
+  time.tm_mday = 19;
+  time.tm_hour = 7;
+  time.tm_min = 5;
+  time.tm_sec = 3;
+  CheckEqual(Log::SessionLogFileName("PPSA04264", time),
+             "PPSA04264_2026-11-19_07-05-03.log", "title log name");
+  CheckEqual(Log::SessionLogFileName("", time),
+             "unknown_2026-11-19_07-05-03.log", "unknown title log name");
+  CheckEqual(Log::SessionLogFileName("a/b\\c: d", time),
+             "a_b_c__d_2026-11-19_07-05-03.log", "unsafe characters");
+}
+
+void TestPruneSessionLogs() {
+  namespace fs = std::filesystem;
+  std::error_code error;
+  const auto folder =
+      fs::temp_directory_path(error) /
+      ("kyty_diag_tests_" + std::to_string(static_cast<long long>(
+                                std::chrono::steady_clock::now()
+                                    .time_since_epoch()
+                                    .count())));
+  fs::create_directories(folder, error);
+  Check(!error, "create the temporary folder");
+  const auto now = fs::file_time_type::clock::now();
+  // log_0 is the newest.
+  for (int i = 0; i < 22; i++) {
+    const auto path = folder / ("log_" + std::to_string(i) + ".log");
+    std::ofstream(path) << i;
+    fs::last_write_time(path, now - std::chrono::hours(i), error);
+    Check(!error, "set a modification time");
+  }
+  std::ofstream(folder / "notes.txt") << "kept";
+  fs::last_write_time(folder / "notes.txt", now - std::chrono::hours(100), error);
+
+  Log::PruneSessionLogs(folder, Log::SESSION_LOGS_KEPT - 1);
+  for (int i = 0; i < 22; i++) {
+    const bool exists =
+        fs::exists(folder / ("log_" + std::to_string(i) + ".log"), error);
+    Check(exists == (i < 19), "prune kept the wrong logs");
+  }
+  Check(fs::exists(folder / "notes.txt", error), "prune removed a file that is not a log");
+  Log::PruneSessionLogs(folder, 50);
+  Check(fs::exists(folder / "log_18.log", error), "prune below the limit removed a log");
+  fs::remove_all(folder, error);
+}
+
 } // namespace
 
 int main() {
@@ -124,6 +180,8 @@ int main() {
   TestDriverVersion();
   TestGpuMemorySummary();
   TestGpuIdentityLine();
+  TestSessionLogFileName();
+  TestPruneSessionLogs();
   std::printf("DiagTests: ok\n");
   return 0;
 }
