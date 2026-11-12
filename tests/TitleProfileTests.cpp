@@ -226,6 +226,13 @@ void TestQuirks() {
   Check((gta5->quirks & legacy) != 0,
         "gta5 does not enable the legacy entitlements");
   Check(gta6->quirks == 0, "gta6 enables a quirk although nothing is known");
+  // Titles may use BAD_CHUNK_ID to find the end of the layout: opt-in only.
+  for (const auto &profile : Common::TitleProfiles()) {
+    Check((profile.quirks & QuirkBit(Quirk::PlayGoAllChunks)) == 0,
+          "a profile enables playgo-all-chunks");
+  }
+  Check(Common::FindQuirk("playgo-all-chunks") == Quirk::PlayGoAllChunks,
+        "the playgo-all-chunks name did not resolve");
   Check(gta5->default_preset.empty() && gta6->default_preset.empty(),
         "a profile has a default preset");
 

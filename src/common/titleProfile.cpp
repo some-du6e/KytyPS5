@@ -36,6 +36,7 @@ constexpr TitleProfile Profiles[] = {
 
 constexpr std::array<std::string_view, static_cast<size_t>(Quirk::Count)> QuirkNamesTable = {
     "rockstar-legacy-entitlements",
+    "playgo-all-chunks",
 };
 
 constexpr char ToLowerAscii(char c) {

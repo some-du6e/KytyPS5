@@ -35,6 +35,10 @@ struct TitleInfo {
 enum class Quirk : uint32_t {
 	// libNpEntitlementAccess reports GTA V's three legacy add-on labels as installed.
 	RockstarLegacyEntitlements,
+	// gta6-prep: config. With --playgo-hack and no chunk metadata, PlayGo reports chunk ids at or
+	// above the made-up count as installed instead of PLAYGO_ERROR_BAD_CHUNK_ID. No profile turns
+	// it on: titles may use BAD_CHUNK_ID to find the end of the layout.
+	PlayGoAllChunks,
 	Count
 };
 

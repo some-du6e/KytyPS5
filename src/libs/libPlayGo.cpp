@@ -2,8 +2,8 @@
 #include "common/assert.h"
 #include "common/common.h"
 #include "common/emulatorConfig.h"
+#include "common/hackNotice.h"
 #include "common/logging/log.h"
-#include "common/softFail.h"
 #include "common/stringUtils.h"
 #include "libs/errno.h"
 #include "libs/libs.h"
@@ -11,6 +11,8 @@
 #include "loader/systemContent.h"
 
 #include <algorithm>
+#include <atomic>
+#include <fmt/format.h>
 
 namespace Libs {
 
@@ -67,12 +69,22 @@ static bool is_valid_chunk(uint16_t chunk_id) {
 	if (chunk_id < g_chunks_num) {
 		return true;
 	}
-	// The made-up count can be smaller than the title's real layout: every chunk is installed.
+	// gta6-prep: config: the made-up count can be smaller than the title's real layout. By default an id
+	// past it is BAD_CHUNK_ID, as before; Quirk::PlayGoAllChunks reports every chunk installed.
 	if (g_chunks_faked) {
-		KYTY_SOFT_FAIL("scePlayGo", "chunk id %u beyond the %u chunks --playgo-hack assumes, "
-		               "reported installed",
-		               static_cast<unsigned>(chunk_id), g_chunks_num);
-		return true;
+		if (Config::QuirkEnabled(Common::Quirk::PlayGoAllChunks)) {
+			Common::HackNotice::Report("PlayGo chunk beyond the --playgo-hack count reported "
+			                           "installed",
+			                           "scePlayGo", 0, 0, "quirk playgo-all-chunks");
+			return true;
+		}
+		static std::atomic_bool reported {false};
+		if (!reported.exchange(true, std::memory_order_relaxed)) {
+			Log::WriteToConsoleAndLog(fmt::format(
+			    "PlayGo: chunk id {} is beyond the {} chunks --playgo-hack assumes: "
+			    "PLAYGO_ERROR_BAD_CHUNK_ID; --quirk playgo-all-chunks=on reports it installed\n",
+			    chunk_id, g_chunks_num));
+		}
 	}
 	return false;
 }
