@@ -1379,8 +1379,20 @@ void RuntimeLinker::UnloadProgram(Program* program) {
 				default: return;
 			}
 			const std::string name = info.str_table + symbol.st_name;
-			if (program->export_symbols->FindByNid(name.substr(0, name.find('#')), symbol_type,
-			                                       address) != nullptr) {
+			const auto        nid  = name.substr(0, name.find('#'));
+			// A NoType import may have been bound to a Func or Object export (the fallback in
+			// ResolveImport), so look the export up under those types too.
+			bool bound_here =
+			    program->export_symbols->FindByNid(nid, symbol_type, address) != nullptr;
+			if (!bound_here && symbol_type == SymbolType::NoType) {
+				for (const auto as: {SymbolType::Func, SymbolType::Object}) {
+					if (program->export_symbols->FindByNid(nid, as, address) != nullptr) {
+						bound_here = true;
+						break;
+					}
+				}
+			}
+			if (bound_here) {
 				bits &= ~mask;
 				if (RelocateRecord(index, r, importer, jmprela)) {
 					bits |= mask;
