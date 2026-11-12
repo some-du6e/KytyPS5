@@ -1,15 +1,17 @@
 name: gta6-prep CI
 
-# Builds and tests the gta6-prep branch and its work branches. The upstream
-# build.yml only runs on main/master pushes and pull requests, so branch work
-# in this fork would otherwise never be built.
+# Builds and tests the gta6-prep branch. The upstream build.yml only runs on
+# main/master pushes and pull requests, so this fork's branch would otherwise
+# never be built. Only gta6-prep triggers on push, and one run at a time
+# repo-wide: GitHub disabled Actions on this fork after ~10 concurrent builds
+# from parallel work branches. Build other branches with workflow_dispatch.
 on:
   workflow_dispatch:
   push:
-    branches: [ gta6-prep, 'gta6/**' ]
+    branches: [ gta6-prep ]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}
   cancel-in-progress: true
 
 env:
