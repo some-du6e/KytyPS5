@@ -777,7 +777,7 @@ void TestVopcGaps() {
 	    0xd501000au, 0x01a90280u, // v_cndmask_b32 v10, 0, 1, vcc_lo
 	    0x7d500704u, // v_cmp_class_f64 vcc_lo, v[4:5], v3
 	    0xd501000bu, 0x01a90280u, // v_cndmask_b32 v11, 0, 1, vcc_lo
-	    0xd4a80000u, 0x20020704u, // v_cmp_class_f64_e64 s0, -v[4:5], v3
+	    0xd4a80006u, 0x20020704u, // v_cmp_class_f64_e64 s6, -v[4:5], v3 (s[0:3] is the V#)
 	    0x7dba0501u, // v_cmpx_lg_f16 v1, v2
 	    0x7dbe0501u, // v_cmpx_o_f16 v1, v2
 	    0x7df00501u, // v_cmpx_u_f16 v1, v2
