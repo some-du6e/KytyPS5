@@ -427,6 +427,16 @@ void DecodeMimg(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 	const auto*    sample  = Detail::FindOpcode(MIMG_SAMPLE_OPS, opcode);
 	const auto*    gather  = Detail::FindOpcode(MIMG_GATHER_OPS, opcode);
 	const auto*    atomic  = Detail::FindOpcode(MIMG_ATOMIC_OPS, opcode);
+	if (IsLegacyDecode()) {
+		// gta6-prep: shader-mem. DecodeLegacyInstruction() does not know the *_g16 samples (they
+		// decode as IMAGE_SAMPLE) nor the image atomics appended after RT_ALPHA.
+		if (sample != nullptr && (sample->flags & ImageSampleFlagG16) != 0u) {
+			sample = nullptr;
+		}
+		if (atomic != nullptr && IsPostLegacyOpcode(atomic->decoded)) {
+			atomic = nullptr;
+		}
+	}
 	const auto*    sampled = sample != nullptr ? sample : gather;
 
 	inst.pc                 = pc;
@@ -434,6 +444,9 @@ void DecodeMimg(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 	inst.family             = Family::MIMG;
 	inst.opcode_id          = opcode;
 	inst.opcode             = DecodeMimgOpcode(opcode, sample, gather, atomic);
+	if (IsLegacyDecode() && IsPostLegacyOpcode(inst.opcode)) {
+		inst.opcode = Opcode::UNSUPPORTED; // gta6-prep: shader-mem: IMAGE_MSAA_LOAD
+	}
 	inst.dmask              = (word0 >> 8u) & 0xfu;
 	inst.data_components    = gather != nullptr ? 4u : CountDmaskComponents(inst.dmask);
 	inst.data_bits          = d16 ? 16u : 32u;

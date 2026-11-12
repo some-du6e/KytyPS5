@@ -19,12 +19,32 @@ struct ShaderMemDecodeCase {
   bool compile = true;
 };
 
+// Psr::CodeFingerprint() decodes with DecodeLegacyInstruction(), as GTA V's Psr code tables were
+// generated with the decoder before gta6-prep: every encoding these tests teach the decoder (a new
+// opcode, or a GLC/SLC form of an older FLAT one) must still be the unsupported instruction it
+// was then, with the same family, opcode field and length.
+void CheckShaderMemLegacyUnknown(std::span<const uint32_t> words, const char *assembly) {
+  using namespace ShaderRecompiler::Decoder;
+  Instruction current;
+  DecodeInstruction(words, 0u, current);
+  Instruction legacy;
+  DecodeLegacyInstruction(words, 0u, legacy);
+  if (legacy.opcode != Opcode::UNSUPPORTED || legacy.family != current.family ||
+      legacy.opcode_id != current.opcode_id || legacy.word_count != current.word_count ||
+      IsLegacyDecode()) {
+    std::fprintf(stderr, "ShaderCfgTests: %s: the legacy decode knows it: %s\n", assembly,
+                 InstructionToString(legacy).c_str());
+    std::abort();
+  }
+}
+
 void CheckShaderMemDecodeCase(const ShaderMemDecodeCase &test) {
   using namespace ShaderRecompiler::Decoder;
   const auto fail = [&](const char *what) {
     std::fprintf(stderr, "ShaderCfgTests: %s: %s\n", test.assembly, what);
     std::abort();
   };
+  CheckShaderMemLegacyUnknown(test.words, test.assembly);
   Instruction decoded;
   DecodeInstruction(test.words, 0u, decoded);
   if (decoded.opcode != test.opcode) fail("decoded to the wrong opcode");
@@ -274,6 +294,7 @@ void TestShaderMemImageMsaaLoad() {
        {0xf0001531u, 0x00020400u}, ImageDimension::Dim2DMsaa, 3u, 2u, 4u},
   };
   for (const auto &test : cases) {
+    CheckShaderMemLegacyUnknown(test.words, test.assembly);
     ShaderRecompiler::Decoder::Instruction decoded;
     ShaderRecompiler::Decoder::DecodeInstruction(test.words, 0u, decoded);
     if (decoded.opcode != O::IMAGE_MSAA_LOAD || decoded.image_dimension != test.dimension ||
@@ -366,6 +387,7 @@ void TestShaderMemImageSampleG16() {
       {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1bc0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 8u},
   };
   for (const auto &test : cases) {
+    CheckShaderMemLegacyUnknown(test.words, test.assembly);
     Instruction decoded;
     DecodeInstruction(test.words, 0u, decoded);
     const auto dwords = ImageAddressDwordCount(decoded.image_sample_flags, decoded.image_dimension,
@@ -411,6 +433,10 @@ void TestShaderMemImageSampleG16() {
   const uint32_t sample_d[] = {0xf0880f08u, 0x00820000u};
   Instruction decoded;
   DecodeInstruction(sample_d, 0u, decoded);
+  Instruction legacy_sample_d;
+  DecodeLegacyInstruction(sample_d, 0u, legacy_sample_d);
+  Check(legacy_sample_d.opcode == Opcode::IMAGE_SAMPLE,
+        "the legacy decode must keep knowing image_sample_d");
   Check(decoded.opcode == Opcode::IMAGE_SAMPLE &&
             (decoded.image_sample_flags & ImageSampleFlagG16) == 0u &&
             ImageAddressDwordCount(decoded.image_sample_flags, decoded.image_dimension,

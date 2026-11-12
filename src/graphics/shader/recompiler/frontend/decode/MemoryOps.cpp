@@ -209,6 +209,11 @@ uint32_t SignExtendU32(uint32_t value, uint32_t bits) {
 }
 
 void ApplyMemoryInfo(Instruction& inst, const MemoryOpcodeInfo* info) {
+	// gta6-prep: shader-mem. DecodeLegacyInstruction() does not know the memory opcodes appended
+	// after RT_ALPHA (their table entries take encodings that were unsupported then).
+	if (info != nullptr && IsLegacyDecode() && IsPostLegacyOpcode(info->decoded)) {
+		info = nullptr;
+	}
 	if (info == nullptr) {
 		inst.opcode = Opcode::UNSUPPORTED;
 		return;
@@ -547,8 +552,11 @@ void DecodeFlat(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 	SetRawWords(inst, code, word_index, 2);
 
 	// gta6-prep: shader-mem: GLC (coherent, see MemoryInfoFromDecoded) and SLC (a streaming
-	// cache hint) are valid on loads and stores alike.
-	if (lds != 0 || seg == 3u) {
+	// cache hint) are valid on loads and stores alike. DecodeLegacyInstruction() keeps rejecting
+	// GLC, and SLC on loads, as the decoder did before.
+	const bool legacy_modifiers =
+	    IsLegacyDecode() && (inst.glc || (inst.slc && !IsFlatStoreOpcode(inst.opcode)));
+	if (lds != 0 || seg == 3u || legacy_modifiers) {
 		SetUnsupported(inst, Family::FLAT, opcode, "FLAT modifiers or segment are not implemented");
 		return;
 	}
