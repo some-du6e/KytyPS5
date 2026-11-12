@@ -46,7 +46,8 @@ function Copy-Shared([string]$from, [string]$to, [long]$offset = 0, [long]$count
             $buf = New-Object byte[] (1MB)
             $left = if ($count -lt 0) { [long]::MaxValue } else { $count }
             while ($left -gt 0) {
-                $n = $in.Read($buf, 0, [int][Math]::Min($buf.Length, $left))
+                # [long] first: Min($buf.Length, $left) binds Min(int, int) and cannot convert $left.
+                $n = $in.Read($buf, 0, [int][Math]::Min([long]$buf.Length, $left))
                 if ($n -le 0) { break }
                 $out.Write($buf, 0, $n)
                 $left -= $n
@@ -80,7 +81,8 @@ try {
             $head = 32MB
             $tail = 128MB
             Copy-Shared $printf (Join-Path $stage "_kyty.head.txt") 0 $head
-            Copy-Shared $printf (Join-Path $stage "_kyty.tail.txt") ($len - $tail) $tail
+            # -MaxPrintfMB below 128: the tail is the whole file (FileStream.Seek rejects a negative offset).
+            Copy-Shared $printf (Join-Path $stage "_kyty.tail.txt") ([Math]::Max([long]0, $len - $tail)) $tail
             $info.Add("printf log: _kyty.txt is $len bytes; kept the first $head and the last $tail bytes")
         }
     } else {
@@ -89,7 +91,18 @@ try {
 
     $vk = Get-Command "vulkaninfo", "vulkaninfoSDK" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($vk) {
-        $vkOut = & $vk.Source --summary 2>&1 | Out-String
+        # Windows PowerShell 5.1 turns a native command's redirected stderr (loader warnings about
+        # stale layer entries, for example) into a terminating error under "Stop": run it under
+        # "Continue" and keep the stderr lines as text.
+        try {
+            $vkOut = & {
+                $ErrorActionPreference = "Continue"
+                $PSNativeCommandUseErrorActionPreference = $false
+                & $vk.Source --summary 2>&1 | ForEach-Object { "$_" }
+            } | Out-String
+        } catch {
+            $vkOut = "vulkaninfo failed: $_"
+        }
         Set-Content -LiteralPath (Join-Path $stage "vulkaninfo.txt") -Value $vkOut -Encoding UTF8
         $info.Add("vulkaninfo: $($vk.Source)")
     } else {
