@@ -41,9 +41,7 @@ void CommandBuffer::Begin() {
 	vk::CommandBufferBeginInfo begin_info {};
 	begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-	auto result = buffer.begin(&begin_info);
-
-	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess);
+	RequireVulkanSuccess(buffer.begin(&begin_info), "vkBeginCommandBuffer");
 }
 
 void CommandBuffer::End() const {
@@ -53,9 +51,7 @@ void CommandBuffer::End() const {
 	}
 	auto buffer = m_buffer;
 
-	auto result = buffer.end();
-
-	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess);
+	RequireVulkanSuccess(buffer.end(), "vkEndCommandBuffer");
 }
 
 void CommandBuffer::BeginRendering(const RenderState& state) const {

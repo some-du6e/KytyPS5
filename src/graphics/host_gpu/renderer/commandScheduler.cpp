@@ -5,6 +5,7 @@
 #include "common/emulatorConfig.h"
 #include "common/profiler.h"
 #include "graphics/host_gpu/graphicContext.h"
+#include "graphics/host_gpu/vulkanDiag.h"
 
 #include <algorithm>
 #include <limits>
@@ -22,8 +23,9 @@ CommandScheduler::CommandPool::CommandPool(GraphicContext& graphics, MasterSemap
 	create.queueFamilyIndex = graphics.queue_family;
 	create.flags            = vk::CommandPoolCreateFlagBits::eTransient |
 	                          vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-	const auto result       = graphics.device.createCommandPool(&create, nullptr, &m_pool);
-	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess || m_pool == nullptr);
+	RequireVulkanSuccess(graphics.device.createCommandPool(&create, nullptr, &m_pool),
+	                     "vkCreateCommandPool");
+	EXIT_IF(m_pool == nullptr);
 }
 
 CommandScheduler::CommandPool::~CommandPool() {
@@ -39,8 +41,9 @@ size_t CommandScheduler::CommandPool::Grow() {
 	allocate.commandPool        = m_pool;
 	allocate.level              = vk::CommandBufferLevel::ePrimary;
 	allocate.commandBufferCount = static_cast<uint32_t>(GrowStep);
-	EXIT_IF(m_graphics.device.allocateCommandBuffers(&allocate, m_buffers.data() + first) !=
-	        vk::Result::eSuccess);
+	RequireVulkanSuccess(
+	    m_graphics.device.allocateCommandBuffers(&allocate, m_buffers.data() + first),
+	    "vkAllocateCommandBuffers");
 	return first;
 }
 
@@ -499,7 +502,8 @@ void CommandScheduler::QueueSubmit(vk::CommandBuffer buffer, SubmitInfo& submit,
 	Common::DebugCounters::Add(Common::DebugCounters::Counter::QueueSubmits);
 
 	if (result != vk::Result::eSuccess) {
-		EXIT("vkQueueSubmit failed: %s, tick=%" PRIu64 "\n", vk::to_string(result).c_str(), tick);
+		EXIT("%s, tick=%" PRIu64 "\n%s", VulkanFailureText("vkQueueSubmit", result).c_str(), tick,
+		     DeviceLostDetails(result).c_str());
 	}
 	// Ticks are submitted in order, by one thread at a time.
 	m_submitted_tick.store(tick, std::memory_order_release);
@@ -515,7 +519,7 @@ void CommandScheduler::RecordingThread() {
 			std::tie(buffer, buffer_index) = m_command_pool.CommitDeferred();
 			vk::CommandBufferBeginInfo begin_info {};
 			begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-			EXIT_NOT_IMPLEMENTED(buffer.begin(&begin_info) != vk::Result::eSuccess);
+			RequireVulkanSuccess(buffer.begin(&begin_info), "vkBeginCommandBuffer");
 		}
 		return buffer;
 	};
@@ -538,7 +542,7 @@ void CommandScheduler::RecordingThread() {
 void CommandScheduler::SubmitRecorded(vk::CommandBuffer& buffer, size_t buffer_index,
                                       const RecordedSubmit& recorded) {
 	if (buffer != nullptr) {
-		EXIT_NOT_IMPLEMENTED(buffer.end() != vk::Result::eSuccess);
+		RequireVulkanSuccess(buffer.end(), "vkEndCommandBuffer");
 	}
 	// A submission without commands still signals its tick.
 	// The command buffer reads the stream data the execution thread's copies write.

@@ -5,6 +5,7 @@
 #include "common/profiler.h"
 #include "graphics/host_gpu/graphicContext.h"
 #include "graphics/host_gpu/renderer/commandScheduler.h"
+#include "graphics/host_gpu/vulkanCommon.h"
 
 #include <cstring>
 #include <numeric>
@@ -93,7 +94,7 @@ Buffer::Buffer(GraphicContext& graphics, CommandScheduler& scheduler, MemoryUsag
 	if (result != vk::Result::eSuccess) {
 		graphics.LogMemoryBudget();
 	}
-	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess);
+	RequireVulkanSuccess(result, "vmaCreateBuffer");
 
 	m_buffer = native_buffer;
 	if (with_bda) {
@@ -123,7 +124,7 @@ void Buffer::Flush(uint64_t offset, uint64_t size) {
 	if (!IsCoherent() && size != 0) {
 		const auto result =
 		    vmaFlushAllocation(m_graphics->allocator, m_allocation, offset, size);
-		EXIT_NOT_IMPLEMENTED(static_cast<vk::Result>(result) != vk::Result::eSuccess);
+		RequireVulkanSuccess(static_cast<vk::Result>(result), "vmaFlushAllocation");
 	}
 }
 
@@ -132,7 +133,7 @@ void Buffer::Invalidate(uint64_t offset, uint64_t size) {
 	if (!IsCoherent() && size != 0) {
 		const auto result =
 		    vmaInvalidateAllocation(m_graphics->allocator, m_allocation, offset, size);
-		EXIT_NOT_IMPLEMENTED(static_cast<vk::Result>(result) != vk::Result::eSuccess);
+		RequireVulkanSuccess(static_cast<vk::Result>(result), "vmaInvalidateAllocation");
 	}
 }
 

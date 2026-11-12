@@ -366,4 +366,9 @@ const std::vector<std::string>& GetGuestArguments() {
 	return g_config->guest_arguments;
 }
 
+// gta6-prep: diag
+bool DeviceFaultReportEnabled() {
+	return g_config != nullptr && g_config->device_fault_report_enabled;
+}
+
 } // namespace Config

@@ -137,6 +137,10 @@ struct ConfigOptions {
 	Keymap keymap;
 	// Ordinary boots need a non-null argv[0]; --guest-exec supplies the caller's arguments.
 	std::vector<std::string> guest_arguments {""};
+
+	// gta6-prep: diag
+	// See DeviceFaultReportEnabled().
+	bool device_fault_report_enabled = false;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -254,6 +258,11 @@ bool RedZoneProtectionEnabled();
 
 const Keymap& GetKeymap();
 const std::vector<std::string>& GetGuestArguments();
+
+// gta6-prep: diag
+// --device-fault-report: the device enables VK_EXT_device_fault where the driver supports it, and
+// the report of a lost device includes the driver's fault addresses and vendor codes.
+bool DeviceFaultReportEnabled();
 
 } // namespace Config
 

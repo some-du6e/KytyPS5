@@ -2,8 +2,12 @@
 
 #include "common/assert.h"
 #include "graphics/guest_gpu/gpu_defs.h"
+#include "graphics/host_gpu/vulkanDiag.h"
 
 #include <array>
+#include <atomic>
+#include <cstring>
+#include <vector>
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
@@ -116,10 +120,75 @@ vk::Format VulkanFormat(Prospero::BufferFormat guest_format) {
 	return index < kFormatLookup.size() ? kFormatLookup[index] : vk::Format::eUndefined;
 }
 
+namespace {
+
+std::atomic<VkDevice> g_fault_device {VK_NULL_HANDLE};
+// The first thread that sees the device lost reads the fault report; the driver may not keep it.
+std::atomic_flag g_fault_reported = ATOMIC_FLAG_INIT;
+
+std::string_view DescriptionText(const char* text, size_t capacity) {
+	return {text, strnlen(text, capacity)};
+}
+
+std::string DeviceFaultReport(vk::Device device) {
+	vk::DeviceFaultCountsEXT counts {};
+	auto                     result = device.getFaultInfoEXT(&counts, nullptr);
+	if (result != vk::Result::eSuccess && result != vk::Result::eIncomplete) {
+		return fmt::format("Device fault: {}\n", VulkanFailureText("vkGetDeviceFaultInfoEXT", result));
+	}
+	std::vector<vk::DeviceFaultAddressInfoEXT> addresses(counts.addressInfoCount);
+	std::vector<vk::DeviceFaultVendorInfoEXT>  vendors(counts.vendorInfoCount);
+	// The vendor's binary crash dump is not read.
+	counts.vendorBinarySize = 0;
+	vk::DeviceFaultInfoEXT info {};
+	info.pAddressInfos = addresses.empty() ? nullptr : addresses.data();
+	info.pVendorInfos  = vendors.empty() ? nullptr : vendors.data();
+	result             = device.getFaultInfoEXT(&counts, &info);
+	if (result != vk::Result::eSuccess && result != vk::Result::eIncomplete) {
+		return fmt::format("Device fault: {}\n", VulkanFailureText("vkGetDeviceFaultInfoEXT", result));
+	}
+	std::string report = fmt::format(
+	    "Device fault: {}\n", DescriptionText(info.description.data(), VK_MAX_DESCRIPTION_SIZE));
+	for (uint32_t i = 0; i < counts.addressInfoCount && i < addresses.size(); i++) {
+		const auto& address = addresses[i];
+		report += fmt::format("Device fault: address {} 0x{:016x} precision=0x{:x}\n",
+		                      vk::to_string(address.addressType), address.reportedAddress,
+		                      address.addressPrecision);
+	}
+	for (uint32_t i = 0; i < counts.vendorInfoCount && i < vendors.size(); i++) {
+		const auto& vendor = vendors[i];
+		report += fmt::format("Device fault: vendor \"{}\" code=0x{:x} data=0x{:x}\n",
+		                      DescriptionText(vendor.description.data(), VK_MAX_DESCRIPTION_SIZE),
+		                      vendor.vendorFaultCode, vendor.vendorFaultData);
+	}
+	return report;
+}
+
+} // namespace
+
+void EnableDeviceFaultReports(vk::Device device) {
+	g_fault_device.store(static_cast<VkDevice>(device), std::memory_order_release);
+}
+
+std::string DeviceLostDetails(vk::Result result) {
+	if (result != vk::Result::eErrorDeviceLost) {
+		return {};
+	}
+	const auto device = g_fault_device.load(std::memory_order_acquire);
+	if (device == VK_NULL_HANDLE || VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceFaultInfoEXT == nullptr) {
+		return "Device lost: no VK_EXT_device_fault report (--device-fault-report enables it on "
+		       "drivers that support it)\n";
+	}
+	if (g_fault_reported.test_and_set(std::memory_order_acq_rel)) {
+		return "Device lost: the device fault report is in the first report of this session\n";
+	}
+	return DeviceFaultReport(vk::Device(device));
+}
+
 void RequireVulkanSuccess(vk::Result result, const char* operation) {
 	if (result != vk::Result::eSuccess) {
-		EXIT("%s failed: %s (%d)\n", operation, vk::to_string(result).c_str(),
-		     static_cast<int>(result));
+		EXIT("%s\n%s", VulkanFailureText(operation, result).c_str(),
+		     DeviceLostDetails(result).c_str());
 	}
 }
 

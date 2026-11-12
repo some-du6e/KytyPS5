@@ -25,7 +25,16 @@
 namespace Libs::Graphics {
 
 vk::Format  VulkanFormat(Prospero::BufferFormat guest_format);
+// Ends the emulator with "<operation> failed: <VkResult name> (<value>)" unless `result` is
+// eSuccess, followed on ErrorDeviceLost by the DeviceLostDetails() lines.
 void        RequireVulkanSuccess(vk::Result result, const char* operation);
+// The device whose VK_EXT_device_fault report DeviceLostDetails() reads; set once the device is
+// created with the deviceFault feature (--device-fault-report).
+void        EnableDeviceFaultReports(vk::Device device);
+// For the report of a fatal `result`: empty unless it is ErrorDeviceLost, else lines that start
+// with "Device fault: " (from VK_EXT_device_fault, first caller only) or "Device lost: ", each
+// ending in a newline.
+[[nodiscard]] std::string DeviceLostDetails(vk::Result result);
 vk::ShaderModule CompileSPV(std::span<const uint32_t> code, vk::Device device);
 vk::Pipeline     CreateComputePipeline(vk::Device device, std::span<const uint32_t> code,
                                        vk::PipelineLayout layout, const char* operation);

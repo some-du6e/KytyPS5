@@ -180,6 +180,10 @@ static void PrintUsage() {
 #endif
 	::printf("  --keymap <Control=Input>             DualSense mapping; may be repeated.\n");
 	::printf("  --rd                                 Enable RenderDoc capture.\n");
+	// gta6-prep: diag
+	::printf("  --device-fault-report                Enable VK_EXT_device_fault where the driver\n"
+	         "                                       supports it, so that a lost device reports\n"
+	         "                                       the driver's fault data. Default: off.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -316,6 +320,8 @@ static constexpr Flag FLAGS[] = {
     {"--redzone", &ConfigOptions::red_zone_protection_enabled},
     {"--no-redzone", &ConfigOptions::red_zone_protection_enabled, false},
 #endif
+    // gta6-prep: diag
+    {"--device-fault-report", &ConfigOptions::device_fault_report_enabled},
 };
 
 static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_help) {

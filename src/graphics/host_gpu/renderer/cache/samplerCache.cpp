@@ -4,6 +4,7 @@
 #include "common/logging/log.h"
 #include "graphics/guest_gpu/gpu_defs.h"
 #include "graphics/host_gpu/renderer/renderContext.h"
+#include "graphics/host_gpu/vulkanCommon.h"
 
 namespace Libs::Graphics {
 
@@ -157,8 +158,9 @@ vk::Sampler SamplerCache::GetSampler(const ShaderSamplerResource& r, bool intege
 	sampler_info.pNext = &reduction;
 
 	vk::Sampler vk_sampler = nullptr;
-	const auto  result     = m_graphics.device.createSampler(&sampler_info, nullptr, &vk_sampler);
-	EXIT_NOT_IMPLEMENTED(result != vk::Result::eSuccess || vk_sampler == nullptr);
+	RequireVulkanSuccess(m_graphics.device.createSampler(&sampler_info, nullptr, &vk_sampler),
+	                     "vkCreateSampler");
+	EXIT_IF(vk_sampler == nullptr);
 
 	m_samplers.emplace(key, vk_sampler);
 	return vk_sampler;
