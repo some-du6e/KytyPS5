@@ -822,7 +822,8 @@ BufferId BufferCache::CreateBuffer(uint64_t vaddr, uint64_t size) {
 	size         = end - vaddr;
 	auto overlap = ResolveOverlaps(vaddr, size);
 	// gta6-prep: vram: a merge past the device limits gets a message before VMA fails opaquely,
-	// and loses its stream reserve when that is what passes them.
+	// and loses its stream reserve only when the reserve is what passes a limit (without it the
+	// buffer passes fewer limits; MemoryPolicy::PlanMergedBuffer()).
 	if (MemoryPolicy::FitMergedBuffer(overlap.end - overlap.begin,
 	                                  m_graphics.max_memory_allocation_size,
 	                                  m_graphics.max_buffer_size) != MemoryPolicy::MergedBufferFit::Fits) {

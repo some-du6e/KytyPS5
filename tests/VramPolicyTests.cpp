@@ -359,13 +359,21 @@ void TestMergedBufferPlan() {
 	Check(PlanMergedBuffer(5 * GiB, 5 * GiB, allocation, buffer) ==
 	          MergedBufferPlan {.drop_stream_leap = false, .fit = MergedBufferFit::OverAllocationSize},
 	      "a buffer past maxMemoryAllocationSize is not reported");
-	// Past both even without the reserve: the reserve is still dropped, the rest is reported.
+	// Past the same limit with and without the reserve: the reserve is kept (dropping it would
+	// only make every later growth merge again), the buffer is reported.
 	Check(PlanMergedBuffer(20 * GiB, 18 * GiB, allocation, buffer) ==
-	          MergedBufferPlan {.drop_stream_leap = true, .fit = MergedBufferFit::OverBufferSize},
-	      "a buffer past maxBufferSize is not reported");
+	          MergedBufferPlan {.drop_stream_leap = false, .fit = MergedBufferFit::OverBufferSize},
+	      "a buffer past maxBufferSize without the reserve is not reported, or loses it");
+	Check(PlanMergedBuffer(5 * GiB + 2 * MiB, 5 * GiB, allocation, buffer) ==
+	          MergedBufferPlan {.drop_stream_leap = false, .fit = MergedBufferFit::OverAllocationSize},
+	      "a streaming buffer past maxMemoryAllocationSize lost its reserve");
+	// Only the reserve passes maxBufferSize: drop it, report the allocation size.
 	Check(PlanMergedBuffer(17 * GiB, 15 * GiB, allocation, buffer) ==
 	          MergedBufferPlan {.drop_stream_leap = true, .fit = MergedBufferFit::OverAllocationSize},
 	      "dropping the reserve below maxBufferSize is not taken");
+	Check(PlanMergedBuffer(buffer + 2 * MiB, buffer, allocation, buffer) ==
+	          MergedBufferPlan {.drop_stream_leap = true, .fit = MergedBufferFit::OverAllocationSize},
+	      "a reserve past maxBufferSize is kept");
 	Check(Policy::FitMergedBuffer(buffer, allocation, buffer) == MergedBufferFit::OverAllocationSize &&
 	          Policy::FitMergedBuffer(allocation, allocation, buffer) == MergedBufferFit::Fits,
 	      "the limits are not inclusive");

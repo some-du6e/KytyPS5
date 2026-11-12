@@ -169,7 +169,8 @@ constexpr bool LogSpillAt(uint64_t count) {
 }
 
 // A guest buffer that merges overlapping cached buffers (BufferCache::CreateBuffer()) against the
-// device limits. 0 for a limit: unknown, no check.
+// device limits. 0 for a limit: unknown, no check. Ordered: each value passes more limits than
+// the one before (PlanMergedBuffer() compares them).
 enum class MergedBufferFit : uint8_t {
 	Fits,
 	// Past maxMemoryAllocationSize: the driver may still allocate it.
@@ -198,15 +199,22 @@ constexpr MergedBufferFit FitMergedBuffer(uint64_t size, uint64_t max_allocation
 	return MergedBufferFit::Fits;
 }
 
-// `size_without_leap`: the size without the stream reserve (equal to `size` without one).
+// `size_without_leap`: the size without the stream reserve (equal to `size` without one). The
+// reserve is dropped only when it is what passes a limit, i.e. when the buffer without it passes
+// fewer limits. A buffer past maxMemoryAllocationSize with or without the reserve keeps it: drivers
+// may allocate past that limit (VMA does not enforce it), and without the reserve every later
+// growth step would merge and copy the whole buffer again.
 constexpr MergedBufferPlan PlanMergedBuffer(uint64_t size, uint64_t size_without_leap,
                                             uint64_t max_allocation, uint64_t max_buffer) {
 	const auto fit = FitMergedBuffer(size, max_allocation, max_buffer);
 	if (fit == MergedBufferFit::Fits || size_without_leap >= size) {
 		return {.drop_stream_leap = false, .fit = fit};
 	}
-	return {.drop_stream_leap = true,
-	        .fit              = FitMergedBuffer(size_without_leap, max_allocation, max_buffer)};
+	const auto fit_without_leap = FitMergedBuffer(size_without_leap, max_allocation, max_buffer);
+	if (static_cast<uint8_t>(fit_without_leap) >= static_cast<uint8_t>(fit)) {
+		return {.drop_stream_leap = false, .fit = fit};
+	}
+	return {.drop_stream_leap = true, .fit = fit_without_leap};
 }
 
 // The "VRAM:" line of the log contract (RenderContext logs it once after renderer init). Sizes in
