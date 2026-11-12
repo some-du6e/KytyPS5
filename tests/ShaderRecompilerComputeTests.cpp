@@ -2551,7 +2551,8 @@ public:
             "a dedicated allocation past --vram-limit-mb succeeded in the limited heap");
     vmaDestroyBuffer(limited.allocator, small_buffer, small_allocation);
 
-    // --oom-recovery: an image past the limit retries twice (each logs "VRAM pressure:") and
+    // --oom-recovery: an image past the limit retries once past the budget (CreateImage already
+    // freed the recycled images; logs "VRAM pressure: ... retry 1") and
     // asks the next collection of the caches to run aggressively; the caller still sees the
     // failure. Without the option nothing is asked. Only where the limited heap is the only one
     // (lavapipe): elsewhere VMA may place the image in another heap.

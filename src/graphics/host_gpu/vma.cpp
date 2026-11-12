@@ -395,9 +395,10 @@ bool GraphicContext::CreateImage(const vk::ImageCreateInfo& image_info, VulkanIm
 			                              image_info.extent.depth, vk::to_string(image_info.format),
 			                              image_info.arrayLayers, image_info.mipLevels);
 			const auto bytes = ImageAllocationBytes(device, image_info);
+			// The recycled images were just freed above: only the past-the-budget retry is left.
 			for (uint32_t attempt = 1;
 			     result != vk::Result::eSuccess &&
-			     RecoverFromAllocationFailure(bytes, what, attempt, alloc_info.flags);
+			     RecoverFromAllocationFailure(bytes, what, attempt, alloc_info.flags, true);
 			     attempt++) {
 				result = static_cast<vk::Result>(vmaCreateImage(
 				    allocator, static_cast<const vk::ImageCreateInfo::NativeType*>(image_info),
@@ -507,21 +508,24 @@ uint64_t GraphicContext::TrimRecycledImages() {
 
 bool GraphicContext::RecoverFromAllocationFailure(uint64_t bytes, std::string_view what,
                                                   uint32_t                  attempt,
-                                                  VmaAllocationCreateFlags& flags) {
-	constexpr uint32_t Retries = 2;
-	if (!Config::GetVramSettings().oom_recovery || attempt == 0 || attempt > Retries ||
+                                                  VmaAllocationCreateFlags& flags,
+                                                  bool                      idle_memory_freed) {
+	constexpr uint32_t Steps = 2;
+	// The step this retry takes: the caller that already freed the idle memory starts past it.
+	const uint32_t step = idle_memory_freed ? attempt + 1 : attempt;
+	if (!Config::GetVramSettings().oom_recovery || attempt == 0 || step > Steps ||
 	    allocator == nullptr) {
 		return false;
 	}
 	const auto heap_count = physical_device_memory_properties.memoryHeapCount;
 	const auto before     = AllocatedBlockBytes(allocator, heap_count);
 	RequestGcPressure(MemoryPolicy::GcPressure::OutOfMemory);
-	if (attempt == 1) {
-		// Idle memory first: the recycled images and the queued image destructions. A new
-		// frame index makes VMA fetch the driver's budget again instead of its cached one.
-		static std::atomic<uint32_t> frame_index {0};
+	// A new frame index makes VMA fetch the driver's budget again instead of its cached one.
+	static std::atomic<uint32_t> frame_index {0};
+	vmaSetCurrentFrameIndex(allocator, frame_index.fetch_add(1, std::memory_order_relaxed) + 1);
+	if (step == 1) {
+		// Idle memory first: the recycled images and the queued image destructions.
 		DestroyRecycledImages(allocator);
-		vmaSetCurrentFrameIndex(allocator, frame_index.fetch_add(1, std::memory_order_relaxed) + 1);
 	} else {
 		// Past the budget: the driver may still place it (WDDM pages other memory out), which is
 		// slow but beats closing the emulator.

@@ -164,15 +164,18 @@ struct GraphicContext {
 		    m_gc_pressure.exchange(0, std::memory_order_relaxed));
 	}
 	// --oom-recovery: called after an allocation of about `bytes` failed, before its `attempt`-th
-	// retry (1 or 2). Frees the recycled images and refreshes the budget (1) or drops
-	// VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT from `flags` (2), asks the next collection of both
-	// caches to run aggressively, and logs the "VRAM pressure:" line. The caches are not collected
-	// here: the caller may hold the texture cache's lock or be inside a cache's own bookkeeping,
-	// and their memory is released only once the GPU is done with it. False: no retry (option
-	// off, or the attempts are used up).
+	// retry (from 1). Each retry refreshes VMA's budget and takes the next step: free the recycled
+	// images and the queued image destructions, then drop VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT
+	// from `flags`. `idle_memory_freed`: the caller already freed the recycled images (CreateImage
+	// does before any retry), so its first retry takes the second step and there is no other.
+	// Also asks the next collection of both caches to run aggressively and logs the "VRAM
+	// pressure:" line. The caches are not collected here: the caller may hold the texture cache's
+	// lock or be inside a cache's own bookkeeping, and their memory is released only once the GPU
+	// is done with it. False: no retry (option off, or the steps are used up).
 	[[nodiscard]] bool RecoverFromAllocationFailure(uint64_t bytes, std::string_view what,
 	                                                uint32_t                  attempt,
-	                                                VmaAllocationCreateFlags& flags);
+	                                                VmaAllocationCreateFlags& flags,
+	                                                bool idle_memory_freed = false);
 
 	uint32_t screen_width  = 0;
 	uint32_t screen_height = 0;
