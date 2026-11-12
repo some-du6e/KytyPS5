@@ -4793,7 +4793,9 @@ void TestCountedRowImageSelector() {
               memory.words.begin() + (MaterialBase + 32u - memory.base) / 4u);
   at(MaterialBase + 32u) = 0x104u;
   at(MaterialBase + 256u) = 0x200u;
-  at(MaterialBase + 260u) = static_cast<uint32_t>(Libs::Graphics::Prospero::BufferFormat::k8SScaled) << 20u;
+  // An image format the emulator does not support (gta6-prep: shader-mem made k8SScaled, used here
+  // before, a supported format).
+  at(MaterialBase + 260u) = static_cast<uint32_t>(Libs::Graphics::Prospero::BufferFormat::k10_11_11SScaled) << 20u;
   at(MaterialBase + 268u) = at(MaterialBase + 196u);
   // The walker needs every user-data DWORD the plan reads, including the zero s12-s14.
   std::array<uint32_t, 15> user_data{KeyBase, 4u << 16u, 64u, 0x14004u,
