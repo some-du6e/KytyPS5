@@ -1059,6 +1059,20 @@ void DecodeProgram(std::span<const uint32_t> code, Program& program,
 // gta6-prep: shader-alu. The first instruction of the program the decoder does not support, or
 // null.
 const Instruction* FindUnsupportedInstruction(const Program& program);
+// gta6-prep: shader-alu. DecodeInstruction() as the decoder was before the opcodes after
+// RT_ALPHA: those opcodes, and the forms of older opcodes it accepts since (SMEM 0x1f/0x24/0x26/
+// 0x27, VOP3 V_MAX_F16/V_MIN_F16, VOP3 F16 arithmetic with ABS/NEG/CLAMP/OMOD, CLAMP on packed
+// 16-bit integer opcodes), decode as the unsupported instructions they were then, with the
+// lengths they had then. Psr::CodeFingerprint() decodes so, as its code tables were generated
+// with that decoder.
+void DecodeLegacyInstruction(std::span<const uint32_t> code, uint32_t word_index, Instruction& inst);
+// Whether this thread is in DecodeLegacyInstruction() (for the decoders of the families).
+bool IsLegacyDecode();
+// Whether `opcode` is one the decoder learned after the Psr code tables were generated (the
+// opcodes after RT_ALPHA).
+constexpr bool IsPostLegacyOpcode(Opcode opcode) {
+	return opcode > Opcode::RT_ALPHA && opcode < Opcode::COUNT;
+}
 bool IsConditionalBranch(Opcode opcode);
 bool IsDirectBranch(Opcode opcode);
 bool IsDsWriteOpcode(Opcode opcode);

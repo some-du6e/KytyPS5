@@ -408,13 +408,19 @@ bool IsVop2LiteralMadOpcode(uint32_t opcode) {
 }
 
 bool IsUnsupportedVop3EncodedVop2Alias(uint32_t opcode) {
-	// gta6-prep: shader-alu. V_MAX_F16 / V_MIN_F16 (0x39 / 0x3a) have VOP3 forms.
-	return IsVop2LiteralMadOpcode(opcode) || opcode == 0x02u;
+	// gta6-prep: shader-alu. V_MAX_F16 / V_MIN_F16 (0x39 / 0x3a) have VOP3 forms, which
+	// DecodeLegacyInstruction() does not know.
+	return IsVop2LiteralMadOpcode(opcode) || opcode == 0x02u ||
+	       (IsLegacyDecode() && (opcode == 0x39u || opcode == 0x3au));
 }
 
 // gta6-prep: shader-alu. The VOP2 F16 arithmetic whose VOP3 forms take ABS/NEG on their two
 // sources and CLAMP/OMOD on the result (Float16Binary / Float16Ternary apply them).
+// DecodeLegacyInstruction() rejects their modifiers.
 bool IsVop3F16BinaryWithModifiers(Opcode opcode) {
+	if (IsLegacyDecode()) {
+		return false;
+	}
 	switch (opcode) {
 		case Opcode::V_ADD_F16:
 		case Opcode::V_SUB_F16:
@@ -1409,8 +1415,12 @@ const char* UnsupportedVop3pDotModifiers(Opcode opcode, uint32_t op_sel, uint32_
 	}
 }
 
-// gta6-prep: shader-alu. Packed 16-bit integer opcodes whose CLAMP saturates each half.
+// gta6-prep: shader-alu. Packed 16-bit integer opcodes whose CLAMP saturates each half
+// (DecodeLegacyInstruction() rejects it).
 bool IsPackedIntegerClampVop3p(Opcode opcode) {
+	if (IsLegacyDecode()) {
+		return false;
+	}
 	switch (opcode) {
 		case Opcode::V_PK_ADD_I16:
 		case Opcode::V_PK_SUB_I16:

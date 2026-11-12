@@ -136,11 +136,17 @@ bool LibraryNamed() {
 // The opcodes the decoder learned after the code tables were generated, in enum order. The
 // tables hold each opcode's enum value of that time: these opcodes count as the unknown
 // instructions they were then, and the opcodes after them in the enum as their earlier values.
+// The opcodes after RT_ALPHA (gta6-prep: shader-alu and later) are not decoded at all here:
+// CodeFingerprint() decodes with DecodeLegacyInstruction(), which takes them, and the forms of
+// older opcodes learned with them, for the unknown instructions they were.
 constexpr std::array NewerOpcodes {ShaderRecompiler::Decoder::Opcode::V_CMP_U_F16};
 
 // The enum value of `opcode` when the code tables were generated, or -1 when the decoder did
 // not know it then.
 int64_t TableOpcode(ShaderRecompiler::Decoder::Opcode opcode) {
+	if (ShaderRecompiler::Decoder::IsPostLegacyOpcode(opcode)) {
+		return -1;
+	}
 	int64_t earlier = 0;
 	for (const auto newer: NewerOpcodes) {
 		if (opcode == newer) {
@@ -284,7 +290,8 @@ uint64_t CodeFingerprint(std::span<const uint32_t> binary) {
 			return 0;
 		}
 		D::Instruction inst;
-		D::DecodeInstruction(code, word, inst);
+		// The decoder the code tables were generated with (see TableOpcode()).
+		D::DecodeLegacyInstruction(code, word, inst);
 		word += std::max(inst.word_count, 1u);
 		switch (inst.opcode) {
 			// Scheduling: waits and hints.

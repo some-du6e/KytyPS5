@@ -19,6 +19,8 @@ namespace {
 // decoder knows: DecodeInstruction then reports the instruction as unsupported, so the program
 // can be skipped (or rejected by the CFG under --strict-shaders) instead of the decoder exiting.
 thread_local const char* g_operand_failure = nullptr;
+// Set inside DecodeLegacyInstruction().
+thread_local bool g_legacy_decode = false;
 
 bool HasLiteral(const Instruction& inst) {
 	return inst.src0.kind == OperandKind::LiteralConstant ||
@@ -401,6 +403,17 @@ void DecodeInstruction(std::span<const uint32_t> code, uint32_t word_index, Inst
 		SetUnsupported(inst, inst.family, inst.opcode_id, g_operand_failure);
 		g_operand_failure = nullptr;
 	}
+}
+
+void DecodeLegacyInstruction(std::span<const uint32_t> code, uint32_t word_index, Instruction& inst) {
+	const bool outer = g_legacy_decode;
+	g_legacy_decode  = true;
+	DecodeInstruction(code, word_index, inst);
+	g_legacy_decode = outer;
+}
+
+bool IsLegacyDecode() {
+	return g_legacy_decode;
 }
 
 const Instruction* FindUnsupportedInstruction(const Program& program) {

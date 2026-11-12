@@ -291,6 +291,10 @@ void DecodeSmem(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 	inst.family      = Family::SMEM;
 	inst.opcode_id   = opcode;
 	const auto* info = Detail::FindOpcode(SMEM_OPS, opcode);
+	if (IsLegacyDecode() && (opcode == 0x1fu || opcode == 0x24u || opcode == 0x26u || opcode == 0x27u)) {
+		// gta6-prep: shader-alu. The SMEM opcodes DecodeLegacyInstruction() does not know.
+		info = nullptr;
+	}
 	ApplyMemoryInfo(inst, info);
 	SetRawWords(inst, code, word_index, 2);
 	if (inst.opcode == Opcode::UNSUPPORTED) {

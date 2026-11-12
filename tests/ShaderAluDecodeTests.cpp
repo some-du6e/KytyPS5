@@ -218,8 +218,16 @@ struct Encoding {
 	Opcode                opcode;
 };
 
+// Every encoding CheckEncodings() was given: each is an opcode, or a form of an older opcode, the
+// decoder learned in gta6-prep: shader-alu (see TestLegacyDecodeKeepsCodeTableKeys()).
+std::vector<Encoding>& CheckedEncodings() {
+	static std::vector<Encoding> encodings;
+	return encodings;
+}
+
 void CheckEncodings(std::initializer_list<Encoding> encodings) {
 	for (const auto& encoding: encodings) {
+		CheckedEncodings().push_back(encoding);
 		const auto inst = DecodeOne(encoding.words);
 		Check(inst.opcode == encoding.opcode &&
 		          inst.word_count == static_cast<uint32_t>(encoding.words.size()),
@@ -1003,6 +1011,74 @@ void TestSadAndPackedClamp() {
 	CompileToValidSpirv(code, "SAD and packed clamp", 32);
 }
 
+// ---- The decoder the Psr code tables were generated with ----
+
+// The opcode field and the length the decoder gave an instruction it did not know, before
+// gta6-prep: shader-alu: the base words of its encoding, without literal (SDWA/DPP for VOPC).
+struct LegacyUnknown {
+	Decoder::Family family;
+	uint32_t        opcode_id;
+	uint32_t        word_count;
+};
+
+LegacyUnknown ExpectedLegacyUnknown(std::span<const uint32_t> words) {
+	using Decoder::Family;
+	const uint32_t word   = words[0];
+	const auto     family = Decoder::GetInstructionFamily(word);
+	switch (family) {
+		case Family::SOP1: return {family, (word >> 8u) & 0xffu, 1};
+		case Family::SOP2: return {family, (word >> 23u) & 0x7fu, 1};
+		case Family::SOPK: return {family, (word >> 23u) & 0x1fu, 1};
+		case Family::SOPP: return {family, (word >> 16u) & 0x7fu, 1};
+		case Family::VOP1: return {family, (word >> 9u) & 0xffu, 1};
+		case Family::VOP2: return {family, (word >> 25u) & 0x3fu, 1};
+		case Family::VOPC: {
+			const uint32_t src0 = word & 0x1ffu;
+			return {family, (word >> 17u) & 0xffu, src0 == 249u || src0 == 250u ? 2u : 1u};
+		}
+		case Family::VOP3: return {family, (word >> 16u) & 0x3ffu, 2};
+		case Family::VOP3P: return {family, (word >> 16u) & 0x7fu, 2};
+		case Family::SMEM: return {family, (word >> 18u) & 0xffu, 2};
+		default: return {family, 0, 0};
+	}
+}
+
+void TestLegacyDecodeKeepsCodeTableKeys() {
+	// Psr::CodeFingerprint() keys the instructions the decoder did not know by their family and
+	// opcode field, and steps over their base words only: DecodeLegacyInstruction() must still
+	// see every new encoding so, or GTA V's Psr passes stop matching their code tables.
+	Check(CheckedEncodings().size() > 100u, "the new encodings were not all collected");
+	for (const auto& encoding: CheckedEncodings()) {
+		Decoder::Instruction inst;
+		Decoder::DecodeLegacyInstruction(encoding.words, 0, inst);
+		const auto expected = ExpectedLegacyUnknown(encoding.words);
+		Check(inst.opcode == Opcode::UNSUPPORTED && inst.family == expected.family &&
+		          inst.opcode_id == expected.opcode_id && inst.word_count == expected.word_count,
+		      std::string("the legacy decode knows a new encoding: ") + encoding.text + " -> " +
+		          Decoder::InstructionToString(inst));
+		Check(!Decoder::IsLegacyDecode(), "the legacy decode stayed on after DecodeLegacyInstruction");
+		Check(DecodeOne(encoding.words).opcode == encoding.opcode,
+		      std::string("the legacy decode changed the next decode: ") + encoding.text);
+	}
+	// What the decoder knew before decodes as it did.
+	const uint32_t known[][2] = {
+	    {0xbe800301u, 0u},          // s_mov_b32 s0, s1
+	    {0xd5320000u, 0x00020501u}, // v_add_f16_e64 v0, v1, v2
+	    {0xcc0a4000u, 0x18020501u}, // v_pk_add_u16 v0, v1, v2
+	    {0xf4940000u, 0x00000000u}, // s_memrealtime s[0:1]
+	    {0x7e000301u, 0u},          // v_mov_b32 v0, v1
+	};
+	for (const auto& words: known) {
+		Decoder::Instruction legacy;
+		Decoder::DecodeLegacyInstruction(words, 0, legacy);
+		const auto current = DecodeOne(words);
+		Check(legacy.opcode != Opcode::UNSUPPORTED && legacy.opcode == current.opcode &&
+		          legacy.word_count == current.word_count,
+		      std::string("the legacy decode rejects an older encoding: ") +
+		          Decoder::InstructionToString(current));
+	}
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -1023,6 +1099,7 @@ int main() {
 	TestPreciseDivision();
 	TestIntegerLongTail();
 	TestSadAndPackedClamp();
+	TestLegacyDecodeKeepsCodeTableKeys();
 	std::printf("ShaderAluDecodeTests: all tests passed\n");
 	return 0;
 }
