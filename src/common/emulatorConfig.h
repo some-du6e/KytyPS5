@@ -150,6 +150,10 @@ struct ConfigOptions {
 	// --dump-imports <file>: write the import report of eboot.bin and sce_module/*.prx and exit,
 	// without a GPU and without running guest code. Empty: normal run.
 	std::filesystem::path dump_imports_file;
+	// --notype-import-fallback: an STT_NOTYPE import with no NoType export of its NID binds to a
+	// Func, then Object, export (HLE or loaded module). Off: it stays on the stub, as upstream.
+	// Imports without lib/module metadata always try it (they used to abort).
+	bool                  notype_import_fallback = false;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -275,6 +279,7 @@ bool StrictImportsEnabled();
 bool UnresolvedOfflineReturnsEnabled();
 bool RebindImportsEnabled();
 const std::filesystem::path& GetDumpImportsFile();
+bool NoTypeImportFallbackEnabled();
 
 } // namespace Config
 

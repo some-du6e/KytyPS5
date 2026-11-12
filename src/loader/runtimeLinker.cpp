@@ -149,6 +149,8 @@ static std::unordered_map<uint64_t, UnresolvedObjectRecord> g_unresolved_objects
 static std::atomic_uint32_t             g_unresolved_stub_call_log_count {0};
 static std::vector<uint64_t>            g_unresolved_stub_thunk_pages;
 static uint64_t                         g_unresolved_stub_thunk_offset = 0;
+// Imports already reported by a "PS5 NID fallback: ... (type)" line; under RuntimeLinker::m_mutex.
+static std::set<std::string>            g_notype_fallback_logged;
 static constexpr uint64_t               UNRESOLVED_STUB_PAGE_SIZE      = 4096;
 
 static KYTY_SYSV_ABI uint64_t UnresolvedImportStub(uint64_t record_ptr);
@@ -1561,6 +1563,7 @@ void RuntimeLinker::Clear() {
 	g_stubbed_imports_by_slot.clear();
 	g_stubbed_imports.clear();
 	g_unresolved_objects_by_slot.clear();
+	g_notype_fallback_logged.clear();
 	g_unresolved_stub_call_log_count.store(0);
 	if (g_invalid_memory != 0) {
 		EXIT_IF(!Libs::LibKernel::Memory::FreeGuestMemory(g_invalid_memory, 4096));
@@ -1624,7 +1627,8 @@ bool RuntimeLinker::ResolveImport(const std::string& name, SymbolType type, Prog
 			return resolve_by_nid_as(nid, type, out);
 		};
 		// Every HLE function is registered as Func, so an STT_NOTYPE import of one never matches
-		// by type. Try Func, then Object, like sceKernelDlsym (kernel_find_export_symbol).
+		// by type. Try Func, then Object, like sceKernelDlsym (kernel_find_export_symbol). Logged
+		// once per import name: every relocation against it comes through here.
 		auto resolve_notype_by_nid = [&](const std::string& nid, const std::string& from,
 		                                 SymbolRecord* out) -> bool {
 			if (type != SymbolType::NoType) {
@@ -1632,8 +1636,10 @@ bool RuntimeLinker::ResolveImport(const std::string& name, SymbolType type, Prog
 			}
 			for (const auto as: {SymbolType::Func, SymbolType::Object}) {
 				if (resolve_by_nid_as(nid, as, out)) {
-					Log::WriteToConsoleAndLog(
-					    fmt::format("PS5 NID fallback: {} -> {} (type)\n", from, out->name));
+					if (g_notype_fallback_logged.insert(from).second) {
+						Log::WriteToConsoleAndLog(
+						    fmt::format("PS5 NID fallback: {} -> {} (type)\n", from, out->name));
+					}
 					return true;
 				}
 			}
@@ -1680,7 +1686,10 @@ bool RuntimeLinker::ResolveImport(const std::string& name, SymbolType type, Prog
 					LOGF("PS5 NID fallback: %s -> %s\n", sr.name.c_str(), out_info->name.c_str());
 					return true;
 				}
-				if (resolve_notype_by_nid(sr.name, SymbolDatabase::GenerateName(sr), out_info)) {
+				// Opt-in: the import resolved to the stub before, and a partial HLE function can
+				// abort on arguments the stub ignored.
+				if (Config::NoTypeImportFallbackEnabled() &&
+				    resolve_notype_by_nid(sr.name, SymbolDatabase::GenerateName(sr), out_info)) {
 					return true;
 				}
 			}
@@ -1698,6 +1707,7 @@ bool RuntimeLinker::ResolveImport(const std::string& name, SymbolType type, Prog
 				     ids.at(0).c_str(), out_info->name.c_str());
 				return true;
 			}
+			// Always: without it this import aborts the load (Resolve EXITs on false).
 			if (resolve_notype_by_nid(ids.at(0), ids.at(0), out_info)) {
 				return true;
 			}

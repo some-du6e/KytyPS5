@@ -928,7 +928,7 @@ if(BUILD_TESTING)
 	# The gta6-prep: hle options parse (--help stops before any of them acts).
 	add_test(NAME emulator_hle_options_cli
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --strict-imports --unresolved-offline-returns
-	                 --no-rebind-imports --nid-names names.txt --dump-imports imports.txt)
+	                 --no-rebind-imports --notype-import-fallback --nid-names names.txt --dump-imports imports.txt)
 	add_test(NAME lru_cache COMMAND $<TARGET_FILE:lru_cache_tests>)
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)

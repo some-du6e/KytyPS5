@@ -188,6 +188,8 @@ static void PrintUsage() {
 	         "                                       offline error instead of 0 (not with --emulate-psn).\n");
 	::printf("  --no-rebind-imports                  Keep imports stubbed at boot stubbed when a module\n"
 	         "                                       loaded later exports them.\n");
+	::printf("  --notype-import-fallback             Bind an untyped (NoType) import to a function or\n"
+	         "                                       object export of the same NID.\n");
 	::printf("  --dump-imports <file>                With --game: write which imports of eboot.bin and\n"
 	         "                                       sce_module/*.prx Kyty implements, a PRX exports or\n"
 	         "                                       nothing resolves, then exit. No GPU, no guest code.\n");
@@ -331,6 +333,7 @@ static constexpr Flag FLAGS[] = {
     {"--strict-imports", &ConfigOptions::strict_imports},
     {"--unresolved-offline-returns", &ConfigOptions::unresolved_offline_returns},
     {"--no-rebind-imports", &ConfigOptions::rebind_imports, false},
+    {"--notype-import-fallback", &ConfigOptions::notype_import_fallback},
 };
 
 static bool ParseArgs(int argc, char* argv[], RunOptions& options, bool& show_help) {

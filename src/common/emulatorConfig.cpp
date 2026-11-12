@@ -389,4 +389,8 @@ const std::filesystem::path& GetDumpImportsFile() {
 	return g_config != nullptr ? g_config->dump_imports_file : none;
 }
 
+bool NoTypeImportFallbackEnabled() {
+	return g_config != nullptr && g_config->notype_import_fallback;
+}
+
 } // namespace Config
