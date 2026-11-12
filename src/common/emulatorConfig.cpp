@@ -491,4 +491,9 @@ bool SkipUnsupportedImageAtomics() {
 	return g_config != nullptr && g_config->skip_unsupported_image_atomics;
 }
 
+// gta6-prep: shader-alu
+bool StrictShadersEnabled() {
+	return g_config != nullptr && g_config->strict_shaders;
+}
+
 } // namespace Config

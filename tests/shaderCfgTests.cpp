@@ -14501,6 +14501,45 @@ static void TestPsrCodeRecognition() {
         "Psr: the fingerprint depends on where the code is or ignores constants");
 }
 
+// gta6-prep: shader-alu. The code tables were generated with the decoder of then: the opcodes it
+// learned since, and the forms of older opcodes it accepts since, are keyed as the unknown
+// instructions they were (by family and opcode field only, over their base words only).
+static void TestPsrFingerprintKeepsOlderDecode() {
+  namespace Psr = Libs::Graphics::Psr;
+  constexpr uint32_t EndPgm = 0xbf810000u;
+  const auto same = [](std::span<const uint32_t> a, std::span<const uint32_t> b) {
+    const auto fingerprint = Psr::CodeFingerprint(a);
+    return fingerprint != 0 && fingerprint == Psr::CodeFingerprint(b);
+  };
+  // Against a form the decoder still does not know, with the same family and opcode field.
+  const uint32_t add_f16_modifiers[] = {0xd5320200u, 0x38020501u, EndPgm}; // v_add_f16_e64 v0, -v1, |v2| div:2
+  const uint32_t add_f16_op_sel[]    = {0xd5320800u, 0x00020501u, EndPgm}; // op_sel:[1,0,0]
+  Check(same(add_f16_modifiers, add_f16_op_sel), "Psr: VOP3 V_ADD_F16 with NEG/ABS/OMOD is keyed as known");
+  const uint32_t max_f16[]        = {0xd5390000u, 0x00020501u, EndPgm}; // v_max_f16_e64 v0, v1, v2
+  const uint32_t max_f16_op_sel[] = {0xd5390800u, 0x00020501u, EndPgm};
+  Check(same(max_f16, max_f16_op_sel), "Psr: VOP3 V_MAX_F16 is keyed as known");
+  const uint32_t sad[]       = {0xd55a0000u, 0x040e0501u, EndPgm}; // v_sad_u8 v0, v1, v2, v3
+  const uint32_t sad_clamp[] = {0xd55a8000u, 0x040e0501u, EndPgm}; // clamp
+  Check(same(sad, sad_clamp), "Psr: V_SAD_U8 is keyed as known");
+  // Operands and modifiers of an unknown instruction are not in its key.
+  const uint32_t perm[]          = {0xd7440000u, 0x040e0501u, EndPgm}; // v_perm_b32 v0, v1, v2, v3
+  const uint32_t perm_constant[] = {0xd7440000u, 0x040e0487u, EndPgm}; // v_perm_b32 v0, 7, v2, v3
+  Check(same(perm, perm_constant), "Psr: V_PERM_B32 is keyed as known");
+  const uint32_t saveexec[]       = {0xbe802502u, EndPgm}; // s_or_saveexec_b64 s[0:1], s[2:3]
+  const uint32_t saveexec_whole[] = {0xbe8025c1u, EndPgm}; // s_or_saveexec_b64 s[0:1], -1
+  Check(same(saveexec, saveexec_whole), "Psr: S_OR_SAVEEXEC_B64 is keyed as known");
+  const uint32_t pk_clamp[]          = {0xcc0ac000u, 0x18020501u, EndPgm}; // v_pk_add_u16 v0, v1, v2 clamp
+  const uint32_t pk_clamp_constant[] = {0xcc0ac000u, 0x18020487u, EndPgm}; // v_pk_add_u16 v0, 7, v2 clamp
+  Check(same(pk_clamp, pk_clamp_constant), "Psr: V_PK_ADD_U16 with CLAMP is keyed as known");
+  const uint32_t memtime[]        = {0xf4900000u, 0x00000000u, EndPgm}; // s_memtime s[0:1]
+  const uint32_t memtime_offset[] = {0xf4900000u, 0x00000004u, EndPgm};
+  Check(same(memtime, memtime_offset), "Psr: S_MEMTIME is keyed as S_MEMREALTIME");
+  // s_setreg_imm32_b32 was one word: the word after it was decoded as the next instruction.
+  const uint32_t setreg_a[] = {0xba801801u, EndPgm}; // s_setreg_imm32_b32 hwreg(HW_REG_MODE, 0, 4), <s_endpgm>
+  const uint32_t setreg_b[] = {0xba801802u, EndPgm};
+  Check(same(setreg_a, setreg_b), "Psr: S_SETREG_IMM32_B32 is keyed as known or as two words");
+}
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -14510,6 +14549,7 @@ int main() {
   TestVop3FloatConversionDecode();
   TestRayTracingInstructions();
   TestPsrCodeRecognition();
+  TestPsrFingerprintKeepsOlderDecode();
   TestShaderBufferResourceSize();
   TestNativeShaderResourceDependencies();
   TestNormalizedImageContracts();

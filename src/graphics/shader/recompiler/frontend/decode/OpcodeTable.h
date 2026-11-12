@@ -46,10 +46,13 @@ constexpr const Entry* FindOpcode(const OpcodeTable<Entry, EncodingCount, EntryC
 }
 
 template <typename Entry, size_t EncodingCount, size_t EntryCount>
-constexpr Opcode LookupOpcode(const OpcodeTable<Entry, EncodingCount, EntryCount>& table,
-                              uint32_t                                             encoding) {
+Opcode LookupOpcode(const OpcodeTable<Entry, EncodingCount, EntryCount>& table, uint32_t encoding) {
 	const auto* entry = FindOpcode(table, encoding);
-	return entry != nullptr ? entry->decoded : Opcode::UNSUPPORTED;
+	if (entry == nullptr) {
+		return Opcode::UNSUPPORTED;
+	}
+	// gta6-prep: shader-alu. DecodeLegacyInstruction() does not know the later opcodes.
+	return IsLegacyDecode() && IsPostLegacyOpcode(entry->decoded) ? Opcode::UNSUPPORTED : entry->decoded;
 }
 
 } // namespace Libs::Graphics::ShaderRecompiler::Decoder::Detail

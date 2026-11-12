@@ -23,6 +23,10 @@ constexpr MemoryOpcodeInfo SMEM_OPCODE_LIST[] = {
     {0x09u, Opcode::S_BUFFER_LOAD_DWORDX2, 2, 32}, {0x0au, Opcode::S_BUFFER_LOAD_DWORDX4, 4, 32},
     {0x0bu, Opcode::S_BUFFER_LOAD_DWORDX8, 8, 32}, {0x0cu, Opcode::S_BUFFER_LOAD_DWORDX16, 16, 32},
     {0x20u, Opcode::S_DCACHE_INV, 0, 0},           {0x25u, Opcode::S_MEMREALTIME, 2, 32},
+    // gta6-prep: shader-alu. S_GL1_INV invalidates like BUFFER_GL1_INV; S_MEMTIME reads the
+    // clock S_MEMREALTIME reads; S_ATC_PROBE(_BUFFER) only primes address translation.
+    {0x1fu, Opcode::BUFFER_GL1_INV, 0, 0},         {0x24u, Opcode::S_MEMREALTIME, 2, 32},
+    {0x26u, Opcode::S_DCACHE_INV, 0, 0},           {0x27u, Opcode::S_DCACHE_INV, 0, 0},
 };
 
 constexpr MemoryOpcodeInfo MUBUF_OPCODE_LIST[] = {
@@ -287,12 +291,16 @@ void DecodeSmem(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 	inst.family      = Family::SMEM;
 	inst.opcode_id   = opcode;
 	const auto* info = Detail::FindOpcode(SMEM_OPS, opcode);
+	if (IsLegacyDecode() && (opcode == 0x1fu || opcode == 0x24u || opcode == 0x26u || opcode == 0x27u)) {
+		// gta6-prep: shader-alu. The SMEM opcodes DecodeLegacyInstruction() does not know.
+		info = nullptr;
+	}
 	ApplyMemoryInfo(inst, info);
 	SetRawWords(inst, code, word_index, 2);
 	if (inst.opcode == Opcode::UNSUPPORTED) {
 		SetUnsupported(inst, Family::SMEM, opcode, "SMEM opcode is not implemented");
 	}
-	if (inst.opcode == Opcode::S_DCACHE_INV) {
+	if (inst.opcode == Opcode::S_DCACHE_INV || inst.opcode == Opcode::BUFFER_GL1_INV) {
 		return;
 	}
 

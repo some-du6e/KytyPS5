@@ -398,9 +398,11 @@ void Translator::EmitVector(const Decoder::Instruction& inst) {
 		case O::V_PK_MAD_I16: return PackedInteger16Mad(inst, true);
 		case O::V_PK_MAD_U16: return PackedInteger16Mad(inst, false);
 		case O::V_PK_MUL_LO_U16: return PackedInteger16Binary(inst, IR::ValueOpcode::IMul32, false);
-		case O::V_PK_ADD_I16:
+		// The signed forms read sign-extended halves for their CLAMP (gta6-prep: shader-alu); the
+		// low 16 bits of the wrapped result do not depend on it.
+		case O::V_PK_ADD_I16: return PackedInteger16Binary(inst, IR::ValueOpcode::IAdd32, true);
 		case O::V_PK_ADD_U16: return PackedInteger16Binary(inst, IR::ValueOpcode::IAdd32, false);
-		case O::V_PK_SUB_I16:
+		case O::V_PK_SUB_I16: return PackedInteger16Binary(inst, IR::ValueOpcode::ISub32, true);
 		case O::V_PK_SUB_U16: return PackedInteger16Binary(inst, IR::ValueOpcode::ISub32, false);
 		case O::V_PK_MAX_I16: return PackedInteger16Binary(inst, IR::ValueOpcode::SMax32, true);
 		case O::V_PK_MIN_I16: return PackedInteger16Binary(inst, IR::ValueOpcode::SMin32, true);
@@ -614,6 +616,65 @@ void Translator::EmitVector(const Decoder::Instruction& inst) {
 			return Integer3(inst, IR::ValueOpcode::ShiftLeftLogical32,
 			                IR::ValueOpcode::BitwiseOr32);
 		case O::V_CNDMASK_B32: return V_CNDMASK_B32(inst);
+		// gta6-prep: shader-alu
+		case O::V_PERM_B32: return V_PERM_B32(inst);
+		case O::V_SWAP_B32: return V_SWAP_B32(inst);
+		case O::V_DOT2_F32_F16: return V_DOT2_F32_F16(inst);
+		case O::V_DOT2_I32_I16: return V_DOT_INTEGER(inst, 16u, true, false);
+		case O::V_DOT2_U32_U16: return V_DOT_INTEGER(inst, 16u, false, false);
+		case O::V_DOT4_I32_I8: return V_DOT_INTEGER(inst, 8u, true, false);
+		case O::V_DOT4_U32_U8: return V_DOT_INTEGER(inst, 8u, false, false);
+		case O::V_DOT8_I32_I4: return V_DOT_INTEGER(inst, 4u, true, false);
+		case O::V_DOT8_U32_U4: return V_DOT_INTEGER(inst, 4u, false, false);
+		case O::V_DOT4C_I32_I8: return V_DOT_INTEGER(inst, 8u, true, true);
+		case O::V_CMP_F_F16:
+		case O::V_CMPX_F_F16:
+		case O::V_CMPX_F_F32:
+		case O::V_CMPX_F_I32:
+		case O::V_CMPX_F_U32: return EmitCompareConstant(inst, false, false);
+		case O::V_CMP_TRU_F16:
+		case O::V_CMPX_TRU_F16:
+		case O::V_CMPX_TRU_F32:
+		case O::V_CMPX_T_I32:
+		case O::V_CMPX_T_U32: return EmitCompareConstant(inst, true, false);
+		case O::V_CMP_O_F16:
+		case O::V_CMPX_O_F16: return EmitFloatOrderedCompare(inst, true, IR::Type::F16);
+		case O::V_CMPX_U_F16: return EmitFloatOrderedCompare(inst, false, IR::Type::F16);
+		case O::V_CMPX_LG_F16: return EmitFloatCompare(inst, IR::ValueOpcode::FPOrdNotEqual32, true);
+		case O::V_CMPX_NGE_F16:
+			return EmitFloatCompare(inst, IR::ValueOpcode::FPUnordLessThan32, true);
+		case O::V_CMP_NLG_F16:
+		case O::V_CMPX_NLG_F16: return EmitFloatCompare(inst, IR::ValueOpcode::FPUnordEqual32, true);
+		case O::V_CMP_NLE_F16:
+			return EmitFloatCompare(inst, IR::ValueOpcode::FPUnordGreaterThan32, true);
+		case O::V_CMPX_LE_U16:
+			return EmitInteger16Compare(inst, IR::ValueOpcode::ULessThanEqual32, false);
+		case O::V_CMPX_GE_U16:
+			return EmitInteger16Compare(inst, IR::ValueOpcode::UGreaterThanEqual32, false);
+		case O::V_CMP_CLASS_F64:
+		case O::V_CMPX_CLASS_F64: return V_CMP_CLASS_F64(inst);
+		case O::V_DIV_SCALE_F32: return V_DIV_SCALE(inst, false);
+		case O::V_DIV_SCALE_F64: return V_DIV_SCALE(inst, true);
+		case O::V_DIV_FMAS_F32: return V_DIV_FMAS(inst, false);
+		case O::V_DIV_FMAS_F64: return V_DIV_FMAS(inst, true);
+		case O::V_DIV_FIXUP_F32: return V_DIV_FIXUP(inst, IR::Type::F32);
+		case O::V_DIV_FIXUP_F16: return V_DIV_FIXUP(inst, IR::Type::F16);
+		case O::V_DIV_FIXUP_F64: return V_DIV_FIXUP(inst, IR::Type::F64);
+		case O::V_MAD_I64_I32: return V_MAD_I64_I32(inst);
+		case O::V_MAD_U32_U16: return V_MAD_32_16(inst, false);
+		case O::V_MAD_I32_I16: return V_MAD_32_16(inst, true);
+		case O::V_ADD_NC_I32: return V_ADD_SUB_NC_I32(inst, false);
+		case O::V_SUB_NC_I32: return V_ADD_SUB_NC_I32(inst, true);
+		case O::V_LDEXP_F16: return V_LDEXP_F16(inst);
+		case O::V_CVT_PKNORM_I16_F16: return V_CVT_PKNORM_F16(inst, IR::ValueOpcode::PackSnorm2x16);
+		case O::V_CVT_PKNORM_U16_F16: return V_CVT_PKNORM_F16(inst, IR::ValueOpcode::PackUnorm2x16);
+		case O::V_SAT_PK_U8_I16: return V_SAT_PK_U8_I16(inst);
+		case O::V_CVT_NORM_I16_F16: return V_CVT_NORM_F16(inst, IR::ValueOpcode::PackSnorm2x16);
+		case O::V_CVT_NORM_U16_F16: return V_CVT_NORM_F16(inst, IR::ValueOpcode::PackUnorm2x16);
+		case O::V_SAD_U8: return V_SAD(inst, 8u, false, false);
+		case O::V_SAD_HI_U8: return V_SAD(inst, 8u, true, false);
+		case O::V_SAD_U16: return V_SAD(inst, 16u, false, false);
+		case O::V_MSAD_U8: return V_SAD(inst, 8u, false, true);
 		default: return FailMissingTranslation(inst);
 	}
 }

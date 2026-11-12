@@ -52,23 +52,41 @@ void Translator::PackedInteger16Shift(const Decoder::Instruction& inst, IR::Valu
 
 void Translator::PackedInteger16Binary(const Decoder::Instruction& inst, IR::ValueOpcode opcode,
                                        bool sign) {
+	// gta6-prep: shader-alu. CLAMP (V_PK_ADD/SUB_I16/U16, V_PK_MUL_LO_U16) saturates each half.
+	auto       destination = DestinationOperand(inst);
+	const bool clamp       = destination.clamp;
+	destination.clamp      = false;
 	const auto translate_lane = [&](bool high) {
-		const auto lhs = ReadU16LaneAsU32(inst.src0, high, sign);
-		const auto rhs = ReadU16LaneAsU32(inst.src1, high, sign);
-		return IR::U32(ir.Emit(opcode, {lhs, rhs}));
+		const auto lhs    = ReadU16LaneAsU32(inst.src0, high, sign);
+		const auto rhs    = ReadU16LaneAsU32(inst.src1, high, sign);
+		const auto result = IR::U32(ir.Emit(opcode, {lhs, rhs}));
+		return clamp ? SaturatePacked16(result, sign, opcode == IR::ValueOpcode::ISub32) : result;
 	};
-	WriteOperand(DestinationOperand(inst),
-	             PackU16Lanes(translate_lane(false), translate_lane(true)));
+	WriteOperand(destination, PackU16Lanes(translate_lane(false), translate_lane(true)));
 }
 
 void Translator::PackedInteger16Mad(const Decoder::Instruction& inst, bool sign) {
+	auto       destination = DestinationOperand(inst);
+	const bool clamp       = destination.clamp;
+	destination.clamp      = false;
 	const auto translate_lane = [&](bool high) {
-		const auto lhs = ReadU16LaneAsU32(inst.src0, high, false);
-		const auto rhs = ReadU16LaneAsU32(inst.src1, high, false);
-		return ir.IAdd(ir.IMul(lhs, rhs), ReadU16LaneAsU32(inst.src2, high, sign));
+		// The low 16 bits of the product do not depend on the extension; its CLAMP does.
+		const auto lhs    = ReadU16LaneAsU32(inst.src0, high, clamp && sign);
+		const auto rhs    = ReadU16LaneAsU32(inst.src1, high, clamp && sign);
+		const auto result = ir.IAdd(ir.IMul(lhs, rhs), ReadU16LaneAsU32(inst.src2, high, sign));
+		return clamp ? SaturatePacked16(result, sign, false) : result;
 	};
-	WriteOperand(DestinationOperand(inst),
-	             PackU16Lanes(translate_lane(false), translate_lane(true)));
+	WriteOperand(destination, PackU16Lanes(translate_lane(false), translate_lane(true)));
+}
+
+// gta6-prep: shader-alu. A 32-bit lane result of 16-bit operands saturated to the 16-bit range;
+// an unsigned difference can be negative.
+IR::U32 Translator::SaturatePacked16(IR::U32 value, bool sign, bool subtract) {
+	if (sign || !subtract) {
+		return Saturate16(value, sign);
+	}
+	const auto low = ir.Emit(IR::ValueOpcode::SMax32, {value, IR::Value(0u)});
+	return IR::U32(ir.Emit(IR::ValueOpcode::SMin32, {low, IR::Value(0xffffu)}));
 }
 
 IR::U1 Translator::U64MaskBinary(const Decoder::Instruction& inst, IR::ValueOpcode opcode,
@@ -511,6 +529,262 @@ void Translator::PackB16(const Decoder::Instruction& inst, bool high0, bool high
 	                             : ReadU32(inst.src1);
 	const auto result = PackU16Lanes(lo, hi);
 	WriteOperand(DestinationOperand(inst), result);
+}
+
+// gta6-prep: shader-alu
+
+// if SCC then D = S0 (S0 is SIMM16, sign extended, for S_CMOVK_I32). SCC is unchanged.
+void Translator::S_CMOV_B32(const Decoder::Instruction& inst) {
+	WriteOperand(DestinationOperand(inst),
+	             ir.Select(ir.GetScc(), ReadU32(inst.src0), ReadU32(inst.dst)));
+}
+
+// D.i64 = signext((S0.u64 >> S1[5:0]) & ((1 << S1[22:16]) - 1)) from bit S1[22:16] - 1; SCC =
+// D != 0. A width of 0 gives 0; widths past the remaining bits keep the field zero extended.
+void Translator::S_BFE_I64(const Decoder::Instruction& inst) {
+	const auto source = ReadU64(inst.src0);
+	const auto field  = ReadU32(inst.src1);
+	const auto offset =
+	    IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract, {field, IR::Value(0u), IR::Value(6u)}));
+	const auto raw_width =
+	    IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract, {field, IR::Value(16u), IR::Value(7u)}));
+	const auto width   = IR::U32(ir.Emit(IR::ValueOpcode::UMin32, {raw_width, IR::Value(64u)}));
+	const auto shifted = ir.Emit(IR::ValueOpcode::ShiftRightLogical64, {source, offset});
+	// 64 - width is 64 only for width 0, whose result the mask clears: shift by 63 instead.
+	const auto empty   = ir.IEqual(width, IR::U32(IR::Value(0u)));
+	const auto unused  = ir.Select(empty, IR::U32(IR::Value(63u)), ir.ISub(IR::U32(IR::Value(64u)), width));
+	const auto high    = ir.Emit(IR::ValueOpcode::ShiftLeftLogical64, {shifted, unused});
+	const auto extended = ir.Emit(IR::ValueOpcode::ShiftRightArithmetic64, {high, unused});
+	const auto keep     = ir.Select(empty, IR::U32(IR::Value(0u)), IR::U32(IR::Value(0xffffffffu)));
+	const auto result   = ir.Emit(IR::ValueOpcode::BitwiseAnd64, {extended, ir.ConstructU64(keep, keep)});
+	WriteOperand(DestinationOperand(inst), result);
+	ir.SetScc(IR::U1(ir.Emit(IR::ValueOpcode::INotEqual64, {result, IR::Value(uint64_t {0})})));
+}
+
+// D.byte[i] = select(S2.byte[i]) over the bytes of {S0, S1}: 0-7 a byte, 8-11 the sign of the
+// 16-bit halves (8: S1[15], 9: S1[31], 10: S0[15], 11: S0[31]) replicated, 12 zero, 13+ 0xff.
+void Translator::V_PERM_B32(const Decoder::Instruction& inst) {
+	const auto s0 = ReadU32(inst.src0);
+	const auto s1 = ReadU32(inst.src1);
+	const bool constant_selector =
+	    !runtime_word && (inst.src2.kind == Decoder::OperandKind::LiteralConstant ||
+	                      inst.src2.kind == Decoder::OperandKind::IntegerInlineConstant);
+	const auto u32 = [](uint32_t value) { return IR::U32(IR::Value(value)); };
+	IR::U32 result = u32(0u);
+	if (constant_selector) {
+		// The usual form: each byte is a shifted byte of a source or a constant.
+		uint32_t constant = 0;
+		for (uint32_t i = 0; i < 4u; i++) {
+			const auto sel = (inst.src2.value >> (i * 8u)) & 0xffu;
+			IR::U32    byte;
+			if (sel >= 12u) {
+				constant |= (sel == 12u ? 0u : 0xffu) << (i * 8u);
+				continue;
+			}
+			if (sel >= 8u) {
+				const auto word = (sel & 2u) != 0u ? s0 : s1;
+				byte            = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldSExtract,
+				                                  {word, IR::Value((sel & 1u) != 0u ? 31u : 15u), IR::Value(1u)}));
+				byte            = ir.BitwiseAnd(byte, u32(0xffu));
+			} else {
+				byte = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+				                       {(sel & 4u) != 0u ? s0 : s1, IR::Value((sel & 3u) * 8u), IR::Value(8u)}));
+			}
+			result = ir.BitwiseOr(result, ir.ShiftLeftLogical(byte, u32(i * 8u)));
+		}
+		if (constant != 0u) {
+			result = ir.BitwiseOr(result, u32(constant));
+		}
+		WriteOperand(DestinationOperand(inst), result);
+		return;
+	}
+	const auto s2 = ReadU32(inst.src2);
+	for (uint32_t i = 0; i < 4u; i++) {
+		const auto sel  = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+		                                  {s2, IR::Value(i * 8u), IR::Value(8u)}));
+		const auto bit  = [&](uint32_t mask) { return ir.INotEqual(ir.BitwiseAnd(sel, u32(mask)), u32(0u)); };
+		const auto word = ir.Select(bit(4u), s0, s1);
+		const auto byte = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+		                                  {word, ir.ShiftLeftLogical(ir.BitwiseAnd(sel, u32(3u)), u32(3u)),
+		                                   IR::Value(8u)}));
+		const auto sign_word = ir.Select(bit(2u), s0, s1);
+		const auto sign = ir.BitwiseAnd(
+		    IR::U32(ir.Emit(IR::ValueOpcode::BitFieldSExtract,
+		                    {sign_word, ir.Select(bit(1u), u32(31u), u32(15u)), IR::Value(1u)})),
+		    u32(0xffu));
+		const auto value = ir.Select(
+		    IR::U1(ir.Emit(IR::ValueOpcode::UGreaterThanEqual32, {sel, IR::Value(13u)})), u32(0xffu),
+		    ir.Select(ir.IEqual(sel, u32(12u)), u32(0u),
+		              ir.Select(IR::U1(ir.Emit(IR::ValueOpcode::UGreaterThanEqual32, {sel, IR::Value(8u)})),
+		                        sign, byte)));
+		result = ir.BitwiseOr(result, ir.ShiftLeftLogical(value, u32(i * 8u)));
+	}
+	WriteOperand(DestinationOperand(inst), result);
+}
+
+// tmp = D; D = S0; S0 = tmp, in the lanes of EXEC (both are VGPRs).
+void Translator::V_SWAP_B32(const Decoder::Instruction& inst) {
+	const auto destination = ReadU32(PlainOperand(inst.dst));
+	const auto source      = ReadU32(PlainOperand(inst.src0));
+	WriteOperand(PlainOperand(inst.dst), source);
+	WriteOperand(PlainOperand(inst.src0), destination);
+}
+
+// The sum of 32-bit terms: wrapped, or saturated to the signed / unsigned 32-bit range (the CLAMP
+// of the integer dot products), evaluated in 64 bits.
+IR::U32 Translator::IntegerSum(std::span<const IR::U32> terms, bool sign, bool saturate) {
+	EXIT_IF(terms.empty());
+	if (!saturate) {
+		auto sum = terms[0];
+		for (size_t i = 1; i < terms.size(); i++) {
+			sum = ir.IAdd(sum, terms[i]);
+		}
+		return sum;
+	}
+	IR::Value wide;
+	for (size_t i = 0; i < terms.size(); i++) {
+		const auto high = sign ? ir.ShiftRightArithmetic(terms[i], IR::U32(IR::Value(31u)))
+		                       : IR::U32(IR::Value(0u));
+		const auto term = IR::Value(ir.ConstructU64(terms[i], high));
+		wide            = i == 0 ? term : ir.Emit(IR::ValueOpcode::IAdd64, {wide, term});
+	}
+	return SaturateWide(wide, sign);
+}
+
+// A 64-bit integer saturated to the signed or unsigned 32-bit range.
+IR::U32 Translator::SaturateWide(IR::Value wide, bool sign) {
+	const auto low = ir.CompositeExtract(wide, 0);
+	if (sign) {
+		const auto below = IR::U1(ir.Emit(IR::ValueOpcode::SLessThan64,
+		                                  {wide, IR::Value(uint64_t {0xffffffff80000000ull})}));
+		const auto above = IR::U1(ir.Emit(IR::ValueOpcode::SLessThan64,
+		                                  {IR::Value(uint64_t {0x7fffffffull}), wide}));
+		return ir.Select(below, IR::U32(IR::Value(0x80000000u)),
+		                 ir.Select(above, IR::U32(IR::Value(0x7fffffffu)), low));
+	}
+	const auto above = IR::U1(
+	    ir.Emit(IR::ValueOpcode::ULessThan64, {IR::Value(uint64_t {0xffffffffull}), wide}));
+	return ir.Select(above, IR::U32(IR::Value(0xffffffffu)), low);
+}
+
+// D = sum over i of ext(S0.field[i]) * ext(S1.field[i]) + S2 (V_DOT4C_I32_I8: + D), with
+// `bits`-wide fields (16: the halves OP_SEL / OP_SEL_HI select), sign or zero extended.
+void Translator::V_DOT_INTEGER(const Decoder::Instruction& inst, uint32_t bits, bool sign,
+                               bool accumulate_destination) {
+	std::array<IR::U32, 9> terms;
+	uint32_t               count = 0;
+	if (bits == 16u) {
+		for (const bool high: {false, true}) {
+			terms[count++] = ir.IMul(ReadU16LaneAsU32(inst.src0, high, sign),
+			                         ReadU16LaneAsU32(inst.src1, high, sign));
+		}
+	} else {
+		const auto lhs     = ReadU32(inst.src0);
+		const auto rhs     = ReadU32(inst.src1);
+		const auto extract = sign ? IR::ValueOpcode::BitFieldSExtract : IR::ValueOpcode::BitFieldUExtract;
+		for (uint32_t offset = 0; offset < 32u; offset += bits) {
+			const auto a   = IR::U32(ir.Emit(extract, {lhs, IR::Value(offset), IR::Value(bits)}));
+			const auto b   = IR::U32(ir.Emit(extract, {rhs, IR::Value(offset), IR::Value(bits)}));
+			terms[count++] = ir.IMul(a, b);
+		}
+	}
+	terms[count++] = accumulate_destination ? ReadU32(PlainOperand(inst.dst)) : ReadU32(inst.src2);
+	auto destination  = DestinationOperand(inst);
+	const bool clamp  = destination.clamp;
+	destination.clamp = false;
+	WriteOperand(destination, IntegerSum(std::span(terms).first(count), sign, clamp));
+}
+
+// {SDST, D.i64} = sext(S0.i32) * sext(S1.i32) + S2.i64, SDST the sign of the exact 65-bit sum.
+// The product stays in words as V_MAD_U64_U32's does.
+void Translator::V_MAD_I64_I32(const Decoder::Instruction& inst) {
+	const auto lhs     = ReadU32(inst.src0);
+	const auto rhs     = ReadU32(inst.src1);
+	const auto product = ir.ConstructU64(ir.IMul(lhs, rhs),
+	                                     IR::U32(ir.Emit(IR::ValueOpcode::SMulHi, {lhs, rhs})));
+	// A signed 64-bit literal is sign extended.
+	const auto addend = inst.src2.kind == Decoder::OperandKind::LiteralConstant
+	                        ? ir.ConstructU64(ReadU32(inst.src2),
+	                                          ir.ShiftRightArithmetic(ReadU32(inst.src2), IR::U32(IR::Value(31u))))
+	                        : ReadU64(inst.src2);
+	const auto result = IR::U64(ir.Emit(IR::ValueOpcode::IAdd64, {product, addend}));
+	WriteOperand(DestinationOperand(inst), result);
+	if (inst.dst2.kind != Decoder::OperandKind::Null &&
+	    inst.dst2.kind != Decoder::OperandKind::Unknown) {
+		const auto r = ir.CompositeExtract(result, 1);
+		const auto p = ir.CompositeExtract(product, 1);
+		const auto a = ir.CompositeExtract(addend, 1);
+		// Signed overflow flips the sign of the wrapped sum.
+		const auto overflow = ir.BitwiseAnd(ir.BitwiseXor(r, p), ir.BitwiseXor(r, a));
+		const auto sign     = ir.ShiftRightLogical(ir.BitwiseXor(r, overflow), IR::U32(IR::Value(31u)));
+		WriteVectorMask(inst.dst2, ir.INotEqual(sign, IR::U32(IR::Value(0u))));
+	}
+}
+
+// D.u32 = S0.u16 * S1.u16 + S2.u32 (V_MAD_I32_I16: signed), halves by OP_SEL; CLAMP saturates.
+void Translator::V_MAD_32_16(const Decoder::Instruction& inst, bool sign) {
+	const std::array terms {ir.IMul(ReadU16AsU32(inst.src0, sign), ReadU16AsU32(inst.src1, sign)),
+	                        ReadU32(inst.src2)};
+	auto       destination = DestinationOperand(inst);
+	const bool clamp       = destination.clamp;
+	destination.clamp      = false;
+	WriteOperand(destination, IntegerSum(terms, sign, clamp));
+}
+
+// D.i32 = S0.i32 +- S1.i32; CLAMP saturates to the signed range.
+void Translator::V_ADD_SUB_NC_I32(const Decoder::Instruction& inst, bool subtract) {
+	const auto lhs         = ReadU32(inst.src0);
+	const auto rhs         = ReadU32(inst.src1);
+	auto       destination = DestinationOperand(inst);
+	if (!destination.clamp) {
+		WriteOperand(destination, subtract ? ir.ISub(lhs, rhs) : ir.IAdd(lhs, rhs));
+		return;
+	}
+	destination.clamp = false;
+	const auto wide   = [&](IR::U32 value) {
+		return IR::Value(ir.ConstructU64(value, ir.ShiftRightArithmetic(value, IR::U32(IR::Value(31u)))));
+	};
+	const auto sum = ir.Emit(subtract ? IR::ValueOpcode::ISub64 : IR::ValueOpcode::IAdd64,
+	                         {wide(lhs), wide(rhs)});
+	WriteOperand(destination, SaturateWide(sum, true));
+}
+
+// D.u32 = sum over the bytes (16-bit halves) of |S0.field - S1.field| + S2.u32; V_SAD_HI_U8
+// shifts the sum left by 16 before the add, V_MSAD_U8 skips the bytes where S1 is zero.
+void Translator::V_SAD(const Decoder::Instruction& inst, uint32_t bits, bool high, bool masked) {
+	const auto lhs = ReadU32(inst.src0);
+	const auto rhs = ReadU32(inst.src1);
+	IR::U32    sum(IR::Value(0u));
+	for (uint32_t offset = 0; offset < 32u; offset += bits) {
+		const auto a = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+		                               {lhs, IR::Value(offset), IR::Value(bits)}));
+		const auto b = IR::U32(ir.Emit(IR::ValueOpcode::BitFieldUExtract,
+		                               {rhs, IR::Value(offset), IR::Value(bits)}));
+		auto difference = ir.ISub(IR::U32(ir.Emit(IR::ValueOpcode::UMax32, {a, b})),
+		                          IR::U32(ir.Emit(IR::ValueOpcode::UMin32, {a, b})));
+		if (masked) {
+			difference = ir.Select(ir.IEqual(b, IR::U32(IR::Value(0u))), IR::U32(IR::Value(0u)),
+			                       difference);
+		}
+		sum = ir.IAdd(sum, difference);
+	}
+	if (high) {
+		sum = ir.ShiftLeftLogical(sum, IR::U32(IR::Value(16u)));
+	}
+	WriteOperand(DestinationOperand(inst), ir.IAdd(sum, ReadU32(inst.src2)));
+}
+
+// D.u16 = {sat_u8(S0.i16[1]), sat_u8(S0.i16[0])}.
+void Translator::V_SAT_PK_U8_I16(const Decoder::Instruction& inst) {
+	const auto source = ReadU32(inst.src0);
+	const auto byte   = [&](uint32_t offset) {
+		const auto half = ir.Emit(IR::ValueOpcode::BitFieldSExtract,
+		                          {source, IR::Value(offset), IR::Value(16u)});
+		const auto low  = ir.Emit(IR::ValueOpcode::SMax32, {half, IR::Value(0u)});
+		return IR::U32(ir.Emit(IR::ValueOpcode::SMin32, {low, IR::Value(255u)}));
+	};
+	const auto result = ir.BitwiseOr(byte(0u), ir.ShiftLeftLogical(byte(16u), IR::U32(IR::Value(8u))));
+	Write16Bits(DestinationOperand(inst), result);
 }
 
 } // namespace Libs::Graphics::ShaderRecompiler::Frontend

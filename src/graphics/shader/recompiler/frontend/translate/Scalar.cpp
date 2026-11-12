@@ -1,5 +1,10 @@
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 
+#include "common/hackNotice.h"
+
+#include <atomic>
+#include <fmt/format.h>
+
 namespace Libs::Graphics::ShaderRecompiler::Frontend {
 
 void Translator::EmitScalar(const Decoder::Instruction& inst) {
@@ -18,14 +23,44 @@ void Translator::EmitScalar(const Decoder::Instruction& inst) {
 		case O::S_CSELECT_B32: S_CSELECT_B32(inst); return;
 		case O::S_CSELECT_B64: ScalarSelect64(inst, inst.src1); return;
 		case O::S_CMOV_B64: ScalarSelect64(inst, inst.dst); return;
+		case O::S_CMOV_B32:
+		case O::S_CMOVK_I32: S_CMOV_B32(inst); return;
+		case O::S_BFE_I64: return S_BFE_I64(inst);
 		case O::S_GETREG_B32:
-			if (!graphics_compute || (inst.src0.value != 0x1818u && inst.src0.value != 0x0a18u))
-				EXIT("unsupported S_GETREG_B32 at pc 0x%08x: selector=0x%04x graphics_compute=%u",
-				     inst.pc, inst.src0.value, static_cast<unsigned>(graphics_compute));
+			if (!graphics_compute || (inst.src0.value != 0x1818u && inst.src0.value != 0x0a18u)) {
+				return FailTranslation(
+				    inst, fmt::format("unsupported S_GETREG_B32 at pc 0x{:08x}: selector=0x{:04x} "
+				                      "graphics_compute={}",
+				                      inst.pc, inst.src0.value, static_cast<unsigned>(graphics_compute)));
+			}
 			// HW_ID2 identifies graphics compute as QUEUE=6, ME=0.
 			WriteOperand(inst.dst, IR::Value(inst.src0.value == 0x1818u ? 6u : 0u));
 			return;
 		case O::S_SETREG_B32: EmitControlNop(); return;
+		// gta6-prep: shader-alu. MODE writes keep the stage's float mode (as S_SETREG_B32 does);
+		// the others are hints, markers and cache maintenance without an emulated effect.
+		case O::S_SETREG_IMM32_B32:
+		case O::S_VERSION:
+		case O::S_ICACHE_INV:
+		case O::S_WAKEUP:
+		case O::S_INCPERFLEVEL:
+		case O::S_DECPERFLEVEL:
+		case O::S_WAIT_IDLE:
+		case O::S_TTRACEDATA_IMM:
+		case O::S_CODE_END: EmitControlNop(); return;
+		case O::S_ROUND_MODE:
+		case O::S_DENORM_MODE: {
+			// The SPIR-V keeps the stage's rounding and denormal modes (RNE; the float_mode
+			// denormals); LLVM switches f32 denormals on around precise divisions.
+			static std::atomic<bool> reported {false};
+			if (!reported.exchange(true, std::memory_order_relaxed)) {
+				Common::HackNotice::Report("shader rounding and denormal mode changes ignored",
+				                           "Translator::EmitScalar", program.shader_hash, inst.pc,
+				                           Decoder::InstructionToString(inst));
+			}
+			EmitControlNop();
+			return;
+		}
 		case O::S_WAITCNT_VSCNT: S_WAITCNT_VSCNT(inst); return;
 		case O::S_WAITCNT: return;
 
@@ -47,6 +82,44 @@ void Translator::EmitScalar(const Decoder::Instruction& inst) {
 		case O::S_ORN2_SAVEEXEC_B64:
 			S_SAVEEXEC(inst, IR::ValueOpcode::LogicalOr, true, false, true);
 			return;
+		// gta6-prep: shader-alu. D = EXEC (WREXEC: the new EXEC); EXEC = f(S0, EXEC);
+		// SCC = EXEC != 0.
+		case O::S_OR_SAVEEXEC_B32:
+		case O::S_OR_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalOr, false, false,
+			                  inst.opcode == O::S_OR_SAVEEXEC_B64);
+		case O::S_XOR_SAVEEXEC_B32:
+		case O::S_XOR_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalXor, false, false,
+			                  inst.opcode == O::S_XOR_SAVEEXEC_B64);
+		case O::S_ANDN2_SAVEEXEC_B32: // S0 & ~EXEC
+		case O::S_ANDN2_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalAnd, true, false,
+			                  inst.opcode == O::S_ANDN2_SAVEEXEC_B64);
+		case O::S_NAND_SAVEEXEC_B32:
+		case O::S_NAND_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalAnd, false, false,
+			                  inst.opcode == O::S_NAND_SAVEEXEC_B64, true);
+		case O::S_NOR_SAVEEXEC_B32:
+		case O::S_NOR_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalOr, false, false,
+			                  inst.opcode == O::S_NOR_SAVEEXEC_B64, true);
+		case O::S_XNOR_SAVEEXEC_B32:
+		case O::S_XNOR_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalXor, false, false,
+			                  inst.opcode == O::S_XNOR_SAVEEXEC_B64, true);
+		case O::S_ORN1_SAVEEXEC_B32: // ~S0 | EXEC
+		case O::S_ORN1_SAVEEXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalOr, false, true,
+			                  inst.opcode == O::S_ORN1_SAVEEXEC_B64);
+		case O::S_ANDN1_WREXEC_B32: // EXEC = ~S0 & EXEC; D = EXEC
+		case O::S_ANDN1_WREXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalAnd, false, true,
+			                  inst.opcode == O::S_ANDN1_WREXEC_B64, false, true);
+		case O::S_ANDN2_WREXEC_B32: // EXEC = S0 & ~EXEC; D = EXEC
+		case O::S_ANDN2_WREXEC_B64:
+			return S_SAVEEXEC(inst, IR::ValueOpcode::LogicalAnd, true, false,
+			                  inst.opcode == O::S_ANDN2_WREXEC_B64, false, true);
 		case O::S_ADD_U32: ADD_U32(inst, false, false); return;
 		case O::S_ADDC_U32: ADD_U32(inst, false, true); return;
 		case O::S_SUB_U32: SUB_U32(inst, false, false); return;

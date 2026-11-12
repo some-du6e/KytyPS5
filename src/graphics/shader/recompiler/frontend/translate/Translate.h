@@ -5,6 +5,7 @@
 #include "graphics/shader/recompiler/ir/ShaderIR.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace Libs::Graphics::ShaderRecompiler::Frontend {
@@ -21,6 +22,12 @@ struct EmbeddedFetchPlan {
 	int32_t                        instance_offset_sgpr = -1;
 };
 
+// gta6-prep: shader-alu. The first instruction that has no translation.
+struct TranslationFailure {
+	uint32_t    pc = UINT32_MAX;
+	std::string text;
+};
+
 struct TranslateOptions {
 	ShaderType                    stage               = ShaderType::Unknown;
 	uint32_t                      wave_size           = 64;
@@ -29,6 +36,9 @@ struct TranslateOptions {
 	uint32_t                      user_data_count     = 64;
 	ShaderStageInputInfo          input_info;
 	const EmbeddedFetchPlan*      embedded_fetch = nullptr;
+	// gta6-prep: shader-alu. Not null: an instruction without a translation is recorded here and
+	// translation stops, instead of closing the emulator. The program is then incomplete.
+	TranslationFailure*           failure        = nullptr;
 };
 
 IR::Program TranslateProgram(const Decoder::Program& decoded, const CFG::Graph& cfg,

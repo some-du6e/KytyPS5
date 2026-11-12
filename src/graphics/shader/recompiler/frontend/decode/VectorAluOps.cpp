@@ -78,6 +78,9 @@ constexpr Vop2OpcodeInfo VOP2_OPCODE_LIST[] = {
     {0x39u, Opcode::V_MAX_F16, Vop2SdwaProfile::Float16},
     {0x3au, Opcode::V_MIN_F16, Vop2SdwaProfile::Float16},
     {0x3cu, Opcode::V_PK_FMAC_F16},
+    // gta6-prep: shader-alu
+    {0x0du, Opcode::V_DOT4C_I32_I8},
+    {0x3bu, Opcode::V_LDEXP_F16},
 };
 
 constexpr auto VOP2_OPS = Detail::MakeOpcodeTable<0x40>(VOP2_OPCODE_LIST);
@@ -146,6 +149,11 @@ constexpr OpcodeMap VOP1_OPCODE_LIST[] = {
     {0x5fu, Opcode::V_FRACT_F16},
     {0x60u, Opcode::V_SIN_F16},
     {0x61u, Opcode::V_COS_F16},
+    // gta6-prep: shader-alu
+    {0x65u, Opcode::V_SWAP_B32},
+    {0x62u, Opcode::V_SAT_PK_U8_I16},
+    {0x63u, Opcode::V_CVT_NORM_I16_F16},
+    {0x64u, Opcode::V_CVT_NORM_U16_F16},
 };
 
 constexpr auto VOP1_OPS = Detail::MakeOpcodeTable<0x100>(VOP1_OPCODE_LIST);
@@ -244,6 +252,18 @@ constexpr VopcOpcodeInfo VOPC_OPCODE_LIST[] = {
     {0xdeu, Opcode::V_CMPX_GE_F16},        {0xfbu, Opcode::V_CMPX_NGT_F16},
     {0xfcu, Opcode::V_CMPX_NLE_F16},       {0xfdu, Opcode::V_CMPX_NEQ_F16},
     {0xfeu, Opcode::V_CMPX_NLT_F16},
+    // gta6-prep: shader-alu
+    {0xc8u, Opcode::V_CMP_F_F16},          {0xcfu, Opcode::V_CMP_O_F16},
+    {0xeau, Opcode::V_CMP_NLG_F16},        {0xecu, Opcode::V_CMP_NLE_F16},
+    {0xefu, Opcode::V_CMP_TRU_F16},        {0xd8u, Opcode::V_CMPX_F_F16},
+    {0xddu, Opcode::V_CMPX_LG_F16},        {0xdfu, Opcode::V_CMPX_O_F16},
+    {0xf8u, Opcode::V_CMPX_U_F16},         {0xf9u, Opcode::V_CMPX_NGE_F16},
+    {0xfau, Opcode::V_CMPX_NLG_F16},       {0xffu, Opcode::V_CMPX_TRU_F16},
+    {0x10u, Opcode::V_CMPX_F_F32},         {0x1fu, Opcode::V_CMPX_TRU_F32},
+    {0x90u, Opcode::V_CMPX_F_I32},         {0x97u, Opcode::V_CMPX_T_I32},
+    {0xd0u, Opcode::V_CMPX_F_U32},         {0xd7u, Opcode::V_CMPX_T_U32},
+    {0xbbu, Opcode::V_CMPX_LE_U16, false}, {0xbeu, Opcode::V_CMPX_GE_U16, false},
+    {0xa8u, Opcode::V_CMP_CLASS_F64, false}, {0xb8u, Opcode::V_CMPX_CLASS_F64, false},
 };
 
 constexpr auto VOPC_OPS = Detail::MakeOpcodeTable<0x100>(VOPC_OPCODE_LIST);
@@ -338,6 +358,26 @@ constexpr OpcodeMap VOP3_OPCODE_LIST[] = {
     {0x35au, Opcode::V_INTERP_P2_F16},
     {0x36du, Opcode::V_ADD3_U32},
     {0x14fu, Opcode::V_ALIGNBYTE_B32},
+    // gta6-prep: shader-alu
+    {0x344u, Opcode::V_PERM_B32},
+    {0x15fu, Opcode::V_DIV_FIXUP_F32},
+    {0x160u, Opcode::V_DIV_FIXUP_F64},
+    {0x16du, Opcode::V_DIV_SCALE_F32},
+    {0x16eu, Opcode::V_DIV_SCALE_F64},
+    {0x16fu, Opcode::V_DIV_FMAS_F32},
+    {0x170u, Opcode::V_DIV_FMAS_F64},
+    {0x35fu, Opcode::V_DIV_FIXUP_F16},
+    {0x177u, Opcode::V_MAD_I64_I32},
+    {0x312u, Opcode::V_CVT_PKNORM_I16_F16},
+    {0x313u, Opcode::V_CVT_PKNORM_U16_F16},
+    {0x373u, Opcode::V_MAD_U32_U16},
+    {0x375u, Opcode::V_MAD_I32_I16},
+    {0x376u, Opcode::V_SUB_NC_I32},
+    {0x37fu, Opcode::V_ADD_NC_I32},
+    {0x15au, Opcode::V_SAD_U8},
+    {0x15bu, Opcode::V_SAD_HI_U8},
+    {0x15cu, Opcode::V_SAD_U16},
+    {0x171u, Opcode::V_MSAD_U8},
 };
 
 constexpr auto VOP3_OPS = Detail::MakeOpcodeTable<0x400>(VOP3_OPCODE_LIST);
@@ -354,6 +394,11 @@ constexpr OpcodeMap VOP3P_OPCODE_LIST[] = {
     {0x10u, Opcode::V_PK_MUL_F16},     {0x11u, Opcode::V_PK_MIN_F16},
     {0x12u, Opcode::V_PK_MAX_F16},     {0x20u, Opcode::V_FMA_F32},
     {0x21u, Opcode::V_MAD_MIXLO_F16},  {0x22u, Opcode::V_MAD_MIXHI_F16},
+    // gta6-prep: shader-alu
+    {0x13u, Opcode::V_DOT2_F32_F16},   {0x14u, Opcode::V_DOT2_I32_I16},
+    {0x15u, Opcode::V_DOT2_U32_U16},   {0x16u, Opcode::V_DOT4_I32_I8},
+    {0x17u, Opcode::V_DOT4_U32_U8},    {0x18u, Opcode::V_DOT8_I32_I4},
+    {0x19u, Opcode::V_DOT8_U32_U4},
 };
 
 constexpr auto VOP3P_OPS = Detail::MakeOpcodeTable<0x80>(VOP3P_OPCODE_LIST);
@@ -363,8 +408,29 @@ bool IsVop2LiteralMadOpcode(uint32_t opcode) {
 }
 
 bool IsUnsupportedVop3EncodedVop2Alias(uint32_t opcode) {
-	return IsVop2LiteralMadOpcode(opcode) || opcode == 0x02u || opcode == 0x39u ||
-	       opcode == 0x3au;
+	// gta6-prep: shader-alu. V_MAX_F16 / V_MIN_F16 (0x39 / 0x3a) have VOP3 forms, which
+	// DecodeLegacyInstruction() does not know.
+	return IsVop2LiteralMadOpcode(opcode) || opcode == 0x02u ||
+	       (IsLegacyDecode() && (opcode == 0x39u || opcode == 0x3au));
+}
+
+// gta6-prep: shader-alu. The VOP2 F16 arithmetic whose VOP3 forms take ABS/NEG on their two
+// sources and CLAMP/OMOD on the result (Float16Binary / Float16Ternary apply them).
+// DecodeLegacyInstruction() rejects their modifiers.
+bool IsVop3F16BinaryWithModifiers(Opcode opcode) {
+	if (IsLegacyDecode()) {
+		return false;
+	}
+	switch (opcode) {
+		case Opcode::V_ADD_F16:
+		case Opcode::V_SUB_F16:
+		case Opcode::V_SUBREV_F16:
+		case Opcode::V_MUL_F16:
+		case Opcode::V_MAX_F16:
+		case Opcode::V_MIN_F16:
+		case Opcode::V_FMAC_F16: return true;
+		default: return false;
+	}
 }
 
 bool IsVop3EncodedVopc(uint32_t opcode) {
@@ -417,8 +483,24 @@ bool IsVop3BCarryOutOpcode(Opcode opcode) {
 	       opcode == Opcode::V_SUBREV_I32;
 }
 
+// Three sources and a VOP3B SDST: V_MAD_U64_U32, and (gta6-prep: shader-alu) V_DIV_SCALE_*.
 bool IsVop3BMadU64Opcode(Opcode opcode) {
-	return opcode == Opcode::V_MAD_U64_U32;
+	return opcode == Opcode::V_MAD_U64_U32 || opcode == Opcode::V_DIV_SCALE_F32 ||
+	       opcode == Opcode::V_DIV_SCALE_F64 || opcode == Opcode::V_MAD_I64_I32;
+}
+
+// gta6-prep: shader-alu. Native VOP3 integer opcodes with 16-bit sources (OP_SEL[1:0] picks their
+// halves) and a 32-bit result, and those with only a CLAMP (signed or unsigned saturation).
+bool IsVop3Mad32From16(Opcode opcode) {
+	return opcode == Opcode::V_MAD_U32_U16 || opcode == Opcode::V_MAD_I32_I16;
+}
+
+bool IsVop3PknormF16(Opcode opcode) {
+	return opcode == Opcode::V_CVT_PKNORM_I16_F16 || opcode == Opcode::V_CVT_PKNORM_U16_F16;
+}
+
+bool IsVop3BDivScale(Opcode opcode) {
+	return opcode == Opcode::V_DIV_SCALE_F32 || opcode == Opcode::V_DIV_SCALE_F64;
 }
 
 bool IsPermlaneOpcode(Opcode opcode) {
@@ -427,7 +509,8 @@ bool IsPermlaneOpcode(Opcode opcode) {
 
 bool IsNativeVop3F16TernaryOpcode(Opcode opcode) {
 	return opcode == Opcode::V_MIN3_F16 || opcode == Opcode::V_MAX3_F16 ||
-	       opcode == Opcode::V_MED3_F16 || opcode == Opcode::V_FMA_F16;
+	       opcode == Opcode::V_MED3_F16 || opcode == Opcode::V_FMA_F16 ||
+	       opcode == Opcode::V_DIV_FIXUP_F16; // gta6-prep: shader-alu
 }
 
 bool IsNativeVop3B16TernaryOpcode(Opcode opcode) {
@@ -510,7 +593,10 @@ bool IsVop1FloatSourceOpcode(Opcode opcode) {
 		case Opcode::V_SIN_F16:
 		case Opcode::V_COS_F16:
 		case Opcode::V_SIN_F32:
-		case Opcode::V_COS_F32: return true;
+		case Opcode::V_COS_F32:
+		// gta6-prep: shader-alu
+		case Opcode::V_CVT_NORM_I16_F16:
+		case Opcode::V_CVT_NORM_U16_F16: return true;
 		default: return false;
 	}
 }
@@ -924,7 +1010,24 @@ bool IsVopcFloatCompareOpcode(Opcode opcode) {
 		case Opcode::V_CMP_CLASS_F32:
 		case Opcode::V_CMP_CLASS_F16:
 		case Opcode::V_CMPX_CLASS_F16:
-		case Opcode::V_CMPX_CLASS_F32: return true;
+		case Opcode::V_CMPX_CLASS_F32:
+		// gta6-prep: shader-alu
+		case Opcode::V_CMP_F_F16:
+		case Opcode::V_CMP_O_F16:
+		case Opcode::V_CMP_NLG_F16:
+		case Opcode::V_CMP_NLE_F16:
+		case Opcode::V_CMP_TRU_F16:
+		case Opcode::V_CMPX_F_F16:
+		case Opcode::V_CMPX_LG_F16:
+		case Opcode::V_CMPX_O_F16:
+		case Opcode::V_CMPX_U_F16:
+		case Opcode::V_CMPX_NGE_F16:
+		case Opcode::V_CMPX_NLG_F16:
+		case Opcode::V_CMPX_TRU_F16:
+		case Opcode::V_CMPX_F_F32:
+		case Opcode::V_CMPX_TRU_F32:
+		case Opcode::V_CMP_CLASS_F64:
+		case Opcode::V_CMPX_CLASS_F64: return true;
 		default: return false;
 	}
 }
@@ -1141,7 +1244,8 @@ bool SupportsVopcSdwa(Opcode opcode) {
 	// SDWA operand handling is not implemented for 64-bit compares.
 	return opcode != Opcode::UNSUPPORTED &&
 	       (opcode < Opcode::V_CMP_F_F64 || opcode > Opcode::V_CMPX_TRU_F64) &&
-	       (opcode < Opcode::V_CMP_F_I64 || opcode > Opcode::V_CMPX_T_U64);
+	       (opcode < Opcode::V_CMP_F_I64 || opcode > Opcode::V_CMPX_T_U64) &&
+	       opcode != Opcode::V_CMP_CLASS_F64 && opcode != Opcode::V_CMPX_CLASS_F64;
 }
 
 void DecodeVopcSdwa(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index,
@@ -1234,7 +1338,12 @@ uint32_t NativeVop3SourceCount(Opcode opcode) {
 		case Opcode::V_CVT_PKNORM_I16_F32:
 		case Opcode::V_CVT_PKNORM_U16_F32:
 		case Opcode::V_CVT_PK_U16_U32:
-		case Opcode::V_CVT_PK_I16_I32: return 2;
+		case Opcode::V_CVT_PK_I16_I32:
+		// gta6-prep: shader-alu
+		case Opcode::V_ADD_NC_I32:
+		case Opcode::V_SUB_NC_I32:
+		case Opcode::V_CVT_PKNORM_I16_F16:
+		case Opcode::V_CVT_PKNORM_U16_F16: return 2;
 		default: return 3;
 	}
 }
@@ -1268,6 +1377,58 @@ bool IsPackedVop3p(Opcode opcode) {
 		case Opcode::V_PK_MIN_F16:
 		case Opcode::V_PK_MAX_F16:
 		case Opcode::V_PK_FMA_F16: return true;
+		default: return false;
+	}
+}
+
+// gta6-prep: shader-alu
+bool IsVop3pDot(Opcode opcode) {
+	switch (opcode) {
+		case Opcode::V_DOT2_F32_F16:
+		case Opcode::V_DOT2_I32_I16:
+		case Opcode::V_DOT2_U32_U16:
+		case Opcode::V_DOT4_I32_I8:
+		case Opcode::V_DOT4_U32_U8:
+		case Opcode::V_DOT8_I32_I4:
+		case Opcode::V_DOT8_U32_U4: return true;
+		default: return false;
+	}
+}
+
+// Why the source modifiers of a dot product are not implemented, or null. OP_SEL / OP_SEL_HI
+// pick the halves of the 16-bit dot products; NEG / NEG_HI negate the F16 halves of
+// V_DOT2_F32_F16 and NEG its F32 accumulator.
+const char* UnsupportedVop3pDotModifiers(Opcode opcode, uint32_t op_sel, uint32_t neg,
+                                         uint32_t neg_hi) {
+	switch (opcode) {
+		case Opcode::V_DOT2_F32_F16:
+			return (neg_hi & 0x4u) != 0u ? "V_DOT2_F32_F16 NEG_HI on the accumulator is not implemented"
+			                             : nullptr;
+		case Opcode::V_DOT2_I32_I16:
+		case Opcode::V_DOT2_U32_U16:
+			return neg != 0u || neg_hi != 0u ? "VOP3P integer dot product NEG is not implemented"
+			                                 : nullptr;
+		default:
+			return op_sel != 0u || neg != 0u || neg_hi != 0u
+			           ? "VOP3P packed-byte dot product OP_SEL/NEG is not implemented"
+			           : nullptr;
+	}
+}
+
+// gta6-prep: shader-alu. Packed 16-bit integer opcodes whose CLAMP saturates each half
+// (DecodeLegacyInstruction() rejects it).
+bool IsPackedIntegerClampVop3p(Opcode opcode) {
+	if (IsLegacyDecode()) {
+		return false;
+	}
+	switch (opcode) {
+		case Opcode::V_PK_ADD_I16:
+		case Opcode::V_PK_SUB_I16:
+		case Opcode::V_PK_ADD_U16:
+		case Opcode::V_PK_SUB_U16:
+		case Opcode::V_PK_MAD_I16:
+		case Opcode::V_PK_MAD_U16:
+		case Opcode::V_PK_MUL_LO_U16: return true;
 		default: return false;
 	}
 }
@@ -1339,7 +1500,7 @@ bool SupportsNativeVop3SourceModifiers(Opcode opcode) {
 	if (IsVopcFloatCompareOpcode(opcode)) {
 		return true;
 	}
-	if (IsNativeVop3F16TernaryOpcode(opcode)) {
+	if (IsNativeVop3F16TernaryOpcode(opcode) || IsVop3F16BinaryWithModifiers(opcode)) {
 		return true;
 	}
 	switch (opcode) {
@@ -1370,13 +1531,19 @@ bool SupportsNativeVop3SourceModifiers(Opcode opcode) {
 		case Opcode::V_MIN3_F32:
 		case Opcode::V_MAX3_F32:
 		case Opcode::V_MED3_F32:
-		case Opcode::V_LDEXP_F32: return true;
+		case Opcode::V_LDEXP_F32:
+		// gta6-prep: shader-alu
+		case Opcode::V_DIV_FMAS_F32:
+		case Opcode::V_DIV_FMAS_F64:
+		case Opcode::V_DIV_FIXUP_F32:
+		case Opcode::V_DIV_FIXUP_F64:
+		case Opcode::V_LDEXP_F16: return true;
 		default: return false;
 	}
 }
 
 bool SupportsNativeVop3ResultModifiers(Opcode opcode) {
-	if (IsVop1FloatResultOpcode(opcode)) {
+	if (IsVop1FloatResultOpcode(opcode) || IsVop3F16BinaryWithModifiers(opcode)) {
 		return true;
 	}
 	switch (opcode) {
@@ -1399,7 +1566,12 @@ bool SupportsNativeVop3ResultModifiers(Opcode opcode) {
 		case Opcode::V_LDEXP_F32:
 		case Opcode::V_MIN3_F32:
 		case Opcode::V_MAX3_F32:
-		case Opcode::V_MED3_F32: return true;
+		case Opcode::V_MED3_F32:
+		// gta6-prep: shader-alu
+		case Opcode::V_DIV_FMAS_F32:
+		case Opcode::V_DIV_FIXUP_F32:
+		case Opcode::V_DIV_FIXUP_F16:
+		case Opcode::V_LDEXP_F16: return true;
 		default: return false;
 	}
 }
@@ -1409,7 +1581,10 @@ bool SupportsNativeVop3Clamp(Opcode opcode) {
 	       opcode == Opcode::V_MAD_I16 || opcode == Opcode::V_MAD_U16 ||
 	       opcode == Opcode::V_MIN3_I16 || opcode == Opcode::V_MAX3_I16 ||
 	       opcode == Opcode::V_MAX3_U16 || opcode == Opcode::V_MED3_U16 ||
-	       opcode == Opcode::V_MUL_HI_I32_I24 || opcode == Opcode::V_MUL_HI_U32_U24;
+	       opcode == Opcode::V_MUL_HI_I32_I24 || opcode == Opcode::V_MUL_HI_U32_U24 ||
+	       // gta6-prep: shader-alu
+	       IsVop3Mad32From16(opcode) || opcode == Opcode::V_ADD_NC_I32 ||
+	       opcode == Opcode::V_SUB_NC_I32;
 }
 
 bool HasUnsupportedNativeVop3Modifiers(Opcode opcode, bool permlane, bool mad_mix,
@@ -1436,6 +1611,25 @@ bool HasUnsupportedNativeVop3Modifiers(Opcode opcode, bool permlane, bool mad_mi
 	if (IsNativeVop3B16BinaryOpcode(opcode)) {
 		return abs != 0u || clamp != 0u || omod != 0u || neg != 0u;
 	}
+	// gta6-prep: shader-alu
+	if (IsVop3Mad32From16(opcode)) {
+		return abs != 0u || (op_sel & ~0x3u) != 0u || omod != 0u || neg != 0u;
+	}
+	if (opcode == Opcode::V_ADD_NC_I32 || opcode == Opcode::V_SUB_NC_I32) {
+		return abs != 0u || op_sel != 0u || omod != 0u || neg != 0u;
+	}
+	if (IsVop3PknormF16(opcode)) {
+		return (abs & ~0x3u) != 0u || (neg & ~0x3u) != 0u || (op_sel & ~0x3u) != 0u ||
+		       clamp != 0u || omod != 0u;
+	}
+	if (opcode == Opcode::V_LDEXP_F16) {
+		// ABS/NEG on the F16 source, not on the exponent; OP_SEL is not implemented.
+		return (abs & ~1u) != 0u || op_sel != 0u || (neg & ~1u) != 0u;
+	}
+	if (IsVop3BDivScale(opcode)) {
+		// gta6-prep: shader-alu. VOP3B: NEG applies to the three sources.
+		return clamp != 0u || omod != 0u;
+	}
 	if (carry_in_out || scalar_dst) {
 		return clamp != 0u || omod != 0u || neg != 0u;
 	}
@@ -1461,6 +1655,11 @@ bool HasUnsupportedNativeVop3Modifiers(Opcode opcode, bool permlane, bool mad_mi
 			return (abs & ~0x3u) != 0u || (op_sel & ~0x3u) != 0u || clamp != 0u || omod != 0u ||
 			       (neg & ~0x3u) != 0u;
 		default: break;
+	}
+	if (IsVop3F16BinaryWithModifiers(opcode)) {
+		// Two sources (V_FMAC_F16 accumulates into D, which takes no modifier); OP_SEL is not
+		// implemented for them.
+		return (abs & ~0x3u) != 0u || (neg & ~0x3u) != 0u || op_sel != 0u;
 	}
 	if (source_modifiers) {
 		return op_sel != 0u || (omod != 0u && !result_modifiers) ||
@@ -1560,7 +1759,24 @@ bool IsVopcCompareExec(Opcode opcode) {
 		case Opcode::V_CMPX_NGT_F16:
 		case Opcode::V_CMPX_NLE_F16:
 		case Opcode::V_CMPX_NEQ_F16:
-		case Opcode::V_CMPX_NLT_F16: return true;
+		case Opcode::V_CMPX_NLT_F16:
+		// gta6-prep: shader-alu
+		case Opcode::V_CMPX_F_F16:
+		case Opcode::V_CMPX_LG_F16:
+		case Opcode::V_CMPX_O_F16:
+		case Opcode::V_CMPX_U_F16:
+		case Opcode::V_CMPX_NGE_F16:
+		case Opcode::V_CMPX_NLG_F16:
+		case Opcode::V_CMPX_TRU_F16:
+		case Opcode::V_CMPX_F_F32:
+		case Opcode::V_CMPX_TRU_F32:
+		case Opcode::V_CMPX_F_I32:
+		case Opcode::V_CMPX_T_I32:
+		case Opcode::V_CMPX_F_U32:
+		case Opcode::V_CMPX_T_U32:
+		case Opcode::V_CMPX_LE_U16:
+		case Opcode::V_CMPX_GE_U16:
+		case Opcode::V_CMPX_CLASS_F64: return true;
 		default: return false;
 	}
 }
@@ -1630,6 +1846,11 @@ void DecodeVop1(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 	if (inst.opcode == Opcode::V_NOP) {
 		inst.dst.kind  = OperandKind::Null;
 		inst.src_count = 0;
+		return;
+	}
+	if (inst.opcode == Opcode::V_SWAP_B32 && src0 < 256u) {
+		// gta6-prep: shader-alu. Both operands are written: SRC0 is a VGPR, without SDWA or DPP.
+		SetUnsupported(inst, Family::VOP1, opcode, "V_SWAP_B32 source is not a VGPR");
 		return;
 	}
 	switch (src0) {
@@ -1733,7 +1954,8 @@ void DecodeVop3(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		SetUnsupported(inst, Family::VOP3, opcode, reason);
 		return;
 	}
-	if (inst.opcode == Opcode::UNSUPPORTED) {
+	if (inst.opcode == Opcode::UNSUPPORTED || inst.opcode == Opcode::V_SWAP_B32) {
+		// V_SWAP_B32 has no VOP3 encoding.
 		SetUnsupported(inst, Family::VOP3, opcode, "VOP3 opcode is not implemented");
 		return;
 	}
@@ -1803,6 +2025,9 @@ void DecodeVop3(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		DecodeScalarSource(src1, pc, inst.src1);
 		DecodeScalarSource(src2, pc, inst.src2);
 		inst.src_count = 3;
+		if (IsVop3BDivScale(inst.opcode)) {
+			ApplyNativeVop3SourceModifiers(inst, 0u, neg);
+		}
 		ReadLiteralOperands(code, word_index, inst);
 		return;
 	}
@@ -1835,6 +2060,14 @@ void DecodeVop3(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		ApplyNativeVop3B16BinaryModifiers(inst, op_sel);
 	} else if (pack_b32_f16) {
 		ApplyNativeVop3PackB32F16Modifiers(inst, op_sel, abs, neg);
+	} else if (IsVop3Mad32From16(inst.opcode)) {
+		// gta6-prep: shader-alu. 16-bit S0/S1 halves; the addend and the result are 32-bit.
+		inst.src0.op_sel = (op_sel & 0x1u) != 0u;
+		inst.src1.op_sel = (op_sel & 0x2u) != 0u;
+	} else if (IsVop3PknormF16(inst.opcode)) {
+		ApplyNativeVop3SourceModifiers(inst, abs, neg);
+		inst.src0.op_sel = (op_sel & 0x1u) != 0u;
+		inst.src1.op_sel = (op_sel & 0x2u) != 0u;
 	} else if (native_source_modifiers) {
 		ApplyNativeVop3SourceModifiers(inst, abs, neg);
 	}
@@ -1879,6 +2112,15 @@ void DecodeVop3p(uint32_t pc, std::span<const uint32_t> code, uint32_t word_inde
 	} else if (IsMadMixF16(inst.opcode)) {
 		inst.dst.clamp = clamp != 0u;
 	} else if (IsPackedVop3p(inst.opcode)) {
+		inst.dst.clamp = clamp != 0u;
+	} else if (IsPackedIntegerClampVop3p(inst.opcode)) {
+		inst.dst.clamp = clamp != 0u;
+	} else if (IsVop3pDot(inst.opcode)) {
+		// gta6-prep: shader-alu. CLAMP saturates the sum (to [0, 1] for V_DOT2_F32_F16).
+		if (const auto* reason = UnsupportedVop3pDotModifiers(inst.opcode, op_sel, neg, neg_hi)) {
+			SetUnsupported(inst, Family::VOP3P, opcode, reason);
+			return;
+		}
 		inst.dst.clamp = clamp != 0u;
 	} else if (clamp != 0u) {
 		SetUnsupported(inst, Family::VOP3P, opcode, "VOP3P integer clamp is not implemented");

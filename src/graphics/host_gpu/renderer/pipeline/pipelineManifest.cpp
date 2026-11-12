@@ -2114,13 +2114,20 @@ void PipelineCache::BuildManifestModule(uint32_t index, std::span<const uint32_t
 	std::optional<ShaderModule>                       module;
 	// A record the translation or the driver cannot handle (it came from another computer) is
 	// dropped, as are those of programs that link the functions they call from guest memory.
+	// gta6-prep: shader-alu. So are those skipped for an unsupported instruction: the draw that
+	// needs the program reports it.
+	options.skip_unsupported_instructions = !Config::StrictShadersEnabled();
 	const auto what = fmt::format("module {:016x}", record.code_hash);
 	RunDroppable(state.dropped, record.from_assets, record.code_hash, 0, what, [&] {
 		auto source = ShaderRecompiler::PrepareShaderSource(code, options);
-		if (!source.calls.empty() || source.unsupported_call_pc != UINT32_MAX) {
+		if (!source.calls.empty() || source.unsupported_call_pc != UINT32_MAX ||
+		    (source.unsupported_pc != UINT32_MAX && options.skip_unsupported_instructions)) {
 			return;
 		}
 		auto translated = ShaderRecompiler::TranslateProgram(source.decoded, options);
+		if (translated.failure_pc != UINT32_MAX) {
+			return;
+		}
 		// A record from a build that found other resources in the program: no dispatch or draw
 		// of this build asks for its specialization.
 		if (!ShaderRecompiler::IR::ResourceSpecializationFits(translated.program,

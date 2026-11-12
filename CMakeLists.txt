@@ -577,6 +577,8 @@ clang_tidy_check(kyty_emulator_objects "" "${check_headers}" "${inc_headers}")
 include_what_you_use(kyty_emulator_objects "${inc_headers}")
 
 add_kyty_full_emulator_test(shader_cfg_tests "${KYTY_TESTS_DIR}/shaderCfgTests.cpp")
+# gta6-prep: shader-alu. RDNA2 ALU decode, translation and unsupported-instruction skips; no GPU.
+add_kyty_full_emulator_test(shader_alu_decode_tests "${KYTY_TESTS_DIR}/ShaderAluDecodeTests.cpp")
 
 add_executable(scalar_provenance_tests EXCLUDE_FROM_ALL
 	"${KYTY_TESTS_DIR}/ScalarProvenanceTests.cpp"
@@ -1102,6 +1104,10 @@ if(BUILD_TESTING)
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --htile-clear-only)
 	add_test(NAME buffer_cache_ranges
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --buffer-cache-range-only)
+	# gta6-prep: shader-alu
+	add_test(NAME shader_alu_decode COMMAND $<TARGET_FILE:shader_alu_decode_tests>)
+	add_test(NAME shader_recompiler_gta6_alu
+		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --gta6-alu-only)
 
 	# gta6-prep: vram
 	add_test(NAME vram_heap_limit
@@ -1166,6 +1172,7 @@ if(BUILD_TESTING)
 		save_data_dialog_tests
 		http_uri_parse_tests
 		rtc_tests
+		shader_alu_decode_tests
 	)
 endif()
 

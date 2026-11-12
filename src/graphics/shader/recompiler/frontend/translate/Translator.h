@@ -6,6 +6,7 @@
 #include "graphics/shader/recompiler/ir/IREmitter.h"
 
 #include <array>
+#include <span>
 #include <utility>
 
 namespace Libs::Graphics::ShaderRecompiler::Frontend {
@@ -42,6 +43,8 @@ public:
 	void TranslateInstruction(const Decoder::Instruction& inst);
 	// The runtime word an expanded instruction's literal stands for (Decoder::RuntimeLiteral).
 	std::optional<uint32_t> runtime_word;
+	// gta6-prep: shader-alu. See TranslateOptions::failure; null: a missing translation is fatal.
+	TranslationFailure* failure = nullptr;
 	void TranslateEmbeddedFetch(const Decoder::Instruction& inst, uint32_t attribute,
 	                            uint32_t component_count, const ShaderBufferResource& resource);
 	void AddBranchCondition(const CFG::Graph& graph, const CFG::BasicBlock& source,
@@ -244,8 +247,11 @@ private:
 	void    PackB16(const Decoder::Instruction& inst, bool high0, bool high1);
 
 	void S_SUBVECTOR_LOOP(const Decoder::Instruction& inst, bool begin);
+	// `operation` is LogicalAnd, LogicalOr or LogicalXor. negate_result and write_new
+	// (gta6-prep: shader-alu): EXEC = ~op(...) (NAND/NOR/XNOR); D = the new EXEC (WREXEC).
 	void S_SAVEEXEC(const Decoder::Instruction& inst, IR::ValueOpcode operation, bool negate_exec,
-	                bool negate_source, bool write_64);
+	                bool negate_source, bool write_64, bool negate_result = false,
+	                bool write_new = false);
 	void ADD_U32(const Decoder::Instruction& inst, bool vector, bool use_carry_in);
 	void SUB_U32(const Decoder::Instruction& inst, bool vector, bool reverse);
 	void SUBB_U32(const Decoder::Instruction& inst, bool vector, bool reverse);
@@ -277,12 +283,39 @@ private:
 	void V_INTERP_MOV_F32(const Decoder::Instruction& inst);
 	void EXP(const Decoder::Instruction& inst);
 
+	// gta6-prep: shader-alu
+	void S_CMOV_B32(const Decoder::Instruction& inst);
+	void S_BFE_I64(const Decoder::Instruction& inst);
+	void V_PERM_B32(const Decoder::Instruction& inst);
+	void V_SWAP_B32(const Decoder::Instruction& inst);
+	IR::U32 IntegerSum(std::span<const IR::U32> terms, bool sign, bool saturate);
+	void    V_DOT2_F32_F16(const Decoder::Instruction& inst);
+	void    V_DOT_INTEGER(const Decoder::Instruction& inst, uint32_t bits, bool sign,
+	                      bool accumulate_destination);
+	void    V_CMP_CLASS_F64(const Decoder::Instruction& inst);
+	void    V_DIV_SCALE(const Decoder::Instruction& inst, bool f64);
+	void    V_DIV_FMAS(const Decoder::Instruction& inst, bool f64);
+	void    V_DIV_FIXUP(const Decoder::Instruction& inst, IR::Type type);
+	IR::U32 SaturateWide(IR::Value wide, bool sign);
+	void    V_MAD_I64_I32(const Decoder::Instruction& inst);
+	void    V_MAD_32_16(const Decoder::Instruction& inst, bool sign);
+	void    V_ADD_SUB_NC_I32(const Decoder::Instruction& inst, bool subtract);
+	void    V_LDEXP_F16(const Decoder::Instruction& inst);
+	void    V_CVT_PKNORM_F16(const Decoder::Instruction& inst, IR::ValueOpcode opcode);
+	void    V_SAT_PK_U8_I16(const Decoder::Instruction& inst);
+	void    V_CVT_NORM_F16(const Decoder::Instruction& inst, IR::ValueOpcode opcode);
+	void    V_SAD(const Decoder::Instruction& inst, uint32_t bits, bool high, bool masked);
+	IR::U32 SaturatePacked16(IR::U32 value, bool sign, bool subtract);
+
 	void EmitScalar(const Decoder::Instruction& inst);
 	void EmitVector(const Decoder::Instruction& inst);
 	void EmitInterpolation(const Decoder::Instruction& inst);
 	void EmitMemory(const Decoder::Instruction& inst);
 	void EmitRayTracing(const Decoder::Instruction& inst);
-	static void FailMissingTranslation(const Decoder::Instruction& inst);
+	void FailMissingTranslation(const Decoder::Instruction& inst);
+	// gta6-prep: shader-alu. Records `inst` as the program's translation failure, or exits with
+	// `fatal` when the translator has no failure sink.
+	void FailTranslation(const Decoder::Instruction& inst, const std::string& fatal);
 
 	IR::Program&      program;
 	IR::IREmitter     ir;

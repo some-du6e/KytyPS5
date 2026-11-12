@@ -772,6 +772,95 @@ enum class Opcode {
 	RT_COMMIT,
 	RT_EXIT,
 	RT_ALPHA,
+
+	// gta6-prep: shader-alu
+	S_CMOV_B32,
+	S_CMOVK_I32,
+	S_BFE_I64,
+	V_PERM_B32,
+	V_SWAP_B32,
+	S_OR_SAVEEXEC_B32,
+	S_XOR_SAVEEXEC_B32,
+	S_ANDN2_SAVEEXEC_B32,
+	S_NAND_SAVEEXEC_B32,
+	S_NOR_SAVEEXEC_B32,
+	S_XNOR_SAVEEXEC_B32,
+	S_ORN1_SAVEEXEC_B32,
+	S_ANDN1_WREXEC_B32,
+	S_ANDN2_WREXEC_B32,
+	S_OR_SAVEEXEC_B64,
+	S_XOR_SAVEEXEC_B64,
+	S_ANDN2_SAVEEXEC_B64,
+	S_NAND_SAVEEXEC_B64,
+	S_NOR_SAVEEXEC_B64,
+	S_XNOR_SAVEEXEC_B64,
+	S_ORN1_SAVEEXEC_B64,
+	S_ANDN1_WREXEC_B64,
+	S_ANDN2_WREXEC_B64,
+	V_DOT2_F32_F16,
+	V_DOT2_I32_I16,
+	V_DOT2_U32_U16,
+	V_DOT4_I32_I8,
+	V_DOT4_U32_U8,
+	V_DOT8_I32_I4,
+	V_DOT8_U32_U4,
+	V_DOT4C_I32_I8,
+	S_SETREG_IMM32_B32,
+	S_VERSION,
+	S_ROUND_MODE,
+	S_DENORM_MODE,
+	S_ICACHE_INV,
+	S_WAKEUP,
+	S_INCPERFLEVEL,
+	S_DECPERFLEVEL,
+	S_WAIT_IDLE,
+	S_TTRACEDATA_IMM,
+	S_CODE_END,
+	V_CMP_F_F16,
+	V_CMP_O_F16,
+	V_CMP_NLG_F16,
+	V_CMP_NLE_F16,
+	V_CMP_TRU_F16,
+	V_CMPX_F_F16,
+	V_CMPX_LG_F16,
+	V_CMPX_O_F16,
+	V_CMPX_U_F16,
+	V_CMPX_NGE_F16,
+	V_CMPX_NLG_F16,
+	V_CMPX_TRU_F16,
+	V_CMPX_F_F32,
+	V_CMPX_TRU_F32,
+	V_CMPX_F_I32,
+	V_CMPX_T_I32,
+	V_CMPX_F_U32,
+	V_CMPX_T_U32,
+	V_CMPX_LE_U16,
+	V_CMPX_GE_U16,
+	V_CMP_CLASS_F64,
+	V_CMPX_CLASS_F64,
+	V_DIV_SCALE_F32,
+	V_DIV_SCALE_F64,
+	V_DIV_FMAS_F32,
+	V_DIV_FMAS_F64,
+	V_DIV_FIXUP_F32,
+	V_DIV_FIXUP_F16,
+	V_DIV_FIXUP_F64,
+	V_MAD_I64_I32,
+	V_MAD_U32_U16,
+	V_MAD_I32_I16,
+	V_ADD_NC_I32,
+	V_SUB_NC_I32,
+	V_LDEXP_F16,
+	V_CVT_PKNORM_I16_F16,
+	V_CVT_PKNORM_U16_F16,
+	V_SAT_PK_U8_I16,
+	V_CVT_NORM_I16_F16,
+	V_CVT_NORM_U16_F16,
+	V_SAD_U8,
+	V_SAD_HI_U8,
+	V_SAD_U16,
+	V_MSAD_U8,
+
 	COUNT
 };
 
@@ -967,6 +1056,23 @@ Program DecodeFrontProgram(std::span<const uint32_t> front);
 // long_branches (ascending pc) give the targets of the branches an expansion could not encode.
 void DecodeProgram(std::span<const uint32_t> code, Program& program,
                    std::span<const LongBranch> long_branches = {});
+// gta6-prep: shader-alu. The first instruction of the program the decoder does not support, or
+// null.
+const Instruction* FindUnsupportedInstruction(const Program& program);
+// gta6-prep: shader-alu. DecodeInstruction() as the decoder was before the opcodes after
+// RT_ALPHA: those opcodes, and the forms of older opcodes it accepts since (SMEM 0x1f/0x24/0x26/
+// 0x27, VOP3 V_MAX_F16/V_MIN_F16, VOP3 F16 arithmetic with ABS/NEG/CLAMP/OMOD, CLAMP on packed
+// 16-bit integer opcodes), decode as the unsupported instructions they were then, with the
+// lengths they had then. Psr::CodeFingerprint() decodes so, as its code tables were generated
+// with that decoder.
+void DecodeLegacyInstruction(std::span<const uint32_t> code, uint32_t word_index, Instruction& inst);
+// Whether this thread is in DecodeLegacyInstruction() (for the decoders of the families).
+bool IsLegacyDecode();
+// Whether `opcode` is one the decoder learned after the Psr code tables were generated (the
+// opcodes after RT_ALPHA).
+constexpr bool IsPostLegacyOpcode(Opcode opcode) {
+	return opcode > Opcode::RT_ALPHA && opcode < Opcode::COUNT;
+}
 bool IsConditionalBranch(Opcode opcode);
 bool IsDirectBranch(Opcode opcode);
 bool IsDsWriteOpcode(Opcode opcode);

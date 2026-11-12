@@ -211,6 +211,11 @@ struct ConfigOptions {
 	VideoOutResolution          video_out_resolution = VideoOutResolution::Auto;
 	// --skip-unsupported-image-atomics: see SkipUnsupportedImageAtomics().
 	bool                        skip_unsupported_image_atomics = false;
+
+	// gta6-prep: shader-alu
+	// --strict-shaders: an unsupported shader instruction closes the emulator (upstream
+	// behaviour) instead of skipping the draws and dispatches of its program.
+	bool strict_shaders = false;
 };
 
 void Load(const ConfigOptions& cfg);
@@ -410,6 +415,11 @@ VideoOutResolution GetVideoOutResolution();
 // image atomics are skipped with a notice instead of closing the emulator. Off without a loaded
 // configuration.
 bool SkipUnsupportedImageAtomics();
+
+// gta6-prep: shader-alu
+// --strict-shaders. Off (default, and without a loaded configuration): a program with an
+// instruction the shader recompiler does not support is skipped and reported once.
+bool StrictShadersEnabled();
 
 } // namespace Config
 

@@ -28,7 +28,8 @@ constexpr OpcodeMap SOP2_OPCODE_LIST[] = {
     {0x24u, Opcode::S_BFM_B32},
     {0x25u, Opcode::S_BFM_B64},         {0x26u, Opcode::S_MUL_I32},
     {0x27u, Opcode::S_BFE_U32},         {0x28u, Opcode::S_BFE_I32},
-    {0x29u, Opcode::S_BFE_U64},         {0x2cu, Opcode::S_ABSDIFF_I32},
+    {0x29u, Opcode::S_BFE_U64},         {0x2au, Opcode::S_BFE_I64},
+    {0x2cu, Opcode::S_ABSDIFF_I32},
     {0x2eu, Opcode::S_LSHL1_ADD_U32},
     {0x2fu, Opcode::S_LSHL2_ADD_U32},   {0x30u, Opcode::S_LSHL3_ADD_U32},
     {0x31u, Opcode::S_LSHL4_ADD_U32},   {0x32u, Opcode::S_PACK_LL_B32_B16},
@@ -40,6 +41,7 @@ constexpr OpcodeMap SOP2_OPCODE_LIST[] = {
 constexpr OpcodeMap SOP1_OPCODE_LIST[] = {
     {0x03u, Opcode::S_MOV_B32},
     {0x04u, Opcode::S_MOV_B64},
+    {0x05u, Opcode::S_CMOV_B32},
     {0x06u, Opcode::S_CMOV_B64},
     {0x07u, Opcode::S_NOT_B32},
     {0x08u, Opcode::S_NOT_B64},
@@ -78,6 +80,25 @@ constexpr OpcodeMap SOP1_OPCODE_LIST[] = {
     {0x3cu, Opcode::S_AND_SAVEEXEC_B32},
     {0x40u, Opcode::S_ORN2_SAVEEXEC_B32},
     {0x44u, Opcode::S_ANDN1_SAVEEXEC_B32},
+    // gta6-prep: shader-alu
+    {0x25u, Opcode::S_OR_SAVEEXEC_B64},
+    {0x26u, Opcode::S_XOR_SAVEEXEC_B64},
+    {0x27u, Opcode::S_ANDN2_SAVEEXEC_B64},
+    {0x29u, Opcode::S_NAND_SAVEEXEC_B64},
+    {0x2au, Opcode::S_NOR_SAVEEXEC_B64},
+    {0x2bu, Opcode::S_XNOR_SAVEEXEC_B64},
+    {0x38u, Opcode::S_ORN1_SAVEEXEC_B64},
+    {0x39u, Opcode::S_ANDN1_WREXEC_B64},
+    {0x3au, Opcode::S_ANDN2_WREXEC_B64},
+    {0x3du, Opcode::S_OR_SAVEEXEC_B32},
+    {0x3eu, Opcode::S_XOR_SAVEEXEC_B32},
+    {0x3fu, Opcode::S_ANDN2_SAVEEXEC_B32},
+    {0x41u, Opcode::S_NAND_SAVEEXEC_B32},
+    {0x42u, Opcode::S_NOR_SAVEEXEC_B32},
+    {0x43u, Opcode::S_XNOR_SAVEEXEC_B32},
+    {0x45u, Opcode::S_ORN1_SAVEEXEC_B32},
+    {0x46u, Opcode::S_ANDN1_WREXEC_B32},
+    {0x47u, Opcode::S_ANDN2_WREXEC_B32},
 };
 
 constexpr OpcodeMap SOPC_OPCODE_LIST[] = {
@@ -91,7 +112,7 @@ constexpr OpcodeMap SOPC_OPCODE_LIST[] = {
 };
 
 constexpr OpcodeMap SOPK_OPCODE_LIST[] = {
-    {0x00u, Opcode::S_MOVK_I32},   {0x03u, Opcode::S_CMP_EQ_I32}, {0x04u, Opcode::S_CMP_LG_I32},
+    {0x00u, Opcode::S_MOVK_I32},   {0x02u, Opcode::S_CMOVK_I32},  {0x03u, Opcode::S_CMP_EQ_I32}, {0x04u, Opcode::S_CMP_LG_I32},
     {0x05u, Opcode::S_CMP_GT_I32}, {0x06u, Opcode::S_CMP_GE_I32}, {0x07u, Opcode::S_CMP_LT_I32},
     {0x08u, Opcode::S_CMP_LE_I32}, {0x09u, Opcode::S_CMP_EQ_U32}, {0x0au, Opcode::S_CMP_LG_U32},
     {0x0bu, Opcode::S_CMP_GT_U32}, {0x0cu, Opcode::S_CMP_GE_U32}, {0x0du, Opcode::S_CMP_LT_U32},
@@ -99,6 +120,8 @@ constexpr OpcodeMap SOPK_OPCODE_LIST[] = {
     {0x12u, Opcode::S_GETREG_B32}, {0x13u, Opcode::S_SETREG_B32}, {0x17u, Opcode::S_WAITCNT_VSCNT}, {0x18u, Opcode::S_WAITCNT},
     {0x19u, Opcode::S_WAITCNT},    {0x1au, Opcode::S_WAITCNT},
     {0x1bu, Opcode::S_SUBVECTOR_LOOP_BEGIN}, {0x1cu, Opcode::S_SUBVECTOR_LOOP_END},
+    // gta6-prep: shader-alu
+    {0x01u, Opcode::S_VERSION},    {0x15u, Opcode::S_SETREG_IMM32_B32},
 };
 
 constexpr OpcodeMap SOPP_OPCODE_LIST[] = {
@@ -126,6 +149,16 @@ constexpr OpcodeMap SOPP_OPCODE_LIST[] = {
     {0x20u, Opcode::S_INST_PREFETCH},
     {0x21u, Opcode::S_CLAUSE},
     {0x23u, Opcode::S_WAITCNT_DEPCTR},
+    // gta6-prep: shader-alu
+    {0x03u, Opcode::S_WAKEUP},
+    {0x13u, Opcode::S_ICACHE_INV},
+    {0x14u, Opcode::S_INCPERFLEVEL},
+    {0x15u, Opcode::S_DECPERFLEVEL},
+    {0x1fu, Opcode::S_CODE_END},
+    {0x22u, Opcode::S_WAIT_IDLE},
+    {0x24u, Opcode::S_ROUND_MODE},
+    {0x25u, Opcode::S_DENORM_MODE},
+    {0x28u, Opcode::S_TTRACEDATA_IMM},
 };
 
 constexpr auto SOP1_OPS = Detail::MakeOpcodeTable<0x100>(SOP1_OPCODE_LIST);
@@ -182,6 +215,15 @@ void DecodeSop1(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		case Opcode::S_QUADMASK_B64:
 		case Opcode::S_ANDN1_SAVEEXEC_B64:
 		case Opcode::S_BITREPLICATE_B64_B32:
+		case Opcode::S_OR_SAVEEXEC_B64:
+		case Opcode::S_XOR_SAVEEXEC_B64:
+		case Opcode::S_ANDN2_SAVEEXEC_B64:
+		case Opcode::S_NAND_SAVEEXEC_B64:
+		case Opcode::S_NOR_SAVEEXEC_B64:
+		case Opcode::S_XNOR_SAVEEXEC_B64:
+		case Opcode::S_ORN1_SAVEEXEC_B64:
+		case Opcode::S_ANDN1_WREXEC_B64:
+		case Opcode::S_ANDN2_WREXEC_B64:
 			inst.data_dwords = 2u;
 			break;
 		case Opcode::S_GETPC_B64:
@@ -225,7 +267,8 @@ void DecodeSop2(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 
 	DecodeScalarDestination(sdst, pc, inst.dst);
 	DecodeBinarySources(pc, code, word_index, inst, ssrc0, ssrc1);
-	if (opcode == 0x0bu || (opcode >= 0x0fu && opcode <= 0x25u && (opcode & 1u)) || opcode == 0x29u)
+	if (opcode == 0x0bu || (opcode >= 0x0fu && opcode <= 0x25u && (opcode & 1u)) || opcode == 0x29u ||
+	    opcode == 0x2au)
 		inst.data_dwords = 2u;
 }
 
@@ -255,6 +298,7 @@ void DecodeSopk(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 
 	switch (inst.opcode) {
 		case Opcode::S_GETREG_B32:
+		case Opcode::S_CMOVK_I32:
 		case Opcode::S_MOVK_I32: DecodeScalarDestination(sdst, pc, inst.dst); return;
 		case Opcode::S_SUBVECTOR_LOOP_BEGIN:
 		case Opcode::S_SUBVECTOR_LOOP_END:
@@ -284,6 +328,24 @@ void DecodeSopk(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 			inst.src1.signed_val = static_cast<int32_t>(imm);
 			inst.src_count       = 2;
 			DecodeScalarSource(sdst, pc, inst.src0);
+			return;
+		// gta6-prep: shader-alu
+		case Opcode::S_SETREG_IMM32_B32:
+			// The data is the 32-bit literal after the instruction; SIMM16 names the register.
+			SetRawWords(inst, code, word_index, 2);
+			inst.dst.kind        = OperandKind::Null;
+			inst.src1.kind       = OperandKind::LiteralConstant;
+			inst.src1.value      = word & 0xffffu;
+			inst.src1.signed_val = static_cast<int32_t>(imm);
+			inst.src0            = {};
+			inst.src0.kind       = OperandKind::LiteralConstant;
+			inst.src0.value      = code[word_index + 1u];
+			inst.src0.signed_val = static_cast<int32_t>(inst.src0.value);
+			inst.src_count       = 2;
+			return;
+		case Opcode::S_VERSION:
+			// Only a marker for the hardware version the code was compiled for.
+			inst.dst.kind = OperandKind::Null;
 			return;
 		default: break;
 	}

@@ -14,6 +14,14 @@
 namespace Libs::Graphics::ShaderRecompiler::Decoder {
 namespace {
 
+// gta6-prep: shader-alu
+// Set when an operand code of the instruction being decoded names no register or constant the
+// decoder knows: DecodeInstruction then reports the instruction as unsupported, so the program
+// can be skipped (or rejected by the CFG under --strict-shaders) instead of the decoder exiting.
+thread_local const char* g_operand_failure = nullptr;
+// Set inside DecodeLegacyInstruction().
+thread_local bool g_legacy_decode = false;
+
 bool HasLiteral(const Instruction& inst) {
 	return inst.src0.kind == OperandKind::LiteralConstant ||
 	       inst.src1.kind == OperandKind::LiteralConstant ||
@@ -248,7 +256,13 @@ void DecodeScalarSource(uint32_t code, uint32_t pc, Operand& operand) {
 		case 252u: operand.kind = OperandKind::ExecZ; return;
 		case 253u: operand.kind = OperandKind::Scc; return;
 		case 255u: operand.kind = OperandKind::LiteralConstant; return;
-		default: EXIT("unsupported scalar source operand 0x%08x at pc 0x%08x", code, pc);
+		default:
+			(void)pc;
+			operand.kind = OperandKind::Null;
+			if (g_operand_failure == nullptr) {
+				g_operand_failure = "scalar source operand code is not supported";
+			}
+			return;
 	}
 }
 
@@ -268,7 +282,13 @@ void DecodeScalarDestination(uint32_t code, uint32_t pc, Operand& operand) {
 		case 125u: operand.kind = OperandKind::Null; return;
 		case 126u: operand.kind = OperandKind::ExecLo; return;
 		case 127u: operand.kind = OperandKind::ExecHi; return;
-		default: EXIT("unsupported scalar destination operand 0x%08x at pc 0x%08x", code, pc);
+		default:
+			(void)pc;
+			operand.kind = OperandKind::Null;
+			if (g_operand_failure == nullptr) {
+				g_operand_failure = "scalar destination operand code is not supported";
+			}
+			return;
 	}
 }
 
@@ -340,7 +360,9 @@ Family GetInstructionFamily(uint32_t word) {
 	}
 }
 
-void DecodeInstruction(std::span<const uint32_t> code, uint32_t word_index, Instruction& inst) {
+namespace {
+
+void DecodeFamily(std::span<const uint32_t> code, uint32_t word_index, Instruction& inst) {
 	const uint32_t pc = word_index * sizeof(uint32_t);
 	switch (GetInstructionFamily(code[word_index])) {
 		case Family::SOP1: DecodeSop1(pc, code, word_index, inst); return;
@@ -362,8 +384,45 @@ void DecodeInstruction(std::span<const uint32_t> code, uint32_t word_index, Inst
 		case Family::MIMG: DecodeMimg(pc, code, word_index, inst); return;
 		case Family::EXP: DecodeExp(pc, code, word_index, inst); return;
 		default:
-			EXIT("unknown RDNA2 instruction family at pc 0x%08x, raw=0x%08x", pc, code[word_index]);
+			// gta6-prep: shader-alu. One word: the length of an unknown encoding is not known.
+			inst.pc = pc;
+			SetRawWords(inst, code, word_index, 1);
+			SetUnsupported(inst, Family::Unknown, code[word_index] >> 26u,
+			               "instruction encoding family is unknown");
+			return;
 	}
+}
+
+} // namespace
+
+void DecodeInstruction(std::span<const uint32_t> code, uint32_t word_index, Instruction& inst) {
+	g_operand_failure = nullptr;
+	DecodeFamily(code, word_index, inst);
+	if (g_operand_failure != nullptr) {
+		// The instruction keeps the words it decoded; its operands are not usable.
+		SetUnsupported(inst, inst.family, inst.opcode_id, g_operand_failure);
+		g_operand_failure = nullptr;
+	}
+}
+
+void DecodeLegacyInstruction(std::span<const uint32_t> code, uint32_t word_index, Instruction& inst) {
+	const bool outer = g_legacy_decode;
+	g_legacy_decode  = true;
+	DecodeInstruction(code, word_index, inst);
+	g_legacy_decode = outer;
+}
+
+bool IsLegacyDecode() {
+	return g_legacy_decode;
+}
+
+const Instruction* FindUnsupportedInstruction(const Program& program) {
+	for (const auto& inst: program.instructions) {
+		if (inst.opcode == Opcode::UNSUPPORTED) {
+			return &inst;
+		}
+	}
+	return nullptr;
 }
 
 Program DecodeFrontProgram(std::span<const uint32_t> front) {
@@ -374,6 +433,12 @@ Program DecodeFrontProgram(std::span<const uint32_t> front) {
 		DecodeInstruction(front, front_words, inst);
 		result.has_swap_pc |= inst.opcode == Opcode::S_SWAPPC_B64;
 		front_words += inst.word_count;
+		if (inst.opcode == Opcode::UNSUPPORTED) {
+			// gta6-prep: shader-alu. Where the next instruction starts is not known; the program
+			// is skipped, or rejected by the CFG.
+			result.code = front.first(front_words);
+			return result;
+		}
 		if (inst.opcode == Opcode::S_SETPC_B64) {
 			EXIT_NOT_IMPLEMENTED(inst.src0.kind != OperandKind::Sgpr || inst.src0.reg != 6u);
 			break;
@@ -399,10 +464,29 @@ void DecodeProgram(std::span<const uint32_t> code, Program& program,
 	size_t last_target = 0;
 	// Past an S_ENDPGM only to reach a farther target: a path may then end with an S_BRANCH too.
 	bool tail        = false;
+	// gta6-prep: shader-alu. Past an unsupported instruction the words may not be instructions.
+	bool unsupported = false;
 	auto long_branch = long_branches.begin();
 	for (uint32_t word_index = 0; word_index < code.size();) {
 		program.instructions.emplace_back();
-		DecodeInstruction(code, word_index, program.instructions.back());
+		if (unsupported && code.size() - word_index < MaxInstructionRawWords) {
+			// Near the end of the code the words may claim more words than remain: decode them
+			// from a zero-padded copy and stop at an instruction that does not fit.
+			std::array<uint32_t, MaxInstructionRawWords> padded {};
+			std::copy(code.begin() + word_index, code.end(), padded.begin());
+			auto& tail_inst = program.instructions.back();
+			DecodeInstruction(padded, 0, tail_inst);
+			if (tail_inst.word_count > code.size() - word_index) {
+				program.instructions.pop_back();
+				return;
+			}
+			tail_inst.pc = word_index * sizeof(uint32_t);
+			if (IsDirectBranch(tail_inst.opcode)) {
+				tail_inst.branch_target += tail_inst.pc;
+			}
+		} else {
+			DecodeInstruction(code, word_index, program.instructions.back());
+		}
 
 		auto& inst = program.instructions.back();
 		while (long_branch != long_branches.end() && long_branch->pc < inst.pc) ++long_branch;
@@ -412,13 +496,16 @@ void DecodeProgram(std::span<const uint32_t> code, Program& program,
 		}
 		program.has_swap_pc |= inst.opcode == Opcode::S_SWAPPC_B64;
 		word_index += inst.word_count;
+		unsupported |= inst.opcode == Opcode::UNSUPPORTED;
 
 		if (IsDirectBranch(inst.opcode)) {
 			const auto target_index = inst.branch_target / sizeof(uint32_t);
 			if (branch_targets.empty()) {
 				branch_targets.resize(code.size());
 			}
-			branch_targets[target_index] = true;
+			if (target_index < branch_targets.size()) {
+				branch_targets[target_index] = true;
+			}
 			last_target                  = std::max<size_t>(last_target, target_index);
 		}
 		const bool ends_path = inst.opcode == Opcode::S_ENDPGM || (tail && inst.opcode == Opcode::S_BRANCH);
@@ -433,6 +520,10 @@ void DecodeProgram(std::span<const uint32_t> code, Program& program,
 		}
 	}
 
+	if (unsupported) {
+		// The program holds an unsupported instruction, which skips it (or the CFG rejects it).
+		return;
+	}
 	EXIT("shader decode reached the code boundary before S_ENDPGM");
 }
 
@@ -509,7 +600,8 @@ std::string InstructionToString(const Instruction& inst) {
 			return fmt::format("0x{:08x}: s_setpc_b64 {}", inst.pc,
 			                   OperandToString(inst.src0).c_str());
 		case Opcode::S_SETREG_B32:
-			return fmt::format("0x{:08x}: s_setreg_b32 {}, {}", inst.pc,
+		case Opcode::S_SETREG_IMM32_B32:
+			return fmt::format("0x{:08x}: {} {}, {}", inst.pc, magic_enum::enum_name(inst.opcode),
 			                   OperandToString(inst.src0).c_str(),
 			                   OperandToString(inst.src1).c_str());
 		case Opcode::S_WAITCNT_VSCNT: return FormatSources(inst);
@@ -523,6 +615,17 @@ std::string InstructionToString(const Instruction& inst) {
 		case Opcode::S_TTRACEDATA:
 		case Opcode::S_INST_PREFETCH:
 		case Opcode::S_CLAUSE:
+		// gta6-prep: shader-alu
+		case Opcode::S_VERSION:
+		case Opcode::S_ROUND_MODE:
+		case Opcode::S_DENORM_MODE:
+		case Opcode::S_ICACHE_INV:
+		case Opcode::S_WAKEUP:
+		case Opcode::S_INCPERFLEVEL:
+		case Opcode::S_DECPERFLEVEL:
+		case Opcode::S_WAIT_IDLE:
+		case Opcode::S_TTRACEDATA_IMM:
+		case Opcode::S_CODE_END:
 			return fmt::format("0x{:08x}: {} {}", inst.pc, magic_enum::enum_name(inst.opcode),
 			                   OperandToString(inst.src0).c_str());
 		case Opcode::S_BARRIER: return fmt::format("0x{:08x}: s_barrier", inst.pc);

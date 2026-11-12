@@ -275,6 +275,12 @@ static void PrintUsage() {
 	::printf("  --dump-imports <file>                With --game: write which imports of eboot.bin and\n"
 	         "                                       sce_module/*.prx Kyty implements, a PRX exports or\n"
 	         "                                       nothing resolves, then exit. No GPU, no guest code.\n");
+
+	// gta6-prep: shader-alu
+	::printf("\nShaders:\n");
+	::printf("  --strict-shaders                     Stop at a shader instruction the recompiler does\n"
+	         "                                       not support instead of skipping the draws and\n"
+	         "                                       dispatches of its program.\n");
 }
 
 static bool NextArg(int argc, char* argv[], int& index, std::string& out) {
@@ -499,6 +505,9 @@ static constexpr Flag FLAGS[] = {
     {"--oom-recovery", &ConfigOptions::oom_recovery},
     {"--no-oom-recovery", &ConfigOptions::no_oom_recovery},
     {"--skip-unsupported-image-atomics", &ConfigOptions::skip_unsupported_image_atomics},
+
+    // gta6-prep: shader-alu
+    {"--strict-shaders", &ConfigOptions::strict_shaders},
 };
 
 // gta6-prep: config

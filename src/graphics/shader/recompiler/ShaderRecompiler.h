@@ -36,12 +36,23 @@ struct CompileOptions {
 	ShaderStageInputInfo        input_info;
 	// Also emit CompileResult::spirv_plain for a pixel shader instrumented for GET_LOD_STATS.
 	bool                        plain_mip_stats_variant    = false;
+	// gta6-prep: shader-alu
+	// An instruction the decoder does not support, or one without a translation, makes the
+	// program report it (ShaderSource::unsupported_pc, TranslateResult::failure_pc) instead of
+	// closing the emulator; the caller then skips its draws or dispatches. Off, both are fatal
+	// (--strict-shaders).
+	bool                        skip_unsupported_instructions = false;
 };
 
 struct TranslateResult {
 	IR::Program program;
 	std::string decoded_dump;
 	std::string cfg_dump;
+	// gta6-prep: shader-alu. With CompileOptions::skip_unsupported_instructions: the first
+	// instruction that has no translation (UINT32_MAX: none) and its decoded text. The program is
+	// then incomplete and must not be compiled.
+	uint32_t    failure_pc = UINT32_MAX;
+	std::string failure;
 };
 
 struct CompileResult {
@@ -91,6 +102,11 @@ struct ShaderSource {
 	std::vector<uint32_t> call_words;
 	uint64_t revision = 0;
 	std::vector<std::pair<uint64_t, uint64_t>> reads;
+	// gta6-prep: shader-alu. The first instruction the decoder does not support (UINT32_MAX:
+	// none) and its decoded text. With CompileOptions::skip_unsupported_instructions the source is
+	// then not prepared any further (no call targets, no ray tracing patch): it is not translated.
+	uint32_t    unsupported_pc = UINT32_MAX;
+	std::string unsupported_text;
 
 	[[nodiscard]] bool HasCalls() const { return !calls.empty() || expand_calls; }
 };
