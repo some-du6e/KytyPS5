@@ -143,7 +143,20 @@ BufferAccess BufferAccessOf(ValueOpcode opcode) {
 		case ValueOpcode::BufferAtomicOr64:
 		case ValueOpcode::BufferAtomicXor32:
 		case ValueOpcode::BufferAtomicFMin32:
-		case ValueOpcode::BufferAtomicFMax32: return BufferAccess::Atomic;
+		case ValueOpcode::BufferAtomicFMax32:
+		// gta6-prep: shader-mem
+		case ValueOpcode::BufferAtomicCmpSwap64:
+		case ValueOpcode::BufferAtomicISub64:
+		case ValueOpcode::BufferAtomicSMin64:
+		case ValueOpcode::BufferAtomicSMax64:
+		case ValueOpcode::BufferAtomicUMax64:
+		case ValueOpcode::BufferAtomicXor64:
+		case ValueOpcode::BufferAtomicInc64:
+		case ValueOpcode::BufferAtomicDec64:
+		case ValueOpcode::BufferAtomicInc32:
+		case ValueOpcode::BufferAtomicDec32:
+		case ValueOpcode::BufferAtomicFCmpSwap32:
+			return BufferAccess::Atomic;
 		default: return BufferAccess::None;
 	}
 }
@@ -155,6 +168,15 @@ uint32_t BufferComponentCount(ValueOpcode opcode) {
 		case ValueOpcode::BufferAtomicUMin64:
 		case ValueOpcode::BufferAtomicAnd64:
 		case ValueOpcode::BufferAtomicOr64:
+		// gta6-prep: shader-mem
+		case ValueOpcode::BufferAtomicCmpSwap64:
+		case ValueOpcode::BufferAtomicISub64:
+		case ValueOpcode::BufferAtomicSMin64:
+		case ValueOpcode::BufferAtomicSMax64:
+		case ValueOpcode::BufferAtomicUMax64:
+		case ValueOpcode::BufferAtomicXor64:
+		case ValueOpcode::BufferAtomicInc64:
+		case ValueOpcode::BufferAtomicDec64:
 		case ValueOpcode::LoadBufferU32x2:
 		case ValueOpcode::StoreBufferU32x2: return 2u;
 		case ValueOpcode::LoadBufferU32x3:
@@ -199,7 +221,28 @@ SharedAccess SharedAccessOf(ValueOpcode opcode) {
 		case ValueOpcode::SharedAtomicOr32:
 		case ValueOpcode::SharedAtomicOr64:
 		case ValueOpcode::SharedAtomicXor32:
-		case ValueOpcode::SharedAtomicMaskedOr32: return SharedAccess::Atomic;
+		case ValueOpcode::SharedAtomicMaskedOr32:
+		// gta6-prep: shader-mem
+		case ValueOpcode::SharedAtomicRSub32:
+		case ValueOpcode::SharedAtomicCmpSwapF32:
+		case ValueOpcode::SharedAtomicFAdd32:
+		case ValueOpcode::SharedAtomicFMinReturn32:
+		case ValueOpcode::SharedAtomicFMaxReturn32:
+		case ValueOpcode::SharedAtomicMaskedOrReturn32:
+		case ValueOpcode::SharedAtomicIAddReturn64:
+		case ValueOpcode::SharedAtomicISub64:
+		case ValueOpcode::SharedAtomicRSub64:
+		case ValueOpcode::SharedAtomicInc64:
+		case ValueOpcode::SharedAtomicDec64:
+		case ValueOpcode::SharedAtomicSMin64:
+		case ValueOpcode::SharedAtomicSMax64:
+		case ValueOpcode::SharedAtomicUMin64:
+		case ValueOpcode::SharedAtomicAnd64:
+		case ValueOpcode::SharedAtomicOrReturn64:
+		case ValueOpcode::SharedAtomicXor64:
+		case ValueOpcode::SharedAtomicMaskedOr64:
+		case ValueOpcode::SharedAtomicSwap64:
+			return SharedAccess::Atomic;
 		case ValueOpcode::DataAppend: return SharedAccess::Append;
 		case ValueOpcode::DataConsume: return SharedAccess::Consume;
 		default: return SharedAccess::None;
@@ -212,6 +255,20 @@ uint32_t SharedComponentCount(ValueOpcode opcode) {
 		case ValueOpcode::SharedAtomicOr64:
 		case ValueOpcode::SharedAtomicUMax64:
 		case ValueOpcode::SharedAtomicCmpSwap64:
+		// gta6-prep: shader-mem
+		case ValueOpcode::SharedAtomicIAddReturn64:
+		case ValueOpcode::SharedAtomicISub64:
+		case ValueOpcode::SharedAtomicRSub64:
+		case ValueOpcode::SharedAtomicInc64:
+		case ValueOpcode::SharedAtomicDec64:
+		case ValueOpcode::SharedAtomicSMin64:
+		case ValueOpcode::SharedAtomicSMax64:
+		case ValueOpcode::SharedAtomicUMin64:
+		case ValueOpcode::SharedAtomicAnd64:
+		case ValueOpcode::SharedAtomicOrReturn64:
+		case ValueOpcode::SharedAtomicXor64:
+		case ValueOpcode::SharedAtomicMaskedOr64:
+		case ValueOpcode::SharedAtomicSwap64:
 		case ValueOpcode::LoadSharedU32x2:
 		case ValueOpcode::WriteSharedU32x2: return 2u;
 		case ValueOpcode::LoadSharedU32x3:
@@ -263,6 +320,11 @@ ImageOpcodeInfo ImageOpcodeInfoOf(ValueOpcode opcode) {
 		case ValueOpcode::ImageAtomicXor64:
 		case ValueOpcode::ImageAtomicFMin32:
 		case ValueOpcode::ImageAtomicFMax32:
+		// gta6-prep: shader-mem
+		case ValueOpcode::ImageAtomicISub32:
+		case ValueOpcode::ImageAtomicInc32:
+		case ValueOpcode::ImageAtomicDec32:
+		case ValueOpcode::ImageAtomicFCmpSwap32:
 			return {ImageAccess::Atomic, ImageResourceClass::Storage, false};
 		default: return {};
 	}

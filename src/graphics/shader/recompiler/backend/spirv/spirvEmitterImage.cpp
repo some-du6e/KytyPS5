@@ -1376,6 +1376,24 @@ void EmitImage(ValueEmitContext& ctx, const IR::Inst& inst) {
 			                                     ImageDescriptorPointer(state, mem.resource),
 			                                     CoordU32(ctx, mem, *address, dimension),
 			                                     ConstantU32(state, 0));
+			           // gta6-prep: shader-mem: wrapping inc/dec and the float compare-swap.
+			           if (op == IR::ValueOpcode::ImageAtomicInc32 ||
+			               op == IR::ValueOpcode::ImageAtomicDec32) {
+				           return AtomicUpdate(state, pointer, IR::ResourceKind::Image,
+				                               [&](uint32_t old) {
+					                               return EmitWrappingIncDecReplacement(
+					                                   state, old, ctx.Arg(inst, 2),
+					                                   op == IR::ValueOpcode::ImageAtomicDec32);
+				                               });
+			           }
+			           if (op == IR::ValueOpcode::ImageAtomicFCmpSwap32) {
+				           return AtomicUpdate(state, pointer, IR::ResourceKind::Image,
+				                               [&](uint32_t old) {
+					                               return EmitFloatCompareSwapReplacement(
+					                                   state, old, ctx.Arg(inst, 2),
+					                                   ctx.Arg(inst, 3));
+				                               });
+			           }
 			           if (op == IR::ValueOpcode::ImageAtomicFMin32 ||
 			               op == IR::ValueOpcode::ImageAtomicFMax32) {
 				           return AtomicUpdate(state, pointer, IR::ResourceKind::Image,

@@ -1964,8 +1964,12 @@ CompiledShader CompileCase(const TestCase &test, u32 host_subgroup_size = 64) {
       MakeNativeUserData(test.has_user_data ? &test.user_data : nullptr);
   const auto uses_image =
       std::any_of(test.opcodes.begin(), test.opcodes.end(), [](auto op) {
-        return op >= ShaderOpcode::IMAGE_GET_RESINFO &&
-               op <= ShaderOpcode::IMAGE_GATHER4;
+        // gta6-prep: shader-mem: the image opcodes appended after RT_ALPHA.
+        return (op >= ShaderOpcode::IMAGE_GET_RESINFO &&
+                op <= ShaderOpcode::IMAGE_GATHER4) ||
+               (op >= ShaderOpcode::IMAGE_ATOMIC_SUB &&
+                op <= ShaderOpcode::IMAGE_ATOMIC_FCMPSWAP) ||
+               op == ShaderOpcode::IMAGE_MSAA_LOAD;
       });
   if (uses_image && ((user_data[3] >> 28u) & 0xfu) == 0) {
     user_data[3] = static_cast<uint32_t>(Prospero::ImageType::kColor2D) << 28u;
@@ -24308,8 +24312,9 @@ public:
                   unchanged(F::k16_16_16_16SInt, C::Sint, F::k16_16_16_16SInt) &&
                   unchanged(F::k8UScaled, C::Float, F::k8UNorm) &&
                   unchanged(F::k8_8UScaled, C::Float, F::k8_8UNorm) &&
-                  unchanged(F::k8SScaled, C::Unsupported, F::k8SScaled) &&
-                  unchanged(F::k16UScaled, C::Unsupported, F::k16UScaled) &&
+                  // gta6-prep: shader-mem: the 8/16-bit scaled layouts remap too.
+                  unchanged(F::k8SScaled, C::Float, F::k8SNorm) &&
+                  unchanged(F::k16UScaled, C::Float, F::k16UNorm) &&
                   unchanged(F::k16_16_16_16UNorm, C::Float, F::k16_16_16_16UNorm) &&
                   Prospero::NumBytesPerElement(F::k16_16_16_16UScaled) == 8 &&
                   Prospero::NumBytesPerElement(F::k16_16_16_16SScaled) == 8,
@@ -50542,6 +50547,9 @@ TestCase Gta6PreciseDivision() {
 TestCase Gta6SaveexecFamily64() { return Gta6SaveexecFamily(64u); }
 TestCase Gta6SaveexecFamily32() { return Gta6SaveexecFamily(32u); }
 
+// gta6-prep: shader-mem
+#include "ShaderMemComputeTests.inc"
+
 std::vector<TestCase> MakeCases() {
   std::vector<TestCase> cases;
   cases.reserve(128);
@@ -51202,6 +51210,8 @@ std::vector<TestCase> MakeCases() {
   AddCase(Gta6SaveexecFamily64);
   AddCase(Gta6SaveexecFamily32);
   AddCase(Gta6PreciseDivision);
+  // gta6-prep: shader-mem
+  AppendShaderMemCases(cases);
 
   return cases;
 }
@@ -57631,6 +57641,14 @@ int main(int argc, char **argv) {
   EnsureConfigInitialized();
   CheckLeastRecentlyUsedCacheOrdering();
   CheckPipelineManifestFormat();
+  // gta6-prep: shader-mem
+  if (argc == 2 && std::strcmp(argv[1], "--shader-mem-only") == 0) {
+    VulkanHarness vulkan;
+    std::vector<TestCase> cases;
+    AppendShaderMemCases(cases);
+    for (const auto &test : cases) RunCase(&vulkan, test);
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "--mul-hi24-only") == 0) {
     VulkanHarness vulkan;
     RunCase(&vulkan, VectorMulHi24(32));

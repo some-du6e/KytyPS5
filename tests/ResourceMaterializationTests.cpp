@@ -1507,6 +1507,73 @@ void TestScaled16SampledFormats() {
   }
 }
 
+// gta6-prep: shader-mem
+// Every 8/16-bit USCALED/SSCALED layout samples through the UNorm/SNorm format of the same width
+// with a float numeric class and a conversion; their neighbours keep their table entries.
+void TestScaledSampledFormatTable() {
+  using F = Libs::Graphics::Prospero::BufferFormat;
+  using N = Libs::Graphics::Prospero::TextureNumericClass;
+  namespace P = Libs::Graphics::Prospero;
+  struct Case {
+    F format, backing;
+    uint32_t bytes;
+  };
+  for (const auto &[format, backing, bytes] :
+       {Case{F::k8UScaled, F::k8UNorm, 1}, Case{F::k8SScaled, F::k8SNorm, 1},
+        Case{F::k16UScaled, F::k16UNorm, 2}, Case{F::k16SScaled, F::k16SNorm, 2},
+        Case{F::k8_8UScaled, F::k8_8UNorm, 2}, Case{F::k8_8SScaled, F::k8_8SNorm, 2},
+        Case{F::k16_16UScaled, F::k16_16UNorm, 4}, Case{F::k16_16SScaled, F::k16_16SNorm, 4},
+        Case{F::k8_8_8_8UScaled, F::k8_8_8_8UNorm, 4},
+        Case{F::k8_8_8_8SScaled, F::k8_8_8_8SNorm, 4},
+        Case{F::k16_16_16_16UScaled, F::k16_16_16_16UNorm, 8},
+        Case{F::k16_16_16_16SScaled, F::k16_16_16_16SNorm, 8}}) {
+    Check(P::RemapTextureFormat(format) == backing &&
+              P::SampledTextureNumericClass(format) == N::Float &&
+              P::SampledTextureNumericClass(backing) == N::Float &&
+              P::NumBytesPerElement(format) == bytes && P::NumBytesPerElement(backing) == bytes &&
+              P::RenderTargetBytesPerElement(format) == 0u,
+          "scaled sampled format does not remap to its UNorm/SNorm backing");
+  }
+  struct Unchanged {
+    F format;
+    N numeric_class;
+  };
+  for (const auto &[format, numeric_class] :
+       {Unchanged{F::k8_8_8_8UNorm, N::Float}, Unchanged{F::k8_8_8_8UInt, N::Uint},
+        Unchanged{F::k8_8_8_8SInt, N::Sint}, Unchanged{F::k16_16UInt, N::Uint},
+        Unchanged{F::k16Float, N::Float}, Unchanged{F::k1_5_5_5UNorm, N::Unsupported},
+        Unchanged{F::k2_10_10_10SNorm, N::Unsupported}}) {
+    Check(P::RemapTextureFormat(format) == format &&
+              P::SampledTextureNumericClass(format) == numeric_class,
+          "a format outside the scaled set changed its sampled-texture entry");
+  }
+}
+
+// The new scaled formats materialize as float images converted from their backing.
+void TestScaledSampledFormatsMaterialize() {
+  using namespace Libs::Graphics::ShaderRecompiler::IR;
+  using F = Libs::Graphics::Prospero::BufferFormat;
+  using N = Libs::Graphics::Prospero::TextureNumericClass;
+  for (const auto format : {F::k8SScaled, F::k16UScaled, F::k16SScaled, F::k8_8SScaled,
+                            F::k16_16UScaled, F::k16_16SScaled, F::k8_8_8_8UScaled,
+                            F::k8_8_8_8SScaled}) {
+    auto program = MixedSamplerProgram();
+    auto &first = program.descriptor_sources[0];
+    first.dwords[0] = Value(0x100u);
+    first.dwords[1] = Value(static_cast<uint32_t>(format) << 20u);
+    first.dwords[3] = program.descriptor_sources[1].dwords[3];
+    auto plan = ExtractResourcePlan(program);
+    std::array<uint32_t, 2> user_data{0x11111111u, 0x22222222u};
+    const SrtRuntime runtime{.user_data = user_data};
+    ResourceSnapshot snapshot;
+    ResourceSpecialization specialization;
+    Check(MaterializeResources(plan, runtime, snapshot, specialization) &&
+              specialization.images[0].numeric_class == N::Float &&
+              specialization.images[0].conversion_format == format,
+          "scaled sampled image did not materialize as a converted float image");
+  }
+}
+
 void TestSignedStorageSpecialization() {
   using namespace Libs::Graphics::ShaderRecompiler::IR;
   using F = Libs::Graphics::Prospero::BufferFormat;
@@ -1777,6 +1844,9 @@ int main() {
   TestMixedSamplerVariantsShareRuntimeDescriptor();
   TestSpecializationFitsProgram();
   TestSignedStorageSpecialization();
+  // gta6-prep: shader-mem
+  TestScaledSampledFormatTable();
+  TestScaledSampledFormatsMaterialize();
   for (const bool atomic64 : {false, true}) TestUnreachedImageIgnoresSharedDescriptor(atomic64);
   for (const bool mixed : {false, true}) TestIndirectImageSamplerClasses(mixed);
   TestShaderCacheRecords();

@@ -1,9 +1,13 @@
 #include "common/assert.h"
+#include "common/logging/log.h"
 #include "graphics/shader/recompiler/BufferFormat.h"
 #include "graphics/shader/recompiler/frontend/translate/Translator.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <array>
+#include <atomic>
 
 namespace Libs::Graphics::ShaderRecompiler::Frontend {
 
@@ -55,7 +59,17 @@ void Translator::TranslateEmbeddedFetch(const Decoder::Instruction& inst, uint32
 			source = Format::ResolveFormattedSource(
 			    format, GetDstSel(resource.DstSelXYZW(), component));
 			if (source.kind == Format::FormattedSourceKind::Invalid) {
-				EXIT("invalid formatted vertex input %u at pc 0x%08x", attribute, inst.pc);
+				// gta6-prep: shader-mem: an unknown format or a reserved DST_SEL used to end the
+				// emulator here; the component now reads zero.
+				static std::atomic_bool logged = false;
+				if (!logged.exchange(true, std::memory_order_relaxed)) {
+					Log::WriteToConsoleAndLog(fmt::format(
+					    "Soft-fail: vertex fetch: formatted vertex input {} at pc 0x{:08x} has "
+					    "format {} or DST_SEL 0x{:03x} without a decoder, reading zero\n",
+					    attribute, inst.pc, static_cast<uint32_t>(resource.RawFormat()),
+					    resource.DstSelXYZW()));
+				}
+				source = Format::FormattedSource {Format::FormattedSourceKind::Zero, 0};
 			}
 		}
 		IR::Value value;

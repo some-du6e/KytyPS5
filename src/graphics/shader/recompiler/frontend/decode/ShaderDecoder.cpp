@@ -118,6 +118,7 @@ std::string ImageSampleFlagsToString(uint32_t flags) {
 	AppendFlag(&text, &first, flags, ImageSampleFlagCd, "cd");
 	AppendFlag(&text, &first, flags, ImageSampleFlagGatherHorizontal, "gather_horizontal");
 	AppendFlag(&text, &first, flags, ImageSampleFlagAdjust, "adjust");
+	AppendFlag(&text, &first, flags, ImageSampleFlagG16, "g16");
 	return text;
 }
 
@@ -827,8 +828,20 @@ std::string InstructionToString(const Instruction& inst) {
 		case Opcode::DS_WRITE_B128:
 		case Opcode::DS_WRITE_ADDTID_B32:
 		case Opcode::DS_READ_ADDTID_B32: return FormatMemory(inst);
-		default: return FormatBinary(inst);
+		default: break;
 	}
+	// gta6-prep: shader-mem: the memory opcodes appended after the ray tracing pseudo opcodes.
+	if (inst.opcode > Opcode::RT_ALPHA && inst.opcode < Opcode::COUNT) {
+		switch (inst.family) {
+			case Family::MUBUF:
+			case Family::MTBUF:
+			case Family::FLAT:
+			case Family::DS: return FormatMemory(inst);
+			case Family::MIMG: return FormatMimg(inst);
+			default: break;
+		}
+	}
+	return FormatBinary(inst);
 }
 
 std::string ProgramToString(const Program& program) {

@@ -550,6 +550,15 @@ uint32_t EmitFloatAtomicReplacement(EmitterState& state, uint32_t old, uint32_t 
 uint32_t EmitDsFloatAtomicReplacement(EmitterState& state, uint32_t old, uint32_t source,
                                       bool max_value);
 
+// gta6-prep: shader-mem
+// MEM = MEM == cmp (as floats: -0 == +0, NaN never equal) ? source : MEM.
+uint32_t EmitFloatCompareSwapReplacement(EmitterState& state, uint32_t old, uint32_t source,
+                                         uint32_t comparator);
+// Wrapping DWORD increment (old >= limit ? 0 : old + 1) or decrement
+// (old == 0 || old > limit ? limit : old - 1) of the buffer and image INC/DEC atomics.
+uint32_t EmitWrappingIncDecReplacement(EmitterState& state, uint32_t old, uint32_t limit,
+                                       bool decrement);
+
 uint32_t EmitDsSwizzleTargetLane(EmitterState& state, uint32_t subid, uint32_t control);
 
 inline constexpr auto EmitSelectValueU32 =

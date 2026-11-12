@@ -17,6 +17,7 @@
 #include "graphics/shader/recompiler/backend/spirv/SpirvForwarding.h"
 #include "graphics/shader/recompiler/backend/spirv/spirvEmitterInternal.h"
 #include "graphics/shader/recompiler/frontend/cfg/ShaderCFG.h"
+#include "graphics/shader/recompiler/frontend/decode/ImageOps.h"
 #include "graphics/shader/recompiler/frontend/decode/RayTracingPatch.h"
 #include "graphics/shader/recompiler/frontend/decode/ShaderDecoder.h"
 #include "graphics/shader/recompiler/frontend/decode/ShaderFunctions.h"
@@ -8708,6 +8709,9 @@ void TestEmbeddedVertexFormatSwizzle() {
       {Prospero::BufferFormat::k32_32_32_32Float, DstSel(7, 6, 5, 4), 3, 4, 4,
        {0x3e800000, 0x3f000000, 0x3f400000, 0x40000000},
        Prospero::VertexAttribFormat::k32_32_32_32Float},
+      // gta6-prep: shader-mem: a reserved DST_SEL (2) reads zero instead of ending translation.
+      {Prospero::BufferFormat::k32Float, DstSel(4, 2, 1, 0), 3, 4, 1,
+       {0x3e800000, 0, 0x3f800000, 0}},
   };
   std::array<uint16_t, static_cast<size_t>(DirectResourceType::Last) + 1> offsets;
   offsets.fill(ILLEGAL_DIRECT_OFFSET);
@@ -13635,17 +13639,20 @@ void TestFlatLoadShortD16HiAddressFields() {
             global_pair.src1.reg == 10,
         "GLOBAL D16 high-half load with SADDR off must use the VGPR pair");
 
-  // DLC is only a cache hint and stays visible; LDS, GLC and SLC on a load and the reserved
-  // segment are not implemented and must keep failing loudly.
+  // DLC is only a cache hint and stays visible; GLC (a coherent load) and SLC (a streaming hint)
+  // decode too (gta6-prep: shader-mem). LDS and the reserved segment are not implemented and must
+  // keep failing loudly.
   const auto dlc = decode(SegGlobal, 4, 2, DlcBit);
   Check(dlc.opcode == Decoder::Opcode::FLAT_LOAD_SHORT_D16_HI && dlc.dlc && !dlc.glc && !dlc.slc,
         "GLOBAL D16 high-half load lost its DLC hint");
   Check(decode(SegGlobal, 0, 2, LdsBit).opcode == Decoder::Opcode::UNSUPPORTED,
         "FLAT-family D16 high-half load accepted LDS=1");
-  Check(decode(SegGlobal, 0, 2, GlcBit).opcode == Decoder::Opcode::UNSUPPORTED,
-        "FLAT-family D16 high-half load accepted GLC=1");
-  Check(decode(SegGlobal, 0, 2, SlcBit).opcode == Decoder::Opcode::UNSUPPORTED,
-        "FLAT-family D16 high-half load accepted SLC=1 on a load");
+  const auto glc = decode(SegGlobal, 0, 2, GlcBit);
+  Check(glc.opcode == Decoder::Opcode::FLAT_LOAD_SHORT_D16_HI && glc.glc && !glc.slc,
+        "FLAT-family D16 high-half load lost GLC=1");
+  const auto slc = decode(SegGlobal, 0, 2, SlcBit);
+  Check(slc.opcode == Decoder::Opcode::FLAT_LOAD_SHORT_D16_HI && slc.slc && !slc.glc,
+        "FLAT-family D16 high-half load lost SLC=1 on a load");
   Check(decode(SegReserved, 0, 2).opcode == Decoder::Opcode::UNSUPPORTED,
         "FLAT-family D16 high-half load accepted the reserved segment");
 }
@@ -14540,6 +14547,9 @@ static void TestPsrFingerprintKeepsOlderDecode() {
   Check(same(setreg_a, setreg_b), "Psr: S_SETREG_IMM32_B32 is keyed as known or as two words");
 }
 
+// gta6-prep: shader-mem
+#include "ShaderMemDecodeTests.inc"
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -14775,6 +14785,9 @@ int main() {
   TestNullImageKeepsShaderDimension();
   TestStorageSwizzleOfAbsentChannelsKeepsProgram();
   TestUnboundScalarBufferKeepsProgram();
+
+  // gta6-prep: shader-mem
+  RunShaderMemDecodeTests();
 
   return 0;
 }

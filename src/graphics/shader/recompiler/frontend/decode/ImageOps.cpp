@@ -173,6 +173,40 @@ constexpr MimgSampleInfo MIMG_SAMPLE_OPCODE_LIST[] = {
     {0xbeu, "image_sample_c_b_cl_o_a",
      ImageSampleFlagCompare | ImageSampleFlagBias | ImageSampleFlagLodClamp |
          ImageSampleFlagOffset | ImageSampleFlagAdjust},
+    // gta6-prep: shader-mem. gfx10.3 G16 derivative samples: the d/cd opcodes with bit 7 set,
+    // which the PS5 _a numbering leaves free (it has no _a form of the derivative samples).
+    {0xa2u, "image_sample_d_g16",
+     ImageSampleFlagDerivative | ImageSampleFlagG16},
+    {0xa3u, "image_sample_d_cl_g16",
+     ImageSampleFlagDerivative | ImageSampleFlagLodClamp | ImageSampleFlagG16},
+    {0xaau, "image_sample_c_d_g16",
+     ImageSampleFlagCompare | ImageSampleFlagDerivative | ImageSampleFlagG16},
+    {0xabu, "image_sample_c_d_cl_g16",
+     ImageSampleFlagCompare | ImageSampleFlagDerivative | ImageSampleFlagLodClamp | ImageSampleFlagG16},
+    {0xb2u, "image_sample_d_o_g16",
+     ImageSampleFlagDerivative | ImageSampleFlagOffset | ImageSampleFlagG16},
+    {0xb3u, "image_sample_d_cl_o_g16",
+     ImageSampleFlagDerivative | ImageSampleFlagLodClamp | ImageSampleFlagOffset | ImageSampleFlagG16},
+    {0xbau, "image_sample_c_d_o_g16",
+     ImageSampleFlagCompare | ImageSampleFlagDerivative | ImageSampleFlagOffset | ImageSampleFlagG16},
+    {0xbbu, "image_sample_c_d_cl_o_g16",
+     ImageSampleFlagCompare | ImageSampleFlagDerivative | ImageSampleFlagLodClamp | ImageSampleFlagOffset | ImageSampleFlagG16},
+    {0xe8u, "image_sample_cd_g16",
+     ImageSampleFlagDerivative | ImageSampleFlagCd | ImageSampleFlagG16},
+    {0xe9u, "image_sample_cd_cl_g16",
+     ImageSampleFlagDerivative | ImageSampleFlagCd | ImageSampleFlagLodClamp | ImageSampleFlagG16},
+    {0xeau, "image_sample_c_cd_g16",
+     ImageSampleFlagCompare | ImageSampleFlagDerivative | ImageSampleFlagCd | ImageSampleFlagG16},
+    {0xebu, "image_sample_c_cd_cl_g16",
+     ImageSampleFlagCompare | ImageSampleFlagDerivative | ImageSampleFlagCd | ImageSampleFlagLodClamp | ImageSampleFlagG16},
+    {0xecu, "image_sample_cd_o_g16",
+     ImageSampleFlagDerivative | ImageSampleFlagCd | ImageSampleFlagOffset | ImageSampleFlagG16},
+    {0xedu, "image_sample_cd_cl_o_g16",
+     ImageSampleFlagDerivative | ImageSampleFlagCd | ImageSampleFlagLodClamp | ImageSampleFlagOffset | ImageSampleFlagG16},
+    {0xeeu, "image_sample_c_cd_o_g16",
+     ImageSampleFlagCompare | ImageSampleFlagDerivative | ImageSampleFlagCd | ImageSampleFlagOffset | ImageSampleFlagG16},
+    {0xefu, "image_sample_c_cd_cl_o_g16",
+     ImageSampleFlagCompare | ImageSampleFlagDerivative | ImageSampleFlagCd | ImageSampleFlagLodClamp | ImageSampleFlagOffset | ImageSampleFlagG16},
 };
 
 constexpr MimgSampleInfo MIMG_GATHER_OPCODE_LIST[] = {
@@ -256,6 +290,11 @@ constexpr MimgAtomicInfo MIMG_ATOMIC_OPCODE_LIST[] = {
     {0x1au, Opcode::IMAGE_ATOMIC_XOR, true},
     {0x1eu, Opcode::IMAGE_ATOMIC_FMIN},
     {0x1fu, Opcode::IMAGE_ATOMIC_FMAX},
+    // gta6-prep: shader-mem
+    {0x12u, Opcode::IMAGE_ATOMIC_SUB},
+    {0x1bu, Opcode::IMAGE_ATOMIC_INC},
+    {0x1cu, Opcode::IMAGE_ATOMIC_DEC},
+    {0x1du, Opcode::IMAGE_ATOMIC_FCMPSWAP},
 };
 
 constexpr auto MIMG_SAMPLE_OPS = Detail::MakeOpcodeTable<0x100>(MIMG_SAMPLE_OPCODE_LIST);
@@ -281,6 +320,7 @@ Opcode DecodeMimgOpcode(uint32_t opcode, const MimgSampleInfo* sample, const Mim
 		case 0x09u: return Opcode::IMAGE_STORE_MIP;
 		case 0x0eu: return Opcode::IMAGE_GET_RESINFO;
 		case 0x60u: return Opcode::IMAGE_GET_LOD;
+		case 0x80u: return Opcode::IMAGE_MSAA_LOAD; // gta6-prep: shader-mem
 		case 0xe5u: return Opcode::IMAGE_BVH8_INTERSECT_RAY;
 		case 0xe6u:
 		case 0xe7u: return Opcode::IMAGE_BVH_INTERSECT_RAY;
@@ -306,7 +346,8 @@ uint32_t DecodeMimgAddressComponents(uint32_t opcode, ImageDimension dimension,
 		case 0x09u: return ImageCoordComponents(dimension) + 1u;
 		case 0x00u:
 		case 0x08u:
-		case 0x60u: return ImageCoordComponents(dimension);
+		case 0x60u:
+		case 0x80u: return ImageCoordComponents(dimension);
 		default: return 0;
 	}
 }
@@ -323,6 +364,24 @@ uint32_t CountDmaskComponents(uint32_t dmask) {
 
 ImageAddressComponent ImageAddressComponentLayout(uint32_t flags, ImageDimension dimension,
                                                   uint32_t component) {
+	if ((flags & ImageSampleFlagA16) == 0u && (flags & ImageSampleFlagG16) != 0u &&
+	    (flags & ImageSampleFlagDerivative) != 0u) {
+		// gta6-prep: shader-mem. G16 without A16 (the LLVM gfx10.3 layout): offset, bias and PCF
+		// reference take a whole VGPR each, then each derivative vector packs two halves per VGPR
+		// (an odd last one takes the low half of its own VGPR), then the 32-bit coordinates and
+		// LOD clamp.
+		const uint32_t whole = std::popcount(
+		    flags & (ImageSampleFlagOffset | ImageSampleFlagBias | ImageSampleFlagCompare));
+		if (component < whole) return {component * 32u, 32u};
+		const uint32_t axes     = ImageGradientComponents(dimension);
+		const uint32_t per_axis = (axes + 1u) / 2u;
+		const uint32_t index    = component - whole;
+		if (index < axes * 2u) {
+			const uint32_t vgpr = whole + (index / axes) * per_axis + (index % axes) / 2u;
+			return {vgpr * 32u + (index % axes) % 2u * 16u, 16u};
+		}
+		return {(whole + per_axis * 2u + index - axes * 2u) * 32u, 32u};
+	}
 	if ((flags & ImageSampleFlagA16) == 0u) return {component * 32u, 32u};
 	// A16 offsets, bias and PCF reference each take a whole VGPR, the bias as a half in its low
 	// 16 bits. The other components pack two per VGPR, except that each 1D derivative and the last
@@ -406,7 +465,8 @@ void DecodeMimg(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		               "MIMG image gather requires exactly one dmask bit");
 	}
 	if (atomic != nullptr) {
-		const bool compare_swap = inst.opcode == Opcode::IMAGE_ATOMIC_CMPSWAP;
+		const bool compare_swap = inst.opcode == Opcode::IMAGE_ATOMIC_CMPSWAP ||
+		                          inst.opcode == Opcode::IMAGE_ATOMIC_FCMPSWAP;
 		const auto mask32       = compare_swap ? 0x3u : 0x1u;
 		const auto mask64       = compare_swap ? 0xfu : 0x3u;
 		if (inst.dmask != mask32 && inst.dmask != mask64) {
@@ -420,7 +480,7 @@ void DecodeMimg(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		}
 	}
 	const bool supports_d16 = sampled != nullptr || opcode == 0x00u || opcode == 0x01u ||
-	                          opcode == 0x08u || opcode == 0x09u;
+	                          opcode == 0x08u || opcode == 0x09u || opcode == 0x80u;
 	if (d16 && !supports_d16) {
 		SetUnsupported(inst, Family::MIMG, opcode, "MIMG opcode does not support D16 data");
 	}

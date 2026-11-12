@@ -2,8 +2,13 @@
 
 #include "graphics/host_gpu/renderer/cache/bufferCache.h"
 #include "graphics/shader/recompiler/frontend/decode/ShaderDecoder.h"
+#include "common/logging/log.h"
+
+#include <fmt/format.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <bit>
 #include <tuple>
 #include <utility>
@@ -1454,6 +1459,24 @@ uint32_t LoadRawBuffer(ValueEmitContext& ctx, const IR::Inst& inst, const IR::Me
 	return result;
 }
 
+// gta6-prep: shader-mem
+// A formatted access whose format has no decoder (a V# format GetFormatInfo does not know, such
+// as the 113/121 vertex formats pipelineCache special-cases) moves raw DWORDs, which is wrong for
+// any format that is not 32 bits per component. Say so once per format and direction. Callers
+// only log accesses whose buffer resolved to a host object: an unresolved one reads zero and
+// stores nothing, so it never moves raw DWORDs.
+static void LogFormattedRawFallback(ValueEmitContext& ctx, Prospero::BufferFormat format, bool store) {
+	if (format == Prospero::BufferFormat::kInvalid) return; // unbound V#: no data either way
+	static std::array<std::atomic<uint64_t>, 16> logged {};
+	const auto bit  = (static_cast<uint32_t>(format) & 0x1ffu) * 2u + (store ? 1u : 0u);
+	const auto mask = uint64_t {1} << (bit % 64u);
+	if ((logged[bit / 64u].fetch_or(mask, std::memory_order_relaxed) & mask) != 0u) return;
+	Log::WriteToConsoleAndLog(fmt::format(
+	    "Shader: formatted buffer {} with unsupported format {} falls back to raw DWORDs "
+	    "(first in shader 0x{:016x})\n",
+	    store ? "store" : "load", static_cast<uint32_t>(format), ctx.state.program.shader_hash));
+}
+
 uint32_t LoadBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t components) {
 	auto& state = ctx.state;
 	const auto mem = ctx.Memory(inst);
@@ -1477,6 +1500,9 @@ uint32_t LoadBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t compon
 				    return LoadFormattedPrepared(ctx, inst, selected, resource, info, components);
 			    }
 			    if (resource.object_pointer == 0u) return ConstantU32CompositeZero(state, components);
+			    if (selected.formatted) {
+				    LogFormattedRawFallback(ctx, BufferFormat(ctx, selected), false);
+			    }
 			    return LoadRawBuffer(ctx, inst, selected, resource, components);
 		    });
 	    });
@@ -1548,6 +1574,10 @@ void StoreBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t component
 			if (info.type != Format::ComponentType::Unknown) {
 				StoreFormattedPrepared(ctx, inst, selected, resource, info, composite, components);
 				return;
+			}
+			// An unresolved buffer stores nothing, so there is no raw fallback to report.
+			if (selected.formatted && resource.object_pointer != 0u) {
+				LogFormattedRawFallback(ctx, BufferFormat(ctx, selected), true);
 			}
 			if (selected.IsCoherentBufferPairStore(inst.GetOpcode()) && resource.object_pointer != 0u) {
 				StoreRawBufferPair(ctx, inst, selected, resource, composite, [&]() {
@@ -2126,6 +2156,78 @@ std::array<uint32_t, 3> EmitTriangleIndices(ValueEmitContext& ctx, const std::ar
 	return result;
 }
 
+// gta6-prep: shader-mem
+// The QWORD counterpart of AtomicUpdate: a compare-exchange loop over a 64-bit pointer, for the
+// 64-bit atomics without a SPIR-V instruction. Returns the value the update replaced.
+template <typename Fn>
+static uint32_t AtomicUpdate64(EmitterState& state, uint32_t pointer, spv::Scope scope,
+                               uint32_t storage_semantics, bool ordered, Fn&& desired) {
+	const auto none      = ConstantU32(state, spv::MemorySemanticsMaskNone);
+	const auto load      = ordered ? ConstantU32(state, spv::MemorySemanticsAcquireMask |
+	                                                        storage_semantics)
+	                               : none;
+	const auto equal     = ordered ? ConstantU32(state, spv::MemorySemanticsAcquireReleaseMask |
+	                                                        storage_semantics)
+	                               : none;
+	const auto preheader = state.builder.AllocateId();
+	const auto header    = state.builder.AllocateId();
+	const auto cont      = state.builder.AllocateId();
+	const auto merge     = state.builder.AllocateId();
+	const auto initial   = state.builder.AllocateId();
+	const auto observed  = state.builder.AllocateId();
+	const auto exchanged = state.builder.AllocateId();
+	const auto scope_id  = ConstantU32(state, scope);
+	state.builder.AddFunction(spv::OpBranch, preheader);
+	EmitLabel(state, preheader);
+	state.builder.AddFunction(spv::OpAtomicLoad, TypeU64(state), initial, pointer, scope_id, load);
+	state.builder.AddFunction(spv::OpBranch, header);
+	EmitLabel(state, header);
+	state.builder.AddFunction(spv::OpPhi, TypeU64(state), observed, initial, preheader, exchanged,
+	                          cont);
+	const auto next = desired(observed);
+	state.builder.AddFunction(spv::OpAtomicCompareExchange, TypeU64(state), exchanged, pointer,
+	                          scope_id, equal, load, next, observed);
+	const auto success = state.builder.AllocateId();
+	state.builder.AddFunction(spv::OpIEqual, TypeBool(state), success, exchanged, observed);
+	state.builder.AddFunction(spv::OpLoopMerge, merge, cont, spv::LoopControlMaskNone);
+	state.builder.AddFunction(spv::OpBranchConditional, success, merge, cont);
+	EmitLabel(state, cont);
+	state.builder.AddFunction(spv::OpBranch, header);
+	EmitLabel(state, merge);
+	return observed;
+}
+
+// MEM = old >= limit ? 0 : old + 1, and MEM = old == 0 || old > limit ? limit : old - 1 (unsigned
+// QWORDs), as for the DWORD forms.
+static uint32_t AtomicReplacement64(EmitterState& state, IR::ValueOpcode opcode, uint32_t old,
+                                    uint32_t value, uint32_t value2) {
+	const auto u64 = TypeU64(state);
+	const auto b   = TypeBool(state);
+	switch (opcode) {
+		case IR::ValueOpcode::BufferAtomicInc64:
+		case IR::ValueOpcode::SharedAtomicInc64:
+			return Select(state, u64, Binary(state, spv::OpUGreaterThanEqual, b, old, value),
+			              ConstantU64(state, 0),
+			              Binary(state, spv::OpIAdd, u64, old, ConstantU64(state, 1)));
+		case IR::ValueOpcode::BufferAtomicDec64:
+		case IR::ValueOpcode::SharedAtomicDec64: {
+			const auto wrap = Binary(state, spv::OpLogicalOr, b,
+			                         Binary(state, spv::OpIEqual, b, old, ConstantU64(state, 0)),
+			                         Binary(state, spv::OpUGreaterThan, b, old, value));
+			return Select(state, u64, wrap, value,
+			              Binary(state, spv::OpISub, u64, old, ConstantU64(state, 1)));
+		}
+		case IR::ValueOpcode::SharedAtomicRSub64: return Binary(state, spv::OpISub, u64, value, old);
+		case IR::ValueOpcode::SharedAtomicMaskedOr64:
+			return Binary(state, spv::OpBitwiseOr, u64,
+			              Binary(state, spv::OpBitwiseAnd, u64, old, Unary(state, spv::OpNot, u64, value)),
+			              value2);
+		default: break;
+	}
+	EXIT("64-bit atomic %s has no replacement", std::string(IR::ValueOpcodeName(opcode)).c_str());
+	return old;
+}
+
 uint32_t EmitAtomic32(ValueEmitContext& ctx, const IR::Inst& inst) {
 	const auto& mem = ctx.Memory(inst);
 	return EmitAtomicAccess(ctx, inst, mem, [&](uint32_t pointer) {
@@ -2152,7 +2254,16 @@ uint32_t EmitBufferAtomic64(ValueEmitContext& ctx, const IR::Inst& inst) {
 		        ConstantU64(state, 0), [&]() {
 			        const auto pointer = EmitStorageBufferElementPointer(
 			            state, resource, index, TypeStorageBufferElementPointer(state, 64));
-			        const auto old = EmitAtomicOperation(ctx, inst, pointer, spv::ScopeDevice);
+			        // gta6-prep: shader-mem: wrapping inc/dec_x2 run a compare-exchange loop.
+			        const auto old =
+			            SpirvAtomicOpcode(inst.GetOpcode()) == spv::OpNop
+			                ? AtomicUpdate64(state, pointer, spv::ScopeDevice, 0u, false,
+			                                 [&](uint32_t observed) {
+				                                 return AtomicReplacement64(
+				                                     state, inst.GetOpcode(), observed,
+				                                     ctx.Arg(inst, inst.NumArgs() - 2), 0u);
+			                                 })
+			                : EmitAtomicOperation(ctx, inst, pointer, spv::ScopeDevice);
 			        EmitAtomicMemoryBarrier(state, mem.kind);
 			        return old;
 		        });
@@ -2187,6 +2298,15 @@ void EmitSharedAtomic64(ValueEmitContext& ctx, const IR::Inst& inst) {
 		const auto scope = ConstantU32(state, spv::ScopeWorkgroup);
 		const auto acquire_release =
 		    ConstantU32(state, spv::MemorySemanticsAcquireReleaseMask | semantics);
+		if (opcode == spv::OpNop) {
+			// gta6-prep: shader-mem: inc/dec/rsub/mskor_b64 run a compare-exchange loop.
+			return AtomicUpdate64(state, pointer, spv::ScopeWorkgroup, semantics, true,
+			                      [&](uint32_t observed) {
+				                      return AtomicReplacement64(
+				                          state, inst.GetOpcode(), observed, ctx.Arg(inst, 1),
+				                          inst.NumArgs() == 4u ? ctx.Arg(inst, 2) : 0u);
+			                      });
+		}
 		if (opcode == spv::OpAtomicCompareExchange) {
 			// RDNA2 DS compares DATA and stores DATA2, opposite to BUFFER atomics.
 			state.builder.AddFunction(
@@ -2517,6 +2637,86 @@ uint32_t EmitBpermuteU32(ValueEmitContext& ctx, const IR::Inst& inst) {
 	                           EmitSubgroupLocalInvocationId(state), ConstantU32(state, ~31u));
 	const auto target = Binary(state, spv::OpBitwiseOr, TypeU32(state), base, index);
 	return EmitDsMaskedLaneRead(state, source, target, ctx.Arg(inst, 2));
+}
+
+// gta6-prep: shader-mem
+// DS read-modify-write forms without a native SPIR-V atomic: each runs the compare-exchange loop
+// of AtomicUpdate over the DWORD, so the result is exact on every host (no float atomic extension).
+namespace {
+
+uint32_t BitsToF32(EmitterState& state, uint32_t bits) {
+	return Unary(state, spv::OpBitcast, TypeF32(state), bits);
+}
+
+} // namespace
+
+uint32_t EmitSharedAtomicRSub32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [](EmitterState& state, uint32_t old, uint32_t value) {
+		                        return Binary(state, spv::OpISub, TypeU32(state), value, old);
+	                        });
+}
+
+uint32_t EmitSharedAtomicCmpSwapF32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	// DS_CMPST_F32: MEM = MEM == DATA (as floats: -0 == +0, NaN never equal) ? DATA2 : MEM.
+	const auto& mem        = ctx.Memory(inst);
+	const auto  comparator = ctx.Arg(inst, 1);
+	const auto  source     = ctx.Arg(inst, 2);
+	return EmitAtomicAccess(ctx, inst, mem, [&](uint32_t pointer) {
+		return AtomicUpdate(ctx.state, pointer, mem.kind, [&](uint32_t old) {
+			auto&      state = ctx.state;
+			const auto equal = Binary(state, spv::OpFOrdEqual, TypeBool(state),
+			                          BitsToF32(state, old), BitsToF32(state, comparator));
+			return Select(state, TypeU32(state), equal, source, old);
+		});
+	});
+}
+
+uint32_t EmitSharedAtomicFAdd32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [](EmitterState& state, uint32_t old, uint32_t value) {
+		                        const auto sum = Binary(state, spv::OpFAdd, TypeF32(state),
+		                                                BitsToF32(state, old), BitsToF32(state, value));
+		                        return Unary(state, spv::OpBitcast, TypeU32(state), sum);
+	                        });
+}
+
+uint32_t EmitSharedFloatAtomicReturn(ValueEmitContext& ctx, const IR::Inst& inst) {
+	const bool max_value = inst.GetOpcode() == IR::ValueOpcode::SharedAtomicFMaxReturn32;
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [max_value](EmitterState& state, uint32_t old, uint32_t value) {
+		                        return EmitDsFloatAtomicReplacement(state, old, value, max_value);
+	                        });
+}
+
+uint32_t EmitSharedAtomicMaskedOrReturn32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	const auto keep = Unary(ctx.state, spv::OpNot, TypeU32(ctx.state), ctx.Arg(inst, 1));
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [keep](EmitterState& state, uint32_t old, uint32_t value) {
+		                        return Binary(state, spv::OpBitwiseOr, TypeU32(state),
+		                                      Binary(state, spv::OpBitwiseAnd, TypeU32(state), old,
+		                                             keep),
+		                                      value);
+	                        });
+}
+
+uint32_t EmitBufferAtomicIncDec(ValueEmitContext& ctx, const IR::Inst& inst) {
+	const bool decrement = inst.GetOpcode() == IR::ValueOpcode::BufferAtomicDec32;
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [decrement](EmitterState& state, uint32_t old, uint32_t limit) {
+		                        return EmitWrappingIncDecReplacement(state, old, limit, decrement);
+	                        });
+}
+
+uint32_t EmitBufferAtomicFCmpSwap32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	const auto& mem        = ctx.Memory(inst);
+	const auto  source     = ctx.Arg(inst, inst.NumArgs() - 3);
+	const auto  comparator = ctx.Arg(inst, inst.NumArgs() - 2);
+	return EmitAtomicAccess(ctx, inst, mem, [&](uint32_t pointer) {
+		return AtomicUpdate(ctx.state, pointer, mem.kind, [&](uint32_t old) {
+			return EmitFloatCompareSwapReplacement(ctx.state, old, source, comparator);
+		});
+	});
 }
 
 } // namespace Libs::Graphics::ShaderRecompiler::Spirv::Emitter

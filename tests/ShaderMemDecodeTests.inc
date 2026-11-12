@@ -1,0 +1,428 @@
+// gta6-prep: shader-mem
+// Decode and SPIR-V validation tests for the memory, image and LDS opcodes of the gta6-prep block.
+// Every encoding comes from llvm-mc 18 (-arch=amdgcn -mcpu=gfx1030 -show-encoding); the
+// assembly is next to it. Included into shaderCfgTests.cpp, inside its anonymous namespace.
+
+struct ShaderMemDecodeCase {
+  const char *assembly;
+  std::vector<uint32_t> words;
+  ShaderRecompiler::Decoder::Opcode opcode;
+  uint32_t src_count;
+  int dst;  // VGPR, or -1 to skip
+  int src0; // VGPR, or -1 to skip
+  int src1;
+  int src2;
+  uint32_t offset;
+  uint32_t data_dwords;
+  const char *ir;    // IR opcode name the program must contain, or nullptr
+  const char *spirv; // disassembly text the module must contain, or nullptr
+  bool compile = true;
+};
+
+void CheckShaderMemDecodeCase(const ShaderMemDecodeCase &test) {
+  using namespace ShaderRecompiler::Decoder;
+  const auto fail = [&](const char *what) {
+    std::fprintf(stderr, "ShaderCfgTests: %s: %s\n", test.assembly, what);
+    std::abort();
+  };
+  Instruction decoded;
+  DecodeInstruction(test.words, 0u, decoded);
+  if (decoded.opcode != test.opcode) fail("decoded to the wrong opcode");
+  if (decoded.word_count != test.words.size()) fail("decoded to the wrong word count");
+  if (decoded.src_count != test.src_count) fail("decoded the wrong source count");
+  if (test.dst >= 0 && decoded.dst.reg != static_cast<uint32_t>(test.dst)) fail("wrong VDST/VDATA");
+  if (test.src0 >= 0 && decoded.src0.reg != static_cast<uint32_t>(test.src0)) fail("wrong src0");
+  if (test.src1 >= 0 && decoded.src1.reg != static_cast<uint32_t>(test.src1)) fail("wrong src1");
+  if (test.src2 >= 0 && decoded.src2.reg != static_cast<uint32_t>(test.src2)) fail("wrong src2");
+  if (decoded.offset != test.offset) fail("wrong offset");
+  if (decoded.data_dwords != test.data_dwords) fail("wrong data width");
+  const auto text = InstructionToString(decoded);
+  if (text.find(magic_enum::enum_name(test.opcode)) == std::string::npos ||
+      text.find("unsupported") != std::string::npos) {
+    fail("decoder text does not name the opcode");
+  }
+  if (!test.compile) return;
+
+  std::vector<uint32_t> shader = test.words;
+  shader.push_back(0xbf810000u); // s_endpgm
+  auto options = MakeCompileOptions(ShaderType::Compute);
+  options.dump_ir = true;
+  const auto result = RecompileForTest(shader, options);
+  if (test.ir != nullptr && result.ir_dump.find(test.ir) == std::string::npos) {
+    fail("program does not contain the expected IR opcode");
+  }
+  CheckSpirvBinaryValidates(result.spirv);
+  if (test.spirv != nullptr &&
+      DisassembleSpirvBinary(result.spirv).find(test.spirv) == std::string::npos) {
+    fail("SPIR-V does not contain the expected operation");
+  }
+}
+
+void TestShaderMemDsAtomics32() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  const ShaderMemDecodeCase cases[] = {
+      {"ds_rsub_u32 v1, v2 offset:4", {0xd8080004u, 0x00000201u}, O::DS_RSUB_U32, 2, -1, 1, 2, -1,
+       4, 1, "SharedAtomicRSub32", "OpAtomicCompareExchange"},
+      {"ds_rsub_rtn_u32 v5, v1, v2 offset:8", {0xd8880008u, 0x05000201u}, O::DS_RSUB_RTN_U32, 2, 5,
+       1, 2, -1, 8, 1, "SharedAtomicRSub32", "OpAtomicCompareExchange"},
+      // DATA (v2) compares and DATA2 (v3) replaces, the opposite of MUBUF cmpswap.
+      {"ds_cmpst_b32 v1, v2, v3 offset:12", {0xd840000cu, 0x00030201u}, O::DS_CMPST_B32, 3, -1, 1,
+       2, 3, 12, 1, "SharedAtomicCmpSwap32", "OpAtomicCompareExchange"},
+      {"ds_cmpst_f32 v1, v2, v3 offset:16", {0xd8440010u, 0x00030201u}, O::DS_CMPST_F32, 3, -1, 1,
+       2, 3, 16, 1, "SharedAtomicCmpSwapF32", "OpFOrdEqual"},
+      {"ds_cmpst_rtn_f32 v5, v1, v2, v3 offset:20", {0xd8c40014u, 0x05030201u},
+       O::DS_CMPST_RTN_F32, 3, 5, 1, 2, 3, 20, 1, "SharedAtomicCmpSwapF32", "OpFOrdEqual"},
+      {"ds_add_f32 v1, v2 offset:24", {0xd8540018u, 0x00000201u}, O::DS_ADD_F32, 2, -1, 1, 2, -1,
+       24, 1, "SharedAtomicFAdd32", "OpFAdd"},
+      {"ds_add_rtn_f32 v5, v1, v2 offset:28", {0xd954001cu, 0x05000201u}, O::DS_ADD_RTN_F32, 2, 5,
+       1, 2, -1, 28, 1, "SharedAtomicFAdd32", "OpFAdd"},
+      {"ds_min_rtn_f32 v5, v1, v2 offset:32", {0xd8c80020u, 0x05000201u}, O::DS_MIN_RTN_F32, 2, 5,
+       1, 2, -1, 32, 1, "SharedAtomicFMinReturn32", "OpAtomicCompareExchange"},
+      {"ds_max_rtn_f32 v5, v1, v2 offset:36", {0xd8cc0024u, 0x05000201u}, O::DS_MAX_RTN_F32, 2, 5,
+       1, 2, -1, 36, 1, "SharedAtomicFMaxReturn32", "OpAtomicCompareExchange"},
+      {"ds_mskor_rtn_b32 v5, v1, v2, v3 offset:40", {0xd8b00028u, 0x05030201u},
+       O::DS_MSKOR_RTN_B32, 3, 5, 1, 2, 3, 40, 1, "SharedAtomicMaskedOrReturn32",
+       "OpAtomicCompareExchange"},
+  };
+  for (const auto &test : cases) CheckShaderMemDecodeCase(test);
+
+  // Compare-stores keep rejecting GDS, like DS_CMPST_RTN_B32.
+  ShaderRecompiler::Decoder::Instruction gds;
+  const uint32_t gds_words[] = {0xd8440010u | (1u << 17u), 0x00030201u};
+  ShaderRecompiler::Decoder::DecodeInstruction(gds_words, 0u, gds);
+  Check(gds.opcode == O::UNSUPPORTED, "DS_CMPST_F32 must reject GDS");
+}
+
+// DS QWORD atomics read DATA (and DATA2) as VGPR pairs; MUBUF _x2 atomics return the old QWORD
+// with GLC and CMPSWAP_X2 reads its source and comparison pairs from VDATA[3:0].
+void TestShaderMemAtomics64() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  const ShaderMemDecodeCase cases[] = {
+      {"ds_sub_u64 v1, v[2:3] offset:8", {0xd9040008u, 0x00000201u}, O::DS_SUB_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicISub64", "OpAtomicISub %ulong"},
+      {"ds_rsub_u64 v1, v[2:3] offset:8", {0xd9080008u, 0x00000201u}, O::DS_RSUB_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicRSub64", "OpAtomicCompareExchange %ulong"},
+      {"ds_inc_u64 v1, v[2:3] offset:8", {0xd90c0008u, 0x00000201u}, O::DS_INC_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicInc64", "OpAtomicCompareExchange %ulong"},
+      {"ds_dec_u64 v1, v[2:3] offset:8", {0xd9100008u, 0x00000201u}, O::DS_DEC_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicDec64", "OpAtomicCompareExchange %ulong"},
+      {"ds_min_i64 v1, v[2:3] offset:8", {0xd9140008u, 0x00000201u}, O::DS_MIN_I64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicSMin64", "OpAtomicSMin %ulong"},
+      {"ds_max_i64 v1, v[2:3] offset:8", {0xd9180008u, 0x00000201u}, O::DS_MAX_I64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicSMax64", "OpAtomicSMax %ulong"},
+      {"ds_min_u64 v1, v[2:3] offset:8", {0xd91c0008u, 0x00000201u}, O::DS_MIN_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicUMin64", "OpAtomicUMin %ulong"},
+      {"ds_max_u64 v1, v[2:3] offset:8", {0xd9200008u, 0x00000201u}, O::DS_MAX_U64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicUMax64", "OpAtomicUMax %ulong"},
+      {"ds_and_b64 v1, v[2:3] offset:8", {0xd9240008u, 0x00000201u}, O::DS_AND_B64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicAnd64", "OpAtomicAnd %ulong"},
+      {"ds_xor_b64 v1, v[2:3] offset:8", {0xd92c0008u, 0x00000201u}, O::DS_XOR_B64, 2, -1, 1, 2, -1, 8, 2, "SharedAtomicXor64", "OpAtomicXor %ulong"},
+      {"ds_mskor_b64 v1, v[2:3], v[4:5] offset:8", {0xd9300008u, 0x00040201u}, O::DS_MSKOR_B64, 3, -1, 1, 2, 4, 8, 2, "SharedAtomicMaskedOr64", "OpAtomicCompareExchange %ulong"},
+      {"ds_cmpst_b64 v1, v[2:3], v[4:5] offset:8", {0xd9400008u, 0x00040201u}, O::DS_CMPST_B64, 3, -1, 1, 2, 4, 8, 2, "SharedAtomicCmpSwap64", "OpAtomicCompareExchange %ulong"},
+      {"ds_add_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd9800008u, 0x06000201u}, O::DS_ADD_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicIAddReturn64", "OpAtomicIAdd %ulong"},
+      {"ds_sub_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd9840008u, 0x06000201u}, O::DS_SUB_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicISub64", "OpAtomicISub %ulong"},
+      {"ds_rsub_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd9880008u, 0x06000201u}, O::DS_RSUB_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicRSub64", "OpAtomicCompareExchange %ulong"},
+      {"ds_inc_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd98c0008u, 0x06000201u}, O::DS_INC_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicInc64", "OpAtomicCompareExchange %ulong"},
+      {"ds_dec_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd9900008u, 0x06000201u}, O::DS_DEC_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicDec64", "OpAtomicCompareExchange %ulong"},
+      {"ds_min_rtn_i64 v[6:7], v1, v[2:3] offset:8", {0xd9940008u, 0x06000201u}, O::DS_MIN_RTN_I64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicSMin64", "OpAtomicSMin %ulong"},
+      {"ds_max_rtn_i64 v[6:7], v1, v[2:3] offset:8", {0xd9980008u, 0x06000201u}, O::DS_MAX_RTN_I64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicSMax64", "OpAtomicSMax %ulong"},
+      {"ds_min_rtn_u64 v[6:7], v1, v[2:3] offset:8", {0xd99c0008u, 0x06000201u}, O::DS_MIN_RTN_U64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicUMin64", "OpAtomicUMin %ulong"},
+      {"ds_and_rtn_b64 v[6:7], v1, v[2:3] offset:8", {0xd9a40008u, 0x06000201u}, O::DS_AND_RTN_B64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicAnd64", "OpAtomicAnd %ulong"},
+      {"ds_or_rtn_b64 v[6:7], v1, v[2:3] offset:8", {0xd9a80008u, 0x06000201u}, O::DS_OR_RTN_B64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicOrReturn64", "OpAtomicOr %ulong"},
+      {"ds_xor_rtn_b64 v[6:7], v1, v[2:3] offset:8", {0xd9ac0008u, 0x06000201u}, O::DS_XOR_RTN_B64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicXor64", "OpAtomicXor %ulong"},
+      {"ds_mskor_rtn_b64 v[6:7], v1, v[2:3], v[4:5] offset:8", {0xd9b00008u, 0x06040201u}, O::DS_MSKOR_RTN_B64, 3, 6, 1, 2, 4, 8, 2, "SharedAtomicMaskedOr64", "OpAtomicCompareExchange %ulong"},
+      {"ds_wrxchg_rtn_b64 v[6:7], v1, v[2:3] offset:8", {0xd9b40008u, 0x06000201u}, O::DS_WRXCHG_RTN_B64, 2, 6, 1, 2, -1, 8, 2, "SharedAtomicSwap64", "OpAtomicExchange %ulong"},
+      {"buffer_atomic_cmpswap_x2 v[4:7], v1, s[0:3], 0 offen glc", {0xe1445000u, 0x80000401u}, O::BUFFER_ATOMIC_CMPSWAP_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicCmpSwap64", "OpAtomicCompareExchange %ulong"},
+      {"buffer_atomic_sub_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe14c5000u, 0x80000401u}, O::BUFFER_ATOMIC_SUB_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicISub64", "OpAtomicISub %ulong"},
+      {"buffer_atomic_smin_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe1545000u, 0x80000401u}, O::BUFFER_ATOMIC_SMIN_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicSMin64", "OpAtomicSMin %ulong"},
+      {"buffer_atomic_smax_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe15c5000u, 0x80000401u}, O::BUFFER_ATOMIC_SMAX_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicSMax64", "OpAtomicSMax %ulong"},
+      {"buffer_atomic_umax_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe1605000u, 0x80000401u}, O::BUFFER_ATOMIC_UMAX_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicUMax64", "OpAtomicUMax %ulong"},
+      {"buffer_atomic_xor_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe16c5000u, 0x80000401u}, O::BUFFER_ATOMIC_XOR_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicXor64", "OpAtomicXor %ulong"},
+      {"buffer_atomic_inc_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe1705000u, 0x80000401u}, O::BUFFER_ATOMIC_INC_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicInc64", "OpAtomicCompareExchange %ulong"},
+      {"buffer_atomic_dec_x2 v[4:5], v1, s[0:3], 0 offen glc", {0xe1745000u, 0x80000401u}, O::BUFFER_ATOMIC_DEC_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicDec64", "OpAtomicCompareExchange %ulong"},
+      {"buffer_atomic_umax_x2 v[4:5], v1, s[0:3], 0 offen", {0xe1601000u, 0x80000401u}, O::BUFFER_ATOMIC_UMAX_X2, 3, 4, 1, -1, -1, 0, 2, "BufferAtomicUMax64", "OpAtomicUMax %ulong"},
+  };
+  for (const auto &test : cases) CheckShaderMemDecodeCase(test);
+
+  ShaderRecompiler::Decoder::Instruction gds;
+  const uint32_t gds_words[] = {0xd9840008u | (1u << 17u), 0x06000201u};
+  ShaderRecompiler::Decoder::DecodeInstruction(gds_words, 0u, gds);
+  Check(gds.opcode == O::UNSUPPORTED, "DS 64-bit atomics must reject GDS");
+}
+
+// Wrapping inc/dec and float compare-swap for MUBUF; sub/inc/dec/fcmpswap for MIMG (decode only:
+// the image forms run in ShaderRecompilerComputeTests with a real storage image).
+void TestShaderMemIncDecAtomics() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  const ShaderMemDecodeCase cases[] = {
+      {"buffer_atomic_inc v4, v1, s[0:3], 0 offen glc", {0xe0f05000u, 0x80000401u},
+       O::BUFFER_ATOMIC_INC, 3, 4, 1, -1, -1, 0, 1, "BufferAtomicInc32", "OpAtomicCompareExchange"},
+      {"buffer_atomic_dec v4, v1, s[0:3], 0 offen glc", {0xe0f45000u, 0x80000401u},
+       O::BUFFER_ATOMIC_DEC, 3, 4, 1, -1, -1, 0, 1, "BufferAtomicDec32", "OpAtomicCompareExchange"},
+      {"buffer_atomic_fcmpswap v[4:5], v1, s[0:3], 0 offen glc", {0xe0f85000u, 0x80000401u},
+       O::BUFFER_ATOMIC_FCMPSWAP, 3, 4, 1, -1, -1, 0, 1, "BufferAtomicFCmpSwap32", "OpFOrdEqual"},
+      {"image_atomic_sub v4, v[0:1], s[8:15] dmask:0x1 dim:SQ_RSRC_IMG_2D unorm glc",
+       {0xf0483108u, 0x00020400u}, O::IMAGE_ATOMIC_SUB, 3, 4, 0, -1, -1, 0, 1, nullptr, nullptr,
+       false},
+      {"image_atomic_inc v4, v[0:1], s[8:15] dmask:0x1 dim:SQ_RSRC_IMG_2D unorm glc",
+       {0xf06c3108u, 0x00020400u}, O::IMAGE_ATOMIC_INC, 3, 4, 0, -1, -1, 0, 1, nullptr, nullptr,
+       false},
+      {"image_atomic_dec v4, v[0:1], s[8:15] dmask:0x1 dim:SQ_RSRC_IMG_2D unorm glc",
+       {0xf0703108u, 0x00020400u}, O::IMAGE_ATOMIC_DEC, 3, 4, 0, -1, -1, 0, 1, nullptr, nullptr,
+       false},
+      {"image_atomic_fcmpswap v[4:5], v[0:1], s[8:15] dmask:0x3 dim:SQ_RSRC_IMG_2D unorm glc",
+       {0xf0743308u, 0x00020400u}, O::IMAGE_ATOMIC_FCMPSWAP, 3, 4, 0, -1, -1, 0, 2, nullptr,
+       nullptr, false},
+  };
+  for (const auto &test : cases) CheckShaderMemDecodeCase(test);
+
+  // Only the compare-swaps take two DWORDs per texel; a 64-bit inc is not implemented.
+  ShaderRecompiler::Decoder::Instruction decoded;
+  const uint32_t inc64[] = {0xf06c3308u, 0x00020400u};
+  ShaderRecompiler::Decoder::DecodeInstruction(inc64, 0u, decoded);
+  Check(decoded.opcode == O::UNSUPPORTED, "IMAGE_ATOMIC_INC dmask 0x3 must stay unsupported");
+}
+
+// FLAT/GLOBAL: GLC and SLC are accepted on loads and stores; byte D16 loads fill one half of the
+// destination and the D16_HI stores take the high byte or short of DATA.
+void TestShaderMemFlatModifiersAndD16() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  namespace Decoder = ShaderRecompiler::Decoder;
+  const ShaderMemDecodeCase cases[] = {
+      {"global_load_dword v3, v[0:1], off glc", {0xdc318000u, 0x037d0000u}, O::FLAT_LOAD_DWORD, 2,
+       3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_dword v3, v1, s[2:3] offset:16 slc", {0xdc328010u, 0x03020001u},
+       O::FLAT_LOAD_DWORD, 2, 3, 1, -1, -1, 16, 1, nullptr, nullptr, false},
+      {"global_load_dwordx2 v[4:5], v[0:1], off glc slc dlc", {0xdc379000u, 0x047d0000u},
+       O::FLAT_LOAD_DWORDX2, 2, 4, 0, 1, -1, 0, 2, nullptr, nullptr, false},
+      {"flat_load_dword v3, v[0:1] glc", {0xdc310000u, 0x037d0000u}, O::FLAT_LOAD_DWORD, 2, 3, 0,
+       1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_ubyte_d16 v3, v[0:1], off", {0xdc808000u, 0x037d0000u},
+       O::FLAT_LOAD_UBYTE_D16, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_ubyte_d16_hi v3, v[0:1], off", {0xdc848000u, 0x037d0000u},
+       O::FLAT_LOAD_UBYTE_D16_HI, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_sbyte_d16 v3, v[0:1], off", {0xdc888000u, 0x037d0000u},
+       O::FLAT_LOAD_SBYTE_D16, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_load_sbyte_d16_hi v3, v[0:1], off offset:-4", {0xdc8c8ffcu, 0x037d0000u},
+       O::FLAT_LOAD_SBYTE_D16_HI, 2, 3, 0, 1, -1, 0xfffffffcu, 1, nullptr, nullptr, false},
+      {"global_store_byte_d16_hi v[0:1], v3, off", {0xdc648000u, 0x007d0300u},
+       O::FLAT_STORE_BYTE_D16_HI, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_store_short_d16_hi v[0:1], v3, off glc", {0xdc6d8000u, 0x007d0300u},
+       O::FLAT_STORE_SHORT_D16_HI, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+      {"global_store_dword v[0:1], v3, off glc", {0xdc718000u, 0x007d0300u},
+       O::FLAT_STORE_DWORD, 2, 3, 0, 1, -1, 0, 1, nullptr, nullptr, false},
+  };
+  for (const auto &test : cases) CheckShaderMemDecodeCase(test);
+
+  struct Half {
+    std::array<uint32_t, 2> words;
+    uint32_t sdwa_sel;
+    bool glc, slc, data_signed;
+  };
+  const Half halves[] = {
+      {{0xdc318000u, 0x037d0000u}, 6u, true, false, false},  // glc load
+      {{0xdc328010u, 0x03020001u}, 6u, false, true, false},  // slc load
+      {{0xdc808000u, 0x037d0000u}, 4u, false, false, false}, // ubyte_d16: low half
+      {{0xdc848000u, 0x037d0000u}, 5u, false, false, false}, // ubyte_d16_hi: high half
+      {{0xdc888000u, 0x037d0000u}, 4u, false, false, true},  // sbyte_d16
+      {{0xdc8c8ffcu, 0x037d0000u}, 5u, false, false, true},  // sbyte_d16_hi
+      {{0xdc648000u, 0x007d0300u}, 2u, false, false, false}, // store_byte_d16_hi: DATA byte 2
+      {{0xdc6d8000u, 0x007d0300u}, 5u, true, false, false},  // store_short_d16_hi: DATA word 1
+  };
+  for (const auto &half : halves) {
+    Decoder::Instruction decoded;
+    Decoder::DecodeInstruction(half.words, 0u, decoded);
+    Check(decoded.dst.sdwa_sel == half.sdwa_sel && decoded.glc == half.glc &&
+              decoded.slc == half.slc && decoded.data_signed == half.data_signed &&
+              decoded.dst.sdwa_dst_unused == 2u,
+          "FLAT GLC/SLC or D16 half selection decoded incorrectly");
+  }
+
+  // The byte D16 high-half load becomes an 8-bit address load merged into the old register.
+  // global_load_sbyte_d16_hi v16, v18, s[0:1] offset:196; buffer_store_dword v16.
+  const uint32_t shader[] = {
+      0xdc8c80c4u, 0x10000012u, EncodeMubuf0(0x1c, 0, false), EncodeMubuf1(16, 12, 0),
+      EncodeSopp(0x01),
+  };
+  auto options = MakeCompileOptions(ShaderType::Compute);
+  options.dump_ir = true;
+  const auto result = RecompileForTest(shader, options);
+  Check(result.decoded_dump.find("FLAT_LOAD_SBYTE_D16_HI") != std::string::npos &&
+            result.ir_dump.find("LoadAddressU8") != std::string::npos &&
+            result.ir_dump.find("BitFieldInsert") != std::string::npos,
+        "GLOBAL_LOAD_SBYTE_D16_HI did not become a byte load merged into the high half");
+  CheckSpirvBinaryValidates(result.spirv);
+  const uint32_t glc_shader[] = {
+      0xdc3180c4u, 0x10000012u, EncodeMubuf0(0x1c, 0, false), EncodeMubuf1(16, 12, 0),
+      EncodeSopp(0x01),
+  };
+  const auto glc_result = RecompileForTest(glc_shader, options);
+  Check(glc_result.decoded_dump.find("glc=1") != std::string::npos &&
+            glc_result.ir_dump.find("LoadAddressU32") != std::string::npos,
+        "GLOBAL_LOAD_DWORD GLC did not compile");
+  CheckSpirvBinaryValidates(glc_result.spirv);
+}
+
+// image_msaa_load decodes as LLVM 18 assembles it for gfx10.3: VDATA has one VGPR per DMASK bit
+// and the address is x, y, [slice,] fragment.
+void TestShaderMemImageMsaaLoad() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  using ShaderRecompiler::Decoder::ImageDimension;
+  struct Case {
+    const char *assembly;
+    std::array<uint32_t, 2> words;
+    ImageDimension dimension;
+    uint32_t address_components, data_dwords, dst;
+  };
+  const Case cases[] = {
+      {"image_msaa_load v5, v[0:2], s[8:15] dmask:0x1 dim:SQ_RSRC_IMG_2D_MSAA unorm",
+       {0xf0001131u, 0x00020500u}, ImageDimension::Dim2DMsaa, 3u, 1u, 5u},
+      {"image_msaa_load v[4:7], v[0:3], s[8:15] dmask:0xf dim:SQ_RSRC_IMG_2D_MSAA_ARRAY unorm",
+       {0xf0001f39u, 0x00020400u}, ImageDimension::Dim2DMsaaArray, 4u, 4u, 4u},
+      {"image_msaa_load v[4:5], v[0:2], s[8:15] dmask:0x5 dim:SQ_RSRC_IMG_2D_MSAA unorm",
+       {0xf0001531u, 0x00020400u}, ImageDimension::Dim2DMsaa, 3u, 2u, 4u},
+  };
+  for (const auto &test : cases) {
+    ShaderRecompiler::Decoder::Instruction decoded;
+    ShaderRecompiler::Decoder::DecodeInstruction(test.words, 0u, decoded);
+    if (decoded.opcode != O::IMAGE_MSAA_LOAD || decoded.image_dimension != test.dimension ||
+        decoded.image_address_components != test.address_components ||
+        decoded.data_dwords != test.data_dwords || decoded.dst.reg != test.dst ||
+        decoded.src0.reg != 0u ||
+        ShaderRecompiler::Decoder::InstructionToString(decoded).find("IMAGE_MSAA_LOAD") ==
+            std::string::npos) {
+      std::fprintf(stderr, "ShaderCfgTests: %s decoded incorrectly\n", test.assembly);
+      std::abort();
+    }
+  }
+}
+
+// The *_g16 samples (opcodes from llvm-mc 18, gfx1030) decode as derivative samples with packed
+// 16-bit derivatives; the address size matches the VGPR count llvm-mc requires for every
+// opcode and dimension.
+void TestShaderMemImageSampleG16() {
+  using namespace ShaderRecompiler::Decoder;
+  struct Case {
+    const char *assembly;
+    std::array<uint32_t, 2> words;
+    ImageDimension dimension;
+    uint32_t address_dwords;
+  };
+  const Case cases[] = {
+      {"image_sample_d_g16 dim:SQ_RSRC_IMG_1D", {0xf0880f01u, 0x00820000u}, ImageDimension::Dim1D, 3u},
+      {"image_sample_d_g16 dim:SQ_RSRC_IMG_2D", {0xf0880f09u, 0x00820000u}, ImageDimension::Dim2D, 4u},
+      {"image_sample_d_g16 dim:SQ_RSRC_IMG_3D", {0xf0880f11u, 0x00820000u}, ImageDimension::Dim3D, 7u},
+      {"image_sample_d_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0880f29u, 0x00820000u}, ImageDimension::Dim2DArray, 5u},
+      {"image_sample_d_cl_g16 dim:SQ_RSRC_IMG_1D", {0xf08c0f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_d_cl_g16 dim:SQ_RSRC_IMG_2D", {0xf08c0f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_d_cl_g16 dim:SQ_RSRC_IMG_3D", {0xf08c0f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_d_cl_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf08c0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_c_d_g16 dim:SQ_RSRC_IMG_1D", {0xf0a80f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_c_d_g16 dim:SQ_RSRC_IMG_2D", {0xf0a80f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_c_d_g16 dim:SQ_RSRC_IMG_3D", {0xf0a80f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_c_d_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0a80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_c_d_cl_g16 dim:SQ_RSRC_IMG_1D", {0xf0ac0f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_c_d_cl_g16 dim:SQ_RSRC_IMG_2D", {0xf0ac0f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_c_d_cl_g16 dim:SQ_RSRC_IMG_3D", {0xf0ac0f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_c_d_cl_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0ac0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_d_o_g16 dim:SQ_RSRC_IMG_1D", {0xf0c80f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_d_o_g16 dim:SQ_RSRC_IMG_2D", {0xf0c80f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_d_o_g16 dim:SQ_RSRC_IMG_3D", {0xf0c80f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_d_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0c80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_d_cl_o_g16 dim:SQ_RSRC_IMG_1D", {0xf0cc0f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_d_cl_o_g16 dim:SQ_RSRC_IMG_2D", {0xf0cc0f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_d_cl_o_g16 dim:SQ_RSRC_IMG_3D", {0xf0cc0f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_d_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0cc0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_c_d_o_g16 dim:SQ_RSRC_IMG_1D", {0xf0e80f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_c_d_o_g16 dim:SQ_RSRC_IMG_2D", {0xf0e80f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_c_d_o_g16 dim:SQ_RSRC_IMG_3D", {0xf0e80f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_c_d_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0e80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_c_d_cl_o_g16 dim:SQ_RSRC_IMG_1D", {0xf0ec0f01u, 0x00820000u}, ImageDimension::Dim1D, 6u},
+      {"image_sample_c_d_cl_o_g16 dim:SQ_RSRC_IMG_2D", {0xf0ec0f09u, 0x00820000u}, ImageDimension::Dim2D, 7u},
+      {"image_sample_c_d_cl_o_g16 dim:SQ_RSRC_IMG_3D", {0xf0ec0f11u, 0x00820000u}, ImageDimension::Dim3D, 10u},
+      {"image_sample_c_d_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf0ec0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 8u},
+      {"image_sample_cd_g16 dim:SQ_RSRC_IMG_1D", {0xf1a00f01u, 0x00820000u}, ImageDimension::Dim1D, 3u},
+      {"image_sample_cd_g16 dim:SQ_RSRC_IMG_2D", {0xf1a00f09u, 0x00820000u}, ImageDimension::Dim2D, 4u},
+      {"image_sample_cd_g16 dim:SQ_RSRC_IMG_3D", {0xf1a00f11u, 0x00820000u}, ImageDimension::Dim3D, 7u},
+      {"image_sample_cd_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1a00f29u, 0x00820000u}, ImageDimension::Dim2DArray, 5u},
+      {"image_sample_cd_cl_g16 dim:SQ_RSRC_IMG_1D", {0xf1a40f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_cd_cl_g16 dim:SQ_RSRC_IMG_2D", {0xf1a40f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_cd_cl_g16 dim:SQ_RSRC_IMG_3D", {0xf1a40f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_cd_cl_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1a40f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_c_cd_g16 dim:SQ_RSRC_IMG_1D", {0xf1a80f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_c_cd_g16 dim:SQ_RSRC_IMG_2D", {0xf1a80f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_c_cd_g16 dim:SQ_RSRC_IMG_3D", {0xf1a80f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_c_cd_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1a80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_c_cd_cl_g16 dim:SQ_RSRC_IMG_1D", {0xf1ac0f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_c_cd_cl_g16 dim:SQ_RSRC_IMG_2D", {0xf1ac0f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_c_cd_cl_g16 dim:SQ_RSRC_IMG_3D", {0xf1ac0f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_c_cd_cl_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1ac0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_cd_o_g16 dim:SQ_RSRC_IMG_1D", {0xf1b00f01u, 0x00820000u}, ImageDimension::Dim1D, 4u},
+      {"image_sample_cd_o_g16 dim:SQ_RSRC_IMG_2D", {0xf1b00f09u, 0x00820000u}, ImageDimension::Dim2D, 5u},
+      {"image_sample_cd_o_g16 dim:SQ_RSRC_IMG_3D", {0xf1b00f11u, 0x00820000u}, ImageDimension::Dim3D, 8u},
+      {"image_sample_cd_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1b00f29u, 0x00820000u}, ImageDimension::Dim2DArray, 6u},
+      {"image_sample_cd_cl_o_g16 dim:SQ_RSRC_IMG_1D", {0xf1b40f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D", {0xf1b40f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_cd_cl_o_g16 dim:SQ_RSRC_IMG_3D", {0xf1b40f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1b40f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_c_cd_o_g16 dim:SQ_RSRC_IMG_1D", {0xf1b80f01u, 0x00820000u}, ImageDimension::Dim1D, 5u},
+      {"image_sample_c_cd_o_g16 dim:SQ_RSRC_IMG_2D", {0xf1b80f09u, 0x00820000u}, ImageDimension::Dim2D, 6u},
+      {"image_sample_c_cd_o_g16 dim:SQ_RSRC_IMG_3D", {0xf1b80f11u, 0x00820000u}, ImageDimension::Dim3D, 9u},
+      {"image_sample_c_cd_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1b80f29u, 0x00820000u}, ImageDimension::Dim2DArray, 7u},
+      {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_1D", {0xf1bc0f01u, 0x00820000u}, ImageDimension::Dim1D, 6u},
+      {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D", {0xf1bc0f09u, 0x00820000u}, ImageDimension::Dim2D, 7u},
+      {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_3D", {0xf1bc0f11u, 0x00820000u}, ImageDimension::Dim3D, 10u},
+      {"image_sample_c_cd_cl_o_g16 dim:SQ_RSRC_IMG_2D_ARRAY", {0xf1bc0f29u, 0x00820000u}, ImageDimension::Dim2DArray, 8u},
+  };
+  for (const auto &test : cases) {
+    Instruction decoded;
+    DecodeInstruction(test.words, 0u, decoded);
+    const auto dwords = ImageAddressDwordCount(decoded.image_sample_flags, decoded.image_dimension,
+                                               decoded.image_address_components);
+    if (decoded.opcode != Opcode::IMAGE_SAMPLE || decoded.image_dimension != test.dimension ||
+        (decoded.image_sample_flags & ImageSampleFlagG16) == 0u ||
+        (decoded.image_sample_flags & ImageSampleFlagDerivative) == 0u ||
+        dwords != test.address_dwords ||
+        MimgSampledOpcodeName(decoded.opcode_id) == nullptr ||
+        std::string_view(test.assembly).find(MimgSampledOpcodeName(decoded.opcode_id)) != 0u) {
+      std::fprintf(stderr, "ShaderCfgTests: %s: decoded %u address DWORDs, expected %u\n",
+                   test.assembly, dwords, test.address_dwords);
+      std::abort();
+    }
+  }
+
+  // 3D image_sample_d_g16: dx.xy | dx.z | dy.xy | dy.z, then 32-bit x, y, z.
+  const uint32_t flags = ImageSampleFlagDerivative | ImageSampleFlagG16;
+  const ImageAddressComponent expected[] = {{0, 16},  {16, 16}, {32, 16}, {64, 16},
+                                            {80, 16}, {96, 16}, {128, 32}, {160, 32},
+                                            {192, 32}};
+  for (uint32_t component = 0; component < std::size(expected); component++) {
+    const auto layout = ImageAddressComponentLayout(flags, ImageDimension::Dim3D, component);
+    Check(layout.bit_offset == expected[component].bit_offset &&
+              layout.bit_width == expected[component].bit_width,
+          "G16 3D derivative layout is not the packed per-vector layout");
+  }
+  // With A16 the existing all-16-bit layout applies unchanged.
+  for (const auto dimension : {ImageDimension::Dim1D, ImageDimension::Dim2D, ImageDimension::Dim3D}) {
+    for (uint32_t component = 0; component < 12; component++) {
+      const auto a16 = ImageAddressComponentLayout(
+          ImageSampleFlagDerivative | ImageSampleFlagA16 | ImageSampleFlagCompare, dimension,
+          component);
+      const auto both = ImageAddressComponentLayout(
+          ImageSampleFlagDerivative | ImageSampleFlagA16 | ImageSampleFlagCompare |
+              ImageSampleFlagG16,
+          dimension, component);
+      Check(a16.bit_offset == both.bit_offset && a16.bit_width == both.bit_width,
+            "G16 changed the A16 address layout");
+    }
+  }
+  // Without the G16 opcodes nothing changes: image_sample_d keeps 32-bit derivatives.
+  const uint32_t sample_d[] = {0xf0880f08u, 0x00820000u};
+  Instruction decoded;
+  DecodeInstruction(sample_d, 0u, decoded);
+  Check(decoded.opcode == Opcode::IMAGE_SAMPLE &&
+            (decoded.image_sample_flags & ImageSampleFlagG16) == 0u &&
+            ImageAddressDwordCount(decoded.image_sample_flags, decoded.image_dimension,
+                                   decoded.image_address_components) == 6u,
+        "image_sample_d must keep 32-bit derivatives");
+}
+
+void RunShaderMemDecodeTests() {
+  TestShaderMemImageMsaaLoad();
+  TestShaderMemImageSampleG16();
+  TestShaderMemFlatModifiersAndD16();
+  TestShaderMemIncDecAtomics();
+  TestShaderMemDsAtomics32();
+  TestShaderMemAtomics64();
+}

@@ -1132,6 +1132,10 @@ if(BUILD_TESTING)
 	                     emulator_vram_profile_invalid emulator_rt_arena_invalid
 	                     emulator_video_out_resolution_invalid PROPERTIES WILL_FAIL TRUE)
 
+	# gta6-prep: shader-mem
+	add_test(NAME shader_recompiler_shader_mem
+		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --shader-mem-only)
+
 	add_custom_target(kyty_tests DEPENDS
 		ime_dialog_tests
 		shader_cfg_tests
