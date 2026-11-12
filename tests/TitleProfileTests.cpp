@@ -409,7 +409,55 @@ void TestExpandPresets() {
 
 // The options of the presets that take a value; every other token is a flag.
 bool IsPresetFlag(std::string_view option) {
-  return option != "--pipeline-helpers" && option != "--gpu-thread-cpus";
+  return option != "--pipeline-helpers" && option != "--gpu-thread-cpus" &&
+         option != "--vram-profile" && option != "--vram-gc";
+}
+
+// gta6-prep: integration. The VRAM presets carry gta6/vram's options.
+void TestVramPresets() {
+  const auto low = PresetTokens("low-vram");
+  const auto rtx = PresetTokens("rtx3050");
+  for (const auto *tokens : {&low, &rtx}) {
+    const auto profile = IndexOf(*tokens, "--vram-profile");
+    const auto gc = IndexOf(*tokens, "--vram-gc");
+    Check(profile >= 0 && (*tokens)[static_cast<size_t>(profile) + 1] == "low",
+          "a VRAM preset does not select --vram-profile low");
+    Check(gc >= 0 && (*tokens)[static_cast<size_t>(gc) + 1] == "proportional",
+          "a VRAM preset does not select --vram-gc proportional");
+    Check(IndexOf(*tokens, "--oom-recovery") >= 0 &&
+              IndexOf(*tokens, "--no-oom-recovery") < 0,
+          "a VRAM preset does not turn on --oom-recovery");
+    Check(IndexOf(*tokens, "--no-native-raytracing") >= 0,
+          "a VRAM preset leaves native ray tracing on");
+    // What the guest is told stays the title's choice.
+    Check(IndexOf(*tokens, "--video-out-resolution") < 0,
+          "a VRAM preset changes the reported output resolution");
+    // --vram-profile low caps the automatic helper count instead.
+    Check(IndexOf(*tokens, "--pipeline-helpers") < 0,
+          "a VRAM preset fixes the pipeline helper count");
+  }
+  // rtx3050 is low-vram, then the NVIDIA machine's options.
+  Check(rtx.size() > low.size() &&
+            Tokens(rtx.begin(), rtx.begin() + static_cast<std::ptrdiff_t>(low.size())) == low,
+        "rtx3050 does not start with low-vram's options");
+  Check(Tokens(rtx.begin() + static_cast<std::ptrdiff_t>(low.size()), rtx.end()) ==
+            Tokens{"--gpu-thread-cpus", "off"},
+        "rtx3050 adds other options than --gpu-thread-cpus off");
+  Check(Config::PresetTokenList(*Config::FindPreset("low-vram")) ==
+            "--no-native-raytracing --no-trinity --no-readback-tiled-images "
+            "--no-readback-storage-images --no-keep-small-layer-targets --vram-profile low "
+            "--vram-gc proportional --oom-recovery",
+        "the low-vram Preset: line changed");
+
+  // A value option the user set drops the preset's value with it.
+  const auto *rtx_preset = Config::FindPreset("rtx3050");
+  const std::vector<std::string> user{"vram-profile", "oom-recovery"};
+  const auto tokens = Config::TitlePresetTokens(*rtx_preset, user, IsPresetFlag);
+  Check(IndexOf(tokens, "--vram-profile") < 0 && IndexOf(tokens, "low") < 0 &&
+            IndexOf(tokens, "--oom-recovery") < 0,
+        "a default preset overrode the user's VRAM options");
+  Check(IndexOf(tokens, "--vram-gc") >= 0 && IndexOf(tokens, "proportional") >= 0,
+        "a default preset lost a VRAM option the user did not set");
 }
 
 void TestTitlePresetTokens() {
@@ -441,7 +489,7 @@ void TestTitlePresetTokens() {
             IndexOf(rtx_tokens, "off") < 0,
         "a default preset overrode the user's options");
   Check(IndexOf(rtx_tokens, "--no-trinity") == 0 &&
-            rtx_tokens.back() == "--no-keep-small-layer-targets",
+            rtx_tokens.back() == "--oom-recovery",
         "a default preset lost the options the user did not set");
 }
 
@@ -460,6 +508,7 @@ int main() {
   TestPresets();
   TestExpandPresets();
   TestTitlePresetTokens();
+  TestVramPresets();
   std::printf("TitleProfileTests: passed\n");
   return 0;
 }

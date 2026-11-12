@@ -25,30 +25,42 @@ constexpr std::string_view SafeTokens[] = {
     "off",
 };
 
-// Options that use less video memory. Only options that exist are listed.
-// TODO(gta6-prep VRAM workstream): add, once their flags exist,
-//   "--vram-profile", "low",
-//   "--vram-gc", "proportional",
-//   "--oom-recovery",
-//   "--video-out-resolution", "1080p",
-//   "--rt-arena-mb", "<MiB>",
+// Options that use less video memory.
+// --vram-profile low already implies proportional collection thresholds, --oom-recovery, a
+// smaller recycled-image pool, 4 parked images, a smaller BLAS arena and at most 2 automatic
+// pipeline helpers (Config::ResolveVramSettings()); --vram-gc and --oom-recovery are repeated so
+// that the "Preset:" line names them and --vram-profile auto after the preset keeps them.
+// --video-out-resolution stays auto: 1080p changes what the guest is told, and no title is known
+// to size its render targets by it. --rt-arena-mb is left to the profile, as native ray tracing
+// is off.
 constexpr std::string_view LowVramTokens[] = {
     "--no-native-raytracing",
     "--no-trinity",
     "--no-readback-tiled-images",
     "--no-readback-storage-images",
     "--no-keep-small-layer-targets",
+    "--vram-profile",
+    "low",
+    "--vram-gc",
+    "proportional",
+    "--oom-recovery",
 };
 
 // An RTX 3050 with 8 GB: low-vram's options (a preset cannot name another one, so they are
-// repeated here).
-// TODO(gta6-prep VRAM workstream): the same additions as low-vram.
+// repeated here), then the NVIDIA machine's. The pipeline helpers (NVIDIA on Windows only) stay
+// automatic, which --vram-profile low caps at 2: a fixed --pipeline-helpers 2 would also start 2
+// on a CPU whose automatic count is 1.
 constexpr std::string_view Rtx3050Tokens[] = {
     "--no-native-raytracing",
     "--no-trinity",
     "--no-readback-tiled-images",
     "--no-readback-storage-images",
     "--no-keep-small-layer-targets",
+    "--vram-profile",
+    "low",
+    "--vram-gc",
+    "proportional",
+    "--oom-recovery",
     // The built-in CPUs suit a Ryzen 9 5900X; on the CPUs such a machine has they can land on
     // E-cores or on cores the game threads need.
     "--gpu-thread-cpus",
