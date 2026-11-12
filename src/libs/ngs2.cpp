@@ -1267,16 +1267,26 @@ static size_t Ngs2RackOptionSize(uint32_t rack_id) {
 	}
 }
 
+// The soft-fail flags of one rack create API, so that each API reports its own first failure.
+struct Ngs2RackCheckOnce {
+	std::atomic_bool rack_id {false};
+	std::atomic_bool option_size {false};
+};
+
 // OK, or the error a rack create returns for an unknown rack_id or a too small option (a larger
 // one is accepted: only the known prefix is copied).
-static int32_t Ngs2CheckRackOption(const char* api, uint32_t rack_id,
+static int32_t Ngs2CheckRackOption(const char* api, Ngs2RackCheckOnce& once, uint32_t rack_id,
                                    const Ngs2RackOption* option) {
 	const auto expected = Ngs2RackOptionSize(rack_id);
 	if (expected == 0) {
-		KYTY_SOFT_FAIL(api, "unsupported rack_id 0x%" PRIx32, rack_id);
+		Common::SoftFail::ReportOnce(once.rack_id, api,
+		                             fmt::sprintf("unsupported rack_id 0x%" PRIx32, rack_id));
 		return NGS2_ERROR_INVALID_RACK_ID;
 	}
-	if (option != nullptr && !KYTY_ACCEPT_PARAM_SIZE(api, "rack option", option->size, expected)) {
+	if (option != nullptr &&
+	    !Common::SoftFail::AcceptParamSize(once.option_size, api,
+	                                       fmt::sprintf("rack 0x%" PRIx32 " option", rack_id),
+	                                       option->size, expected)) {
 		return NGS2_ERROR_INVALID_OPTION_SIZE;
 	}
 	return OK;
@@ -1569,7 +1579,10 @@ int KYTY_SYSV_ABI Ngs2RackCreate(uintptr_t system_handle, uint32_t rack_id,
 	EXIT_NOT_IMPLEMENTED(buffer_info->host_buffer_size == 0);
 	EXIT_NOT_IMPLEMENTED(system_handle == 0);
 
-	if (const auto check = Ngs2CheckRackOption("sceNgs2RackCreate", rack_id, option); check != OK) {
+	static Ngs2RackCheckOnce soft_fail_once;
+	if (const auto check =
+	        Ngs2CheckRackOption("sceNgs2RackCreate", soft_fail_once, rack_id, option);
+	    check != OK) {
 		return check;
 	}
 
@@ -1682,7 +1695,9 @@ int KYTY_SYSV_ABI Ngs2RackCreateWithAllocator(uintptr_t system_handle, uint32_t 
 	EXIT_NOT_IMPLEMENTED(system_handle == 0);
 
 	// Before the allocation, which a failing Ngs2RackCreate would leak.
-	if (const auto check = Ngs2CheckRackOption("sceNgs2RackCreateWithAllocator", rack_id, option);
+	static Ngs2RackCheckOnce soft_fail_once;
+	if (const auto check =
+	        Ngs2CheckRackOption("sceNgs2RackCreateWithAllocator", soft_fail_once, rack_id, option);
 	    check != OK) {
 		return check;
 	}
