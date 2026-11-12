@@ -1462,7 +1462,9 @@ uint32_t LoadRawBuffer(ValueEmitContext& ctx, const IR::Inst& inst, const IR::Me
 // gta6-prep: shader-mem
 // A formatted access whose format has no decoder (a V# format GetFormatInfo does not know, such
 // as the 113/121 vertex formats pipelineCache special-cases) moves raw DWORDs, which is wrong for
-// any format that is not 32 bits per component. Say so once per format and direction.
+// any format that is not 32 bits per component. Say so once per format and direction. Callers
+// only log accesses whose buffer resolved to a host object: an unresolved one reads zero and
+// stores nothing, so it never moves raw DWORDs.
 static void LogFormattedRawFallback(ValueEmitContext& ctx, Prospero::BufferFormat format, bool store) {
 	if (format == Prospero::BufferFormat::kInvalid) return; // unbound V#: no data either way
 	static std::array<std::atomic<uint64_t>, 16> logged {};
@@ -1497,10 +1499,10 @@ uint32_t LoadBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t compon
 			    if (info.type != Format::ComponentType::Unknown) {
 				    return LoadFormattedPrepared(ctx, inst, selected, resource, info, components);
 			    }
+			    if (resource.object_pointer == 0u) return ConstantU32CompositeZero(state, components);
 			    if (selected.formatted) {
 				    LogFormattedRawFallback(ctx, BufferFormat(ctx, selected), false);
 			    }
-			    if (resource.object_pointer == 0u) return ConstantU32CompositeZero(state, components);
 			    return LoadRawBuffer(ctx, inst, selected, resource, components);
 		    });
 	    });
@@ -1573,7 +1575,8 @@ void StoreBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t component
 				StoreFormattedPrepared(ctx, inst, selected, resource, info, composite, components);
 				return;
 			}
-			if (selected.formatted) {
+			// An unresolved buffer stores nothing, so there is no raw fallback to report.
+			if (selected.formatted && resource.object_pointer != 0u) {
 				LogFormattedRawFallback(ctx, BufferFormat(ctx, selected), true);
 			}
 			if (selected.IsCoherentBufferPairStore(inst.GetOpcode()) && resource.object_pointer != 0u) {
