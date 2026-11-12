@@ -400,36 +400,18 @@ static void NoteExplicitOption(ConfigOptions& config, std::string_view option) {
 	}
 }
 
-// Replaces each `--preset <name>` with the preset's tokens where it stands, so that the options
-// after it override the preset's. The tokens of a preset are not expanded again, and everything
-// from --guest-exec on belongs to the guest.
+static bool IsFlag(std::string_view option) {
+	return std::ranges::find(FLAGS, option, &Flag::name) != std::end(FLAGS);
+}
+
+// Config::ExpandPresets() over argv.
 static bool ExpandPresets(int argc, char* argv[], std::vector<std::string>& args,
                           std::vector<std::string>& presets) {
 	args.assign(argv, argv + argc);
-	for (size_t i = 1; i < args.size(); i++) {
-		if (args[i] == "--guest-exec") {
-			break;
-		}
-		if (args[i] != "--preset") {
-			continue;
-		}
-		if (i + 1 >= args.size()) {
-			::printf("missing value for --preset\n");
-			return false;
-		}
-		const auto* preset = Config::FindPreset(args[i + 1]);
-		if (preset == nullptr) {
-			::printf("unknown preset: %s (presets: %s)\n", args[i + 1].c_str(),
-			         Config::PresetNames().c_str());
-			return false;
-		}
-		presets.emplace_back(preset->name);
-		args.erase(args.begin() + static_cast<std::ptrdiff_t>(i),
-		           args.begin() + static_cast<std::ptrdiff_t>(i + 2));
-		args.insert(args.begin() + static_cast<std::ptrdiff_t>(i), preset->tokens.begin(),
-		            preset->tokens.end());
-		// i >= 1, so this does not wrap; the loop continues after the inserted tokens.
-		i = i + preset->tokens.size() - 1;
+	const auto error = Config::ExpandPresets(args, presets);
+	if (!error.empty()) {
+		::printf("%s\n", error.c_str());
+		return false;
 	}
 	return true;
 }
@@ -763,21 +745,8 @@ static bool ApplyTitlePreset(ConfigOptions& config, std::string_view name) {
 	}
 	// With --help, ParseArgs() accepts a command line without --game.
 	std::vector<std::string> args {"kyty_emulator", "--help"};
-	for (size_t i = 0; i < preset->tokens.size(); i++) {
-		const auto token    = preset->tokens[i];
-		const bool flag     = std::ranges::find(FLAGS, token, &Flag::name) != std::end(FLAGS);
-		const bool user_set = std::ranges::find(config.explicit_options,
-		                                        Config::OptionKey(token)) !=
-		                      config.explicit_options.end();
-		if (!user_set) {
-			args.emplace_back(token);
-		}
-		if (!flag && i + 1 < preset->tokens.size()) {
-			i++;
-			if (!user_set) {
-				args.emplace_back(preset->tokens[i]);
-			}
-		}
+	for (auto& token: Config::TitlePresetTokens(*preset, config.explicit_options, IsFlag)) {
+		args.push_back(std::move(token));
 	}
 	std::vector<char*> argv;
 	argv.reserve(args.size());

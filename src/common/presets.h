@@ -4,6 +4,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Named bundles of command-line options. `--preset <name>` is replaced by the preset's tokens where
 // it stands, so options after it override the preset; a title profile's default preset is applied
@@ -26,6 +27,20 @@ struct Preset {
 // The key an option is tracked by in ConfigOptions::explicit_options: its name without the leading
 // "--" and "no-", e.g. "native-raytracing" for both --native-raytracing and --no-native-raytracing.
 [[nodiscard]] std::string_view OptionKey(std::string_view option);
+
+// Replaces each `--preset <name>` of `args` (args[0] is the program) with the preset's tokens where
+// it stands, so that the options after it override the preset's, and appends the name to
+// `presets`. The tokens of a preset are not expanded again, and everything from --guest-exec on
+// belongs to the guest. Returns an empty string, or the error message to print.
+[[nodiscard]] std::string ExpandPresets(std::vector<std::string>& args,
+                                        std::vector<std::string>& presets);
+
+// The tokens of `preset` that a title profile's default preset applies: those whose OptionKey() is
+// not in `explicit_options` (the options the user set). A token for which `is_flag` is false takes
+// the next token as its value, and the two are kept or dropped together.
+[[nodiscard]] std::vector<std::string> TitlePresetTokens(const Preset&                 preset,
+                                                         std::span<const std::string> explicit_options,
+                                                         bool (*is_flag)(std::string_view option));
 
 } // namespace Config
 

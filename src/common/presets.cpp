@@ -1,5 +1,8 @@
 #include "common/presets.h"
 
+#include <algorithm>
+#include <cstddef>
+
 namespace Config {
 
 namespace {
@@ -105,6 +108,54 @@ std::string_view OptionKey(std::string_view option) {
 		option.remove_prefix(3);
 	}
 	return option;
+}
+
+std::string ExpandPresets(std::vector<std::string>& args, std::vector<std::string>& presets) {
+	for (size_t i = 1; i < args.size(); i++) {
+		if (args[i] == "--guest-exec") {
+			break;
+		}
+		if (args[i] != "--preset") {
+			continue;
+		}
+		if (i + 1 >= args.size()) {
+			return "missing value for --preset";
+		}
+		const auto* preset = FindPreset(args[i + 1]);
+		if (preset == nullptr) {
+			return "unknown preset: " + args[i + 1] + " (presets: " + PresetNames() + ")";
+		}
+		presets.emplace_back(preset->name);
+		args.erase(args.begin() + static_cast<std::ptrdiff_t>(i),
+		           args.begin() + static_cast<std::ptrdiff_t>(i + 2));
+		args.insert(args.begin() + static_cast<std::ptrdiff_t>(i), preset->tokens.begin(),
+		            preset->tokens.end());
+		// i >= 1, so this does not wrap; the loop continues after the inserted tokens.
+		i = i + preset->tokens.size() - 1;
+	}
+	return {};
+}
+
+std::vector<std::string> TitlePresetTokens(const Preset&                 preset,
+                                           std::span<const std::string> explicit_options,
+                                           bool (*is_flag)(std::string_view option)) {
+	std::vector<std::string> tokens;
+	for (size_t i = 0; i < preset.tokens.size(); i++) {
+		const auto token    = preset.tokens[i];
+		const bool flag     = is_flag(token);
+		const bool user_set = std::ranges::find(explicit_options, OptionKey(token)) !=
+		                      explicit_options.end();
+		if (!user_set) {
+			tokens.emplace_back(token);
+		}
+		if (!flag && i + 1 < preset.tokens.size()) {
+			i++;
+			if (!user_set) {
+				tokens.emplace_back(preset.tokens[i]);
+			}
+		}
+	}
+	return tokens;
 }
 
 } // namespace Config

@@ -1,11 +1,13 @@
 #include "common/presets.h"
 #include "common/titleProfile.h"
 
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -300,6 +302,127 @@ void TestPresets() {
         "a --no- only flag key is wrong");
 }
 
+using Tokens = std::vector<std::string>;
+
+Tokens PresetTokens(std::string_view name) {
+  const auto *preset = Config::FindPreset(name);
+  Check(preset != nullptr, "a preset under test is missing");
+  return {preset->tokens.begin(), preset->tokens.end()};
+}
+
+std::ptrdiff_t IndexOf(const Tokens &tokens, std::string_view token) {
+  for (size_t i = 0; i < tokens.size(); i++) {
+    if (tokens[i] == token) {
+      return static_cast<std::ptrdiff_t>(i);
+    }
+  }
+  return -1;
+}
+
+void TestExpandPresets() {
+  const auto safe = PresetTokens("safe");
+  const auto low = PresetTokens("low-vram");
+
+  // In place: the tokens replace "--preset safe", and an option after it comes
+  // after the preset's opposite form, so it wins.
+  Tokens args{"kyty_emulator", "--help", "--preset", "safe",
+              "--async-pipelines"};
+  std::vector<std::string> presets;
+  Check(Config::ExpandPresets(args, presets).empty(),
+        "a valid --preset was rejected");
+  Check(args.size() == 2 + safe.size() + 1, "the expansion has the wrong size");
+  Check(args[0] == "kyty_emulator" && args[1] == "--help",
+        "the options before the preset moved");
+  Check(Tokens(args.begin() + 2, args.begin() + 2 + safe.size()) == safe,
+        "the preset's tokens are not where --preset stood");
+  Check(args.back() == "--async-pipelines",
+        "the option after the preset did not stay last");
+  Check(IndexOf(args, "--no-async-pipelines") >= 0 &&
+            IndexOf(args, "--no-async-pipelines") <
+                IndexOf(args, "--async-pipelines"),
+        "an option after a preset does not override it");
+  Check(presets == std::vector<std::string>{"safe"},
+        "the expanded preset was not recorded");
+
+  // An option before the preset is overridden by it.
+  args = {"kyty_emulator", "--native-raytracing", "--preset", "low-vram"};
+  presets.clear();
+  Check(Config::ExpandPresets(args, presets).empty(),
+        "a valid --preset was rejected");
+  Check(IndexOf(args, "--native-raytracing") == 1 &&
+            IndexOf(args, "--no-native-raytracing") == 2,
+        "a preset does not override the option before it");
+
+  // Several presets expand in order, each where it stands.
+  args = {"kyty_emulator", "--preset", "low-vram", "--trinity", "--preset",
+          "safe"};
+  presets.clear();
+  Check(Config::ExpandPresets(args, presets).empty(),
+        "two valid presets were rejected");
+  Tokens expected{"kyty_emulator"};
+  expected.insert(expected.end(), low.begin(), low.end());
+  expected.emplace_back("--trinity");
+  expected.insert(expected.end(), safe.begin(), safe.end());
+  Check(args == expected, "two presets did not expand in order");
+  Check(presets == std::vector<std::string>{"low-vram", "safe"},
+        "the presets were not recorded in order");
+
+  // The guest's arguments are left alone.
+  args = {"kyty_emulator", "--guest-exec", "/app0/eboot.bin", "--preset",
+          "safe"};
+  const auto guest = args;
+  presets.clear();
+  Check(Config::ExpandPresets(args, presets).empty() && args == guest &&
+            presets.empty(),
+        "a --preset after --guest-exec was expanded");
+
+  args = {"kyty_emulator", "--preset"};
+  Check(Config::ExpandPresets(args, presets) == "missing value for --preset",
+        "a --preset without a name was accepted");
+  args = {"kyty_emulator", "--preset", "bogus"};
+  Check(Config::ExpandPresets(args, presets) ==
+            "unknown preset: bogus (presets: safe, low-vram, rtx3050)",
+        "an unknown preset was accepted");
+}
+
+// The options of the presets that take a value; every other token is a flag.
+bool IsPresetFlag(std::string_view option) {
+  return option != "--pipeline-helpers" && option != "--gpu-thread-cpus";
+}
+
+void TestTitlePresetTokens() {
+  const auto *safe = Config::FindPreset("safe");
+  const auto *rtx = Config::FindPreset("rtx3050");
+  Check(safe != nullptr && rtx != nullptr, "a preset under test is missing");
+
+  Check(Config::TitlePresetTokens(*safe, {}, IsPresetFlag) == PresetTokens("safe"),
+        "a default preset without user options dropped a token");
+
+  // Both forms of an option the user set block it; a value goes with its
+  // option.
+  const std::vector<std::string> user{"async-pipelines", "pipeline-helpers"};
+  const auto tokens = Config::TitlePresetTokens(*safe, user, IsPresetFlag);
+  Check(IndexOf(tokens, "--no-async-pipelines") < 0,
+        "a default preset overrode a flag the user set");
+  Check(IndexOf(tokens, "--pipeline-helpers") < 0 && IndexOf(tokens, "0") < 0,
+        "a default preset kept an option the user set, or its value");
+  Check(tokens.size() == safe->tokens.size() - 3,
+        "a default preset dropped options the user did not set");
+  Check(tokens.size() >= 2 && tokens[tokens.size() - 2] == "--gpu-thread-cpus" &&
+            tokens.back() == "off",
+        "a value option the user did not set lost its value");
+
+  const std::vector<std::string> user_rtx{"native-raytracing", "gpu-thread-cpus"};
+  const auto rtx_tokens = Config::TitlePresetTokens(*rtx, user_rtx, IsPresetFlag);
+  Check(IndexOf(rtx_tokens, "--no-native-raytracing") < 0 &&
+            IndexOf(rtx_tokens, "--gpu-thread-cpus") < 0 &&
+            IndexOf(rtx_tokens, "off") < 0,
+        "a default preset overrode the user's options");
+  Check(IndexOf(rtx_tokens, "--no-trinity") == 0 &&
+            rtx_tokens.back() == "--no-keep-small-layer-targets",
+        "a default preset lost the options the user did not set");
+}
+
 } // namespace
 
 int main() {
@@ -312,6 +435,8 @@ int main() {
   TestProfileTable();
   TestTitleProfileLine();
   TestPresets();
+  TestExpandPresets();
+  TestTitlePresetTokens();
   std::printf("TitleProfileTests: passed\n");
   return 0;
 }
