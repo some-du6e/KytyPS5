@@ -2715,8 +2715,30 @@ def main(argv=None):
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(text)
     else:
-        sys.stdout.write(text)
+        _write_stdout(text)
     return 0
+
+
+def _write_stdout(text):
+    """Writes the report as UTF-8: a redirected or piped stdout on Windows uses the ANSI code page
+    (cp1252), which cannot encode U+FFFD from undecodable log bytes or non-Latin titles and paths."""
+    out = sys.stdout
+    enc = (getattr(out, "encoding", None) or "").lower().replace("-", "").replace("_", "")
+    if enc != "utf8":
+        if hasattr(out, "reconfigure"):
+            try:
+                out.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError, io.UnsupportedOperation):
+                pass
+            else:
+                out.write(text)
+                return
+        if hasattr(out, "buffer"):
+            out.flush()
+            out.buffer.write(text.encode("utf-8", "replace"))
+            out.buffer.flush()
+            return
+    out.write(text)
 
 
 if __name__ == "__main__":

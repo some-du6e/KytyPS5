@@ -111,6 +111,26 @@ class OutputTests(unittest.TestCase):
         self.assertIn("src/x/y.cpp", js)
         self.assertEqual(kt.redact("/home/runner/work/KytyPS5/KytyPS5/src/a.cpp"), "/home/runner/work/KytyPS5/KytyPS5/src/a.cpp")
 
+    def test_stdout_in_a_legacy_code_page_gets_utf8(self):
+        # Windows: a redirected or piped stdout is cp1252, which has no U+FFFD (undecodable log bytes).
+        tmp = tempfile.mkdtemp(prefix="kyty-triage-test-")
+        try:
+            p = os.path.join(tmp, "_kyty.txt")
+            with open(p, "wb") as f:
+                f.write(b"--- Build ---\nOfficial build KytyPS5-2026-11-19-abcdef1\n--- Error ---\n"
+                        b"bad bytes \xe9\xff in a title \xe3\x82\xb2\xe3\x83\xbc\xe3\x83\xa0\n"
+                        b" in D:\\a\\KytyPS5\\KytyPS5\\src\\core\\x.cpp:12\n")
+            raw = io.BytesIO()
+            out = io.TextIOWrapper(raw, encoding="cp1252", newline="\n")
+            with contextlib.redirect_stdout(out):
+                code = kt.main([p])
+            out.flush()
+            self.assertEqual(code, 0)
+            text = raw.getvalue().decode("utf-8")
+            self.assertIn("bad bytes \ufffd\ufffd in a title \u30b2\u30fc\u30e0", text)
+        finally:
+            shutil.rmtree(tmp)
+
     def test_cli_runs_isolated(self):
         r = subprocess.run([sys.executable, "-I", os.path.join(u.TOOL_DIR, "kyty_triage.py"), "--json",
                             u.fixture("macos-1133-device-selection.txt")], capture_output=True, text=True, timeout=120)
