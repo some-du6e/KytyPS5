@@ -13,6 +13,7 @@
 #include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDialog>
 #include <QDir>
 #include <QFile>
@@ -239,7 +240,39 @@ static void AddFlag(QStringList& args, bool enabled, const char* name) {
 	}
 }
 
-static QStringList CreateEmulatorArgs(const Configuration& info) {
+// The sessions whose log the launcher keeps in _Logs (see SessionLogPath()).
+constexpr qsizetype SESSION_LOGS_KEPT = 20;
+
+// Where the emulator keeps the warnings, errors and fatal report of a session (--session-log), so
+// that a game that closes or crashes leaves a log: <emulator folder>/_Logs/<title>_<date>.log. The
+// oldest logs past the newest SESSION_LOGS_KEPT - 1 are deleted first. Empty when the folder cannot
+// be created.
+static QString SessionLogPath(const QString& emulator_folder, const Configuration& info) {
+	QDir folder(emulator_folder);
+	if (!folder.mkpath(QStringLiteral("_Logs")) || !folder.cd(QStringLiteral("_Logs"))) {
+		return {};
+	}
+	// Newest first.
+	const auto logs = folder.entryInfoList({QStringLiteral("*.log")}, QDir::Files, QDir::Time);
+	for (qsizetype i = SESSION_LOGS_KEPT - 1; i < logs.size(); i++) {
+		QFile::remove(logs.at(i).absoluteFilePath());
+	}
+	auto title = !info.title_id.isEmpty() ? info.title_id : QFileInfo(info.basedir).fileName();
+	title.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_.-]")), QStringLiteral("_"));
+	if (title.isEmpty()) {
+		title = QStringLiteral("game");
+	}
+	const auto name =
+	    title + '_' + QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
+	auto path = folder.absoluteFilePath(name + QStringLiteral(".log"));
+	for (int copy = 2; QFileInfo::exists(path); copy++) {
+		path = folder.absoluteFilePath(name + '_' + QString::number(copy) + QStringLiteral(".log"));
+	}
+	return path;
+}
+
+// `session_log`, when not empty, is the session log of the emulator (see SessionLogPath()).
+static QStringList CreateEmulatorArgs(const Configuration& info, const QString& session_log = {}) {
 	QStringList args;
 	auto        r = Configuration::NormalizeResolution(info.screen_resolution).split('x');
 
@@ -296,6 +329,9 @@ static QStringList CreateEmulatorArgs(const Configuration& info) {
 	args << "--command-buffer-dump-folder" << info.command_buffer_dump_folder;
 	args << "--printf-direction" << EnumToText(info.printf_direction);
 	args << "--printf-output-file" << info.printf_output_file;
+	if (!session_log.isEmpty()) {
+		args << "--session-log" << session_log;
+	}
 	AddFlag(args, info.profiler_enabled, "--profile");
 	AddFlag(args, info.pro_enabled, "--trinity");
 	if (info.pro_enabled && info.pssr_upscaler == Configuration::PssrUpscaler::DLSS) {
@@ -420,7 +456,9 @@ static QString CmdCommand(const QString& interpreter, const QStringList& args,
 void MainDialog::RunInterpreter(QProcess* process, const Configuration& info, bool close_terminal) {
 	const auto& interpreter = m_p->GetInterpreter();
 
-	auto args = CreateEmulatorArgs(info);
+	// Every session leaves its warnings and errors in a file of its own.
+	const auto session_log = SessionLogPath(QFileInfo(interpreter).absolutePath(), info);
+	auto       args        = CreateEmulatorArgs(info, session_log);
 	if (args.isEmpty()) {
 		QMessageBox::critical(this, tr("Error"), tr("Invalid emulator configuration"));
 		QApplication::quit();
