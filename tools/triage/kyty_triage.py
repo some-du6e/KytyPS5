@@ -405,7 +405,7 @@ R_SPIRV_FAIL = re.compile(r"^(?:SPIR-V (?:validation|emission) failed: hash=0x(?
                           r"|ShaderRecompiler (?P<stage2>\w+) SPIR-V validation failed hash=0x(?P<hash2>[0-9a-f]{16}))")
 R_VK = re.compile(r"^\[Vulkan\]\[(?P<sev>[VIWE?])\]\[(?P<types>\d+)\]: (?P<msg>.*)$")
 R_VUID = re.compile(r"VUID-[A-Za-z0-9_\-]+")
-R_GPU = re.compile(r"^GPU: (?P<name>.+?) vendor=0x(?P<vendor>[0-9a-fA-F]{1,4}) device=0x(?P<device>[0-9a-fA-F]{1,4})"
+R_GPU = re.compile(r"^GPU: (?P<name>.+?) vendor=0x(?P<vendor>[0-9a-fA-F]{1,8}) device=0x(?P<device>[0-9a-fA-F]{1,8})"
                    r" driver=(?P<driver>\S+) api=(?P<api>\S+) driverID=(?P<driverid>\S+) vram=(?P<vram>\d+) MiB"
                    r"(?: bar=(?P<bar>\d+) MiB)?")
 R_HOST = re.compile(r"^Host: cpu=(?P<cpu>.+?) threads=(?P<threads>\d+) ram=(?P<ram>\d+) MiB os=(?P<os>.*)$")

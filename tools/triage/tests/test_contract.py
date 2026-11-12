@@ -1,5 +1,6 @@
 """Every line of notes/log-contract.md is parsed into the right report field (synthetic fixtures)."""
 
+import io
 import os
 import sys
 import unittest
@@ -136,6 +137,16 @@ class ContractOtherTests(unittest.TestCase):
         self.assertEqual(ctx["guest_address"], {"module": "eboot.bin", "offset": "0x28ab5f0"})
         md = u.kt.render_markdown(rep)
         self.assertIn("- address = `eboot.bin+0x28ab5f0` (guest address line)", md)
+
+    def test_gpu_line_with_a_mesa_vendor_id(self):
+        # VK_VENDOR_ID_MESA is 0x10005; gta6/diag prints it with {:04x}, a minimum width (CI lavapipe).
+        line = (b"GPU: llvmpipe (LLVM 19.1.1, 256 bits) vendor=0x10005 device=0x0000 driver=0.0.1 api=1.4.305 "
+                b"driverID=MesaLlvmpipe vram=0 MiB bar=0 MiB\n")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(line))
+        gpu = rep["identity"]["gpu"]
+        self.assertEqual(gpu["name"], "llvmpipe (LLVM 19.1.1, 256 bits)")
+        self.assertEqual((gpu["vendor"], gpu["vendor_id"], gpu["device_id"]), ("Mesa (lavapipe)", "0x10005", "0x0000"))
+        self.assertEqual((gpu["driver_id"], gpu["vram_mib"]), ("MesaLlvmpipe", 0))
 
     def test_strict_imports(self):
         rep = u.report("synthetic-contract-strict-imports.txt")
