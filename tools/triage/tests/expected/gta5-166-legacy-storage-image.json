@@ -1,0 +1,24 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/166",
+ "_note": "legacy --- Stack Trace --- format without --- Build ---",
+ "outcome": "crash",
+ "primary_category": "RENDER_STATE",
+ "primary_rule": "render-state-storage-image",
+ "crash_site": "imageView.h:137",
+ "top_rule": "render-state-storage-image",
+ "top_fix_area": "src/graphics/host_gpu/renderer/image/imageView.h",
+ "fatal_count": 1,
+ "title_id": "PPSA04264",
+ "build_label": null,
+ "gpu": "AMD Radeon RX 9070 XT",
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [
+  "Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]"
+ ],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

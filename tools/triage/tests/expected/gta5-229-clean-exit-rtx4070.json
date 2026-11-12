@@ -1,0 +1,23 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/229",
+ "outcome": "clean-exit",
+ "primary_category": "CLEAN_EXIT",
+ "primary_rule": null,
+ "crash_site": null,
+ "top_rule": "non-gpu-cached-access",
+ "top_fix_area": "src/graphics/host_gpu/renderer/cache/faultManager.cpp",
+ "fatal_count": 0,
+ "title_id": "PPSA04264",
+ "build_label": "Official build KytyPS5-2026-09-10-2e315a3",
+ "gpu": "NVIDIA GeForce RTX 4070",
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [
+  "Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]"
+ ],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

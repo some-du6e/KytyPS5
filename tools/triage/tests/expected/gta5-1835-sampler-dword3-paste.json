@@ -1,0 +1,26 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/1835",
+ "outcome": "crash",
+ "primary_category": "SHADER_RESOURCE_TRACKING",
+ "primary_rule": "shader-resource-tracking",
+ "crash_site": "ResourceTracking.cpp:590",
+ "top_rule": "shader-resource-tracking",
+ "top_fix_area": "src/graphics/shader/recompiler/ir/passes/ResourceTracking.cpp",
+ "fatal_count": 2,
+ "title_id": "PPSA04263",
+ "build_label": "Official build KytyPS5-2026-10-22-f5f4e7d",
+ "gpu": "NVIDIA GeForce RTX 5080",
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [
+  "Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]"
+ ],
+ "srt_hashes": [
+  "0x5e3e42fe237d3e16",
+  "0xf6b18542ea0e938a"
+ ],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

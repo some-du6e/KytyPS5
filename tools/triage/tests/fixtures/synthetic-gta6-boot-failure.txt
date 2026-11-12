@@ -1,0 +1,53 @@
+# SYNTHETIC "GTA 6-like" boot failure. FABRICATED for the triage tests: nobody has GTA 6 yet, and
+# the title id, NIDs, shader hashes and offsets below are made up. It models the most likely
+# launch-day picture on an RTX 3050 8 GB: new Np libraries the HLE does not know (stubs return
+# offline-style values), programs skipped for unsupported shader instructions, VRAM spilling, and
+# the guest dereferencing a null result right after the stub calls.
+--- Session 2026-11-19 18:00:03 ---
+Fork build some-du6e/KytyPS5 9f8e7d6
+GPU: NVIDIA GeForce RTX 3050 vendor=0x10de device=0x2507 driver=581.42.0.0 api=1.4.312 driverID=NvidiaProprietary vram=8192 MiB bar=256 MiB
+Host: cpu=AMD Ryzen 5 5600 6-Core Processor threads=12 ram=32688 MiB os=Windows 11 (10.0.26100)
+Vulkan pipeline cache: loading _PipelineCache\PPSA99999.bin
+Title profile: none (none) id=PPSA99999 version=01.000.000 name="SYNTHETIC RAGE TITLE" quirks=none preset=none
+VRAM: budget=7168 MiB limit=off profile=auto gc=legacy fixed: bda_table=64 fault=16 rings=96 recycle_cap=256 rt_arena=512 thresholds: tex_trigger=4096 tex_pressure=5120 tex_critical=6144 buf_trigger=1024 buf_critical=1536
+Title ID: PPSA99999
+AMD CPU compatibility: eboot.bin no matching instructions (VRSQRTPS: native=0, trapped=0, skipped=0)
+Unresolved imports: 214 functions, 3 objects; by library: NpUniversalDataSystem=31, NpWebApi2=28, NpManager=22, NpAuth=9, NpGameIntent=8, Http2=7, Ssl=6, NpSessionSignaling=5
+--- Execute: Main
+Pipeline manifest: recording into _PipelineCache\PPSA99999_01.000.000.kpm
+Unresolved import stub called: q1Wd8kXcR2s[NpManager_v1][NpManager_v1.1][Func] (program=eboot.bin, first call, returns=0x80550005, policy=np-offline)
+Unresolved import stub called: 7tYhGf3sQaw[NpManager_v1][NpManager_v1.1][Func] (program=eboot.bin, first call, returns=0x80550005, policy=np-offline)
+Unresolved import stub called: Lm0pQr8sT1u[NpAuth_v1][NpAuth_v1.1][Func] (program=eboot.bin, first call, returns=0x80550005, policy=np-offline)
+Unresolved import stub called: Zx9cVb7nM3k[NpUniversalDataSystem_v1][NpUniversalDataSystem_v1.1][Func] (program=eboot.bin, first call, returns=0x80550005, policy=np-offline)
+Unresolved import stub called: Gh4jK2lP0oI[NpGameIntent_v1][NpGameIntent_v1.1][Func] (program=eboot.bin, first call, returns=0x00000000, policy=zero)
+Unresolved object import: Wq5eRt6yU7i[NpSessionSignaling_v1][NpSessionSignaling_v1.1][Object] (program=eboot.bin) -> invalid page 0x0000000ffff00000
+Soft-fail: sceNpWebApi2CreateUserContext: user 0x10000001 is not signed in, returning SCE_NP_WEBAPI2_ERROR_NOT_SIGNED_IN
+Shaders: VS 3 | PS 4 | CS 9 | GS 0 | LS 0 | HS 0 | TES 0
+[HACK] skip unsupported shader instruction: first at PipelineCache::GetProgram, shader=0x6d1f0e2c3b4a5968, where=0x2c4, 0x000002c4: unsupported family=VOP3P opcode=0x2a raw=[0xcc2a4000 0x1c0a0904] reason=VOP3P opcode is not implemented
+[HACK] skip unsupported shader instruction: first at PipelineCache::GetProgram, shader=0x0f1e2d3c4b5a6978, where=0x98, 0x00000098: unsupported family=MIMG opcode=0xe6 raw=[0xf0e60f00 0x00020004] reason=MIMG opcode is not implemented
+ShaderRecompiler CS phase begin: hash=0x6d1f0e2c3b4a5968 decode
+ShaderRecompiler PS phase begin: hash=0x0f1e2d3c4b5a6978 decode
+GPU: using buffer device address (BDA) shader memory access.
+VRAM spill: images allocated outside device-local memory: count=1 bytes=48 MiB (first: render target 2560x1440 R16G16B16A16Sfloat)
+VRAM spill: images allocated outside device-local memory: count=2 bytes=96 MiB (first: render target 2560x1440 R16G16B16A16Sfloat)
+VRAM spill: images allocated outside device-local memory: count=4 bytes=208 MiB (first: render target 2560x1440 R16G16B16A16Sfloat)
+VRAM pressure: emergency eviction freed 384 MiB after allocation failure of 96 MiB (image 4096x4096 BC7 levels=13), retry 1
+[HACK] summary of the last 10 s: 52 applications in 2 sources
+[HACK]   skip unsupported shader instruction at PipelineCache::GetProgram shader=0x6d1f0e2c3b4a5968 where=0x2c4: +40 (total 41)
+[HACK]   skip unsupported shader instruction at PipelineCache::GetProgram shader=0x0f1e2d3c4b5a6978 where=0x98: +11 (total 12)
+Shaders: VS 18 | PS 25 | CS 14 | GS 0 | LS 0 | HS 0 | TES 0
+--- Guest fault context ---
+thread: [RAGE] Main Thread
+guest pc: eboot.bin+0x1c2d3e4
+rax=0000000000000000 rbx=00000007eff00a00 rcx=0000000000000000 rdx=0000000080550005
+rsi=0000000000000000 rdi=00000007eff00a00 rbp=00000007eff00b00 rsp=00000007eff009c0
+r8 =0000000000000000 r9 =0000000000000000 r10=0000000000000000 r11=0000000000000246
+r12=0000000000000000 r13=0000000000000000 r14=0000000000000000 r15=0000000000000000
+stack:
+ 0000000901a00010 0000000000000000 00000007eff00a00 0000000000000000
+ [rsp+0x00] 0000000901a00010 (eboot.bin+0x1a00010)
+--- Build ---
+Fork build some-du6e/KytyPS5 9f8e7d6
+--- Error ---
+Unhandled host exception: type=1 code=3221225477 pc=0x0000000901c2d3e4 access=1 address=0x0000000000000010
+ in D:\a\KytyPS5\KytyPS5\src\loader\runtimeLinker.cpp:833

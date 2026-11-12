@@ -1,0 +1,217 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/1835 body by Ameo-Koradi at 2026-10-22T17:16:31Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 117
+
+### Game title
+
+GTA V
+
+### Game ID / serial
+
+PPSA04263
+
+### KytyPS5 version
+
+KytyPS5-2026-10-22-f5f4e7d
+
+### Compatibility status
+
+In game
+
+### Last working build / first broken build
+
+_No response_
+
+### Result details
+
+The game is running better and better !
+Cinematics are running at 60 fps with some tiny freezes
+Game is running around 25 fps on average (from 20 to 60fps) with far far less freezes than before.
+That's a great job !
+
+The game's finally crashing after around 10 minutes of roaming in the city.
+
+The game is also still crashing just before the prologue scene as before without using a save game file.
+
+
+### Steps to reproduce the result
+
+Boot
+Play
+
+### Expected behavior
+
+Smoother
+No freeze
+No crashes
+
+### OS
+
+Windows 11 Pro 25H2
+
+### CPU
+
+AMD Ryzen 9800X3D
+
+### GPU
+
+NVIDIA GeForce RTX 5080
+
+### RAM / VRAM
+
+32 GB DDR5 RAM / 16 GB VRAM
+
+### Log file upload
+
+Initialized: Config
+Initialized: Log
+Initialized: Timer
+Initialized: Pthread
+Initialized: Profiler
+Initialized: Network
+Initialized: Memory
+Initialized: FileSystem
+Initialized: Controller
+Initialized: Audio
+Vulkan pipeline cache: loading _PipelineCache\PPSA04263.bin
+Vulkan pipeline cache: loaded 55.48 MB from _PipelineCache\PPSA04263.bin
+Initialized: Graphics
+Title ID: PPSA04263
+AMD CPU compatibility: eboot.bin patched (VRSQRTPS: native=1441, trapped=224, skipped=0; EXTRQ: native=0, trapped=0, skipped=0; INSERTQ: native=0, trapped=0, skipped=0; RDPID: native=0, trapped=0, skipped=0; CLWB: native=0, trapped=0, skipped=0)
+AMD CPU compatibility: libc.prx no matching instructions (VRSQRTPS: native=0, trapped=0, skipped=0; EXTRQ: native=0, trapped=0, skipped=0; INSERTQ: native=0, trapped=0, skipped=0; RDPID: native=0, trapped=0, skipped=0; CLWB: native=0, trapped=0, skipped=0)
+version = 13
+AJM codec=0, name=MP3 decoder
+AMD CPU compatibility: libSceNpCppWebApi.prx no matching instructions (VRSQRTPS: native=0, trapped=0, skipped=0; EXTRQ: native=0, trapped=0, skipped=0; INSERTQ: native=0, trapped=0, skipped=0; RDPID: native=0, trapped=0, skipped=0; CLWB: native=0, trapped=0, skipped=0)
+Shaders: VS 0 | PS 1 | CS 0 | GS 0 | LS 0 | HS 0 | TES 0
+Shader: emitted zero-position clip guard
+Shaders: VS 1 | PS 1 | CS 0 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 1 | PS 2 | CS 0 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 1 | PS 2 | CS 1 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 1 | PS 2 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 1 | PS 3 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 3 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 4 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 5 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 6 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Unresolved import stub called: Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]
+Unresolved import stub called: Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]
+Unresolved import stub called: Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]
+Shaders: VS 2 | PS 7 | CS 2 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 7 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 2 | PS 8 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 3 | PS 8 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 3 | PS 9 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 4 | PS 9 | CS 3 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 4 | PS 9 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+GPU: using buffer device address (BDA) shader memory access.
+Shaders: VS 4 | PS 10 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 5 | PS 10 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 5 | PS 11 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 6 | PS 11 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 6 | PS 12 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 7 | PS 12 | CS 4 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 7 | PS 12 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 7 | PS 13 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 8 | PS 13 | CS 5 | GS 0 | LS 0 | HS 0 | TES 0
+...
+Shaders: VS 61 | PS 62 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 63 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 64 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 65 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 61 | PS 66 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 62 | PS 66 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 62 | PS 67 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 62 | PS 68 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Warning: game uses occlusion queries, which are currently treated as always visible; GPU usage may be higher and FPS may be lower.
+Shaders: VS 62 | PS 69 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 63 | PS 69 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 63 | PS 70 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 64 | PS 70 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 64 | PS 71 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 65 | PS 71 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 65 | PS 72 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 66 | PS 72 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 66 | PS 73 | CS 12 | GS 0 | LS 0 | HS 0 | TES 0
+...
+Shaders: VS 206 | PS 270 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 206 | PS 271 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 207 | PS 271 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 208 | PS 271 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 208 | PS 272 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 208 | PS 273 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 209 | PS 273 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 209 | PS 274 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 210 | PS 274 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 211 | PS 274 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 212 | PS 274 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 212 | PS 275 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 213 | PS 275 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 213 | PS 276 | CS 39 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 213 | PS 276 | CS 40 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 213 | PS 277 | CS 40 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 214 | PS 277 | CS 40 | GS 0 | LS 0 | HS 0 | TES 0
+Vulkan pipeline cache: saved 67.39 MB to _PipelineCache\PPSA04263.bin
+Shaders: VS 214 | PS 278 | CS 40 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 215 | PS 278 | CS 40 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 216 | PS 278 | CS 40 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 216 | PS 279 | CS 40 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 217 | PS 279 | CS 40 | GS 0 | LS 0 | HS 0 | TES 0
+...
+Shaders: VS 267 | PS 363 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 267 | PS 364 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 267 | PS 365 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 267 | PS 366 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 268 | PS 366 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 268 | PS 367 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 268 | PS 368 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 268 | PS 369 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Vulkan pipeline cache: saved 74.55 MB to _PipelineCache\PPSA04263.bin
+Shaders: VS 269 | PS 369 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 269 | PS 370 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 269 | PS 371 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 270 | PS 371 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 270 | PS 372 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 270 | PS 373 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 271 | PS 373 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 272 | PS 373 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 272 | PS 374 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 273 | PS 374 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+...
+Shaders: VS 309 | PS 433 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 309 | PS 434 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 310 | PS 434 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 310 | PS 435 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 311 | PS 435 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 311 | PS 436 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 312 | PS 436 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 312 | PS 437 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 313 | PS 437 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+Shaders: VS 314 | PS 437 | CS 43 | GS 0 | LS 0 | HS 0 | TES 0
+--- Build ---
+Official build KytyPS5-2026-10-22-f5f4e7d
+--- Error ---
+shader resource tracking: hash=0xf6b18542ea0e938a stage=pixel pc=0x000000c8 GetSamplerResource dword 3 is not a valid runtime value in D:\a\KytyPS5\KytyPS5\src\graphics\shader\recompiler\ir\passes\ResourceTracking.cpp:590
+
+### Screenshots/video
+
+<img width="1922" height="1119" alt="Image" src="https://github.com/user-attachments/assets/7922738d-f5ed-48ab-8f96-e4c77c61d62c" />
+
+<img width="1922" height="1119" alt="Image" src="https://github.com/user-attachments/assets/e79b9a72-8afb-4e87-96c4-942233529e25" />
+
+<img width="1922" height="1119" alt="Image" src="https://github.com/user-attachments/assets/a458231c-296a-4347-9612-c96d59453209" />
+
+<img width="1922" height="1119" alt="Image" src="https://github.com/user-attachments/assets/c3ff17fe-24e2-4be0-90c6-75c55189eda7" />
+
+<img width="1578" height="97" alt="Image" src="https://github.com/user-attachments/assets/bdd13306-e3ad-4df5-8daf-98cf09dd4137" />
+
+### Extra notes
+
+Without the save game file, it's still crashing in the beginning of the prologue with this error : 
+
+--- Build ---
+Official build KytyPS5-2026-10-22-f5f4e7d
+--- Error ---
+shader resource tracking: hash=0x5e3e42fe237d3e16 stage=compute pc=0x0000093c buffer descriptor is not a valid runtime value; GPU-selected access requires a scalar, raw 8/16-bit, raw DWORD x1/x2/x3/x4, or formatted X load in D:\a\KytyPS5\KytyPS5\src\graphics\shader\recompiler\ir\passes\ResourceTracking.cpp:590
+
+-------------------
+
+In the list of games, I do not see an "In game" status, but a "doesn't boot" status.

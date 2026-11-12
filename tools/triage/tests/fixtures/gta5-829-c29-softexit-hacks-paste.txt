@@ -1,0 +1,36 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/829 c29 by TotoWood at 2026-10-20T15:05:11Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 18
+
+> 26\. > 27. Follow-up: I built the `native-hardware-raytracing` branch ([95ba8da](https://github.com/KytyPS5/KytyPS5/commit/95ba8da4bc37a37af198f867b0137e5e35073b7b)) and tested it on the same RX 9070 XT (Adrenalin 32.0.32015.2008). `NativeRayTracing: enabled` is logged and Performance RT runs without errors or visual issues that I could see. Three minutes in the city: **~14 → ~19 fps average** (median 17, range 10–34), host GPU 3D engine ~65 % → ~72 % (up to 90 %). So the host ray query path works on AMD/RDNA4 too. Fidelity not tested yet.
+>      
+>      
+>      Thanks for testing the native raytracing, that part is still quite experimental and has some gliches/issues on shadows, cars and other stuff, i will try to improve the performance when i get a bit of time since at the moment i need to reduce the number of draws done in the Game in some way since CPU threads are already working alot most of the time
+
+Version v13 is even better again. Thank you very much, and keep up the great work! The game didn’t crash a single time. However, I’m sending you the console output. I switched between the different graphics modes.
+
+[HACK] bindless table texture bound as null image after a fatal error: first at RenderExecutor::ResolveTableTexture (SoftExitScope), shader=unknown, where=0xdf02a812ea23b437, original error: texture 0x00000010cd0a0000 size 0x30000 has no guest backing
+ (D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\host_gpu\renderer\pipeline\descriptors.cpp:769)
+[HACK] bindless table texture bound as null image after a fatal error: first at RenderExecutor::ResolveTableTexture (SoftExitScope), shader=unknown, where=0x4ec95eeeee78c5bf, original error: texture 0x0000001543c00000 size 0x60000 has no guest backing
+ (D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\host_gpu\renderer\pipeline\descriptors.cpp:769)
+-----------------------------
+[HACK] null SRT table read as zero: first at ahead resolution plain read, shader=0x01182642842237f5, where=0x70
+-----------------------------
+[HACK] bindless table texture bound as null image after a fatal error: first at RenderExecutor::ResolveTableTexture (SoftExitScope), shader=unknown, where=0x7e8d8861a23204ac, original error: texture 0x0000001536e00000 size 0x30000 has no guest backing
+ (D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\host_gpu\renderer\pipeline\descriptors.cpp:769)
+shader resource specialization failed: descriptor evaluation source=2
+---------------------------
+shader resource specialization failed: descriptor evaluation source=2
+[HACK] bindless table texture bound as null image after a fatal error: first at RenderExecutor::ResolveTableTexture (SoftExitScope), shader=unknown, where=0xd8e8171cf4d71136, original error: texture 0x00000010da780000 size 0x60000 has no guest backing
+ (D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\host_gpu\renderer\pipeline\descriptors.cpp:769)
+[HACK] summary of the last 10 s: 38833 applications in 20 sources
+[HACK]   bindless table texture bound as null image at RenderExecutor::ResolveTableTexture (no image resolved) shader=unknown where=0x0: +37482 (total 480362)
+[HACK]   bindless table texture bound as null image after a fatal error at RenderExecutor::ResolveTableTexture (SoftExitScope) shader=unknown where=0x9d83c51557f1e81d: +264 (total 1314)
+[HACK]   bindless table texture bound as null image after a fatal error at RenderExecutor::ResolveTableTexture (SoftExitScope) shader=unknown where=0x1977d9bbe713a361: +264 (total 1314)
+[HACK]   bindless table texture bound as null image after a fatal error at RenderExecutor::ResolveTableTexture (SoftExitScope) shader=unknown where=0xad9b5115cf5aaecc: +264 (total 1314)
+[HACK]   bindless table texture bound as null image after a fatal error at RenderExecutor::ResolveTableTexture (SoftExitScope) shader=unknown where=0x72fbbab21310ea34: +264 (total 598)
+[HACK]   bindless table texture bound as null image after a fatal error at RenderExecutor::ResolveTableTexture (SoftExitScope) shader=unknown where=0xdf02a812ea23b437: +83 (total 84)
+[HACK]   (+14 more sources)
+[HACK] bindless table texture bound as null image after a fatal error: first at RenderExecutor::ResolveTableTexture (SoftExitScope), shader=unknown, where=0xab039b3f045bade7, original error: texture 0x00000014d65e0000 size 0x30000 has no guest backing
+ (D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\host_gpu\renderer\pipeline\descriptors.cpp:769)
+shader resource specialization failed: descriptor evaluation source=2
+shader resource specialization failed: descriptor evaluation source=2

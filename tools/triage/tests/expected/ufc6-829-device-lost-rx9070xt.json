@@ -1,0 +1,26 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/829",
+ "_note": "two reports: commandScheduler first (primary), swapchain second",
+ "outcome": "crash",
+ "primary_category": "DEVICE_LOST",
+ "primary_rule": "device-lost-disguised",
+ "crash_site": "commandScheduler.cpp:548",
+ "top_rule": "device-lost-disguised",
+ "top_fix_area": "src/graphics/host_gpu/renderer/commandScheduler.cpp",
+ "fatal_count": 2,
+ "title_id": "PPSA23566",
+ "build_label": "Fork build TheCruZ/KytyPS5-GTA 098b5fd",
+ "gpu": "AMD Radeon RX 9070 XT",
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [
+  "7CxI50-xlCk[NpPartner001_v1][NpPartner001_v1.1][Func]",
+  "WlyEA-sLDf0[libkernel_v1][libkernel_v1.1][Func]",
+  "eDXKe9FndlE[NpEntitlementAccessPft_v1][NpEntitlementAccess_v1.1][Func]"
+ ],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

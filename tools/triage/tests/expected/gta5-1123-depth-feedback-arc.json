@@ -1,0 +1,21 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/1123",
+ "outcome": "crash",
+ "primary_category": "RENDER_STATE",
+ "primary_rule": "render-state-feedback-loop",
+ "crash_site": "renderDraw.cpp:542",
+ "top_rule": "render-state-feedback-loop",
+ "top_fix_area": "src/graphics/host_gpu/renderer/renderDraw.cpp",
+ "fatal_count": 1,
+ "title_id": "PPSA04264",
+ "build_label": "Official build KytyPS5-2026-10-06-6ef4065",
+ "gpu": "Intel(R) Arc(TM) B580 Graphics",
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": true,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

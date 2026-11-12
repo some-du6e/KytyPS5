@@ -1,0 +1,23 @@
+{
+ "_source": "synthetic",
+ "outcome": "crash",
+ "primary_category": "DEVICE_LOST",
+ "primary_rule": "device-lost",
+ "crash_site": "masterSemaphore.cpp:54",
+ "top_rule": "device-lost",
+ "top_fix_area": "src/graphics/host_gpu/renderer/commandScheduler.cpp",
+ "fatal_count": 1,
+ "title_id": "PPSA00002",
+ "build_label": "Official build KytyPS5-2026-11-19-abcdef1",
+ "gpu": "NVIDIA GeForce RTX 3050",
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": [
+  "VUID-vkCmdDrawIndexed-None-06479"
+ ]
+}

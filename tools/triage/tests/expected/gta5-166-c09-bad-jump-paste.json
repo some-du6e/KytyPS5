@@ -1,0 +1,21 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/166",
+ "outcome": "crash",
+ "primary_category": "HOST_FAULT_BAD_JUMP",
+ "primary_rule": "host-fault-bad-jump",
+ "crash_site": "runtimeLinker.cpp:807",
+ "top_rule": "host-fault-bad-jump",
+ "top_fix_area": "src/loader/runtimeLinker.cpp",
+ "fatal_count": 1,
+ "title_id": null,
+ "build_label": null,
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": "host-fault-bad-jump",
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

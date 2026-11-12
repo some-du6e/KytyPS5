@@ -1,0 +1,33 @@
+{
+ "_source": "synthetic",
+ "_note": "guest null read right after Np stub calls: imports are ranked first",
+ "outcome": "crash",
+ "primary_category": "HOST_FAULT_GUEST",
+ "primary_rule": "host-fault-guest",
+ "crash_site": "runtimeLinker.cpp:833",
+ "top_rule": "unresolved-import-called",
+ "top_fix_area": "src/libs/libNet.cpp",
+ "fatal_count": 1,
+ "title_id": "PPSA99999",
+ "build_label": "Fork build some-du6e/KytyPS5 9f8e7d6",
+ "gpu": "NVIDIA GeForce RTX 3050",
+ "guest_pc": "eboot.bin+0x1c2d3e4",
+ "fault_class": "host-fault-guest",
+ "truncated": false,
+ "imports_called": [
+  "7tYhGf3sQaw[NpManager_v1][NpManager_v1.1][Func]",
+  "Gh4jK2lP0oI[NpGameIntent_v1][NpGameIntent_v1.1][Func]",
+  "Lm0pQr8sT1u[NpAuth_v1][NpAuth_v1.1][Func]",
+  "Zx9cVb7nM3k[NpUniversalDataSystem_v1][NpUniversalDataSystem_v1.1][Func]",
+  "q1Wd8kXcR2s[NpManager_v1][NpManager_v1.1][Func]"
+ ],
+ "srt_hashes": [],
+ "shader_opcodes": [
+  "MIMG:0xe6",
+  "VOP3P:0x2a"
+ ],
+ "hacks": [
+  "skip unsupported shader instruction"
+ ],
+ "vuids": []
+}

@@ -1,0 +1,14 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/166 c09 by Gih-pt at 2026-09-03T21:36:27Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 2
+
+
+
+
+> Tested again on [cd74809](https://github.com/KytyPS5/KytyPS5/commit/cd74809086eb5b0a4f4680b02f3d57b128d74f47). The game no longer starts with this error message:
+> 
+> `Unhandled host exception: type=1 code=11 pc=0x000000000000bffe access=3 address=0x000000000000bffe in /home/runner/work/KytyPS5/KytyPS5/src/loader/runtimeLinker.cpp:807 `
+> 
+> The same error also exists in various other games, but some still load fine.
+
+@cScarletter This problem should be fixed in the latest version.
+

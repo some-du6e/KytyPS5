@@ -1,0 +1,40 @@
+	 guest address-space self-test: ok
+WindowCreate(): width = 3020, height = 1924
+Vulkan loader: /Users/<redacted>/Downloads/KytyPS5-2026-10-07-bb98f26-macOS-x86_64/libMoltenVK.dylib
+Vulkan required extension: VK_KHR_surface
+Vulkan required extension: VK_EXT_metal_surface
+Vulkan required extension: VK_EXT_debug_utils
+Vulkan available extension: VK_KHR_device_group_creation, version = 1
+Vulkan available extension: VK_KHR_external_fence_capabilities, version = 1
+Vulkan available extension: VK_KHR_external_memory_capabilities, version = 1
+Vulkan available extension: VK_KHR_external_semaphore_capabilities, version = 1
+Vulkan available extension: VK_KHR_get_physical_device_properties2, version = 2
+Vulkan available extension: VK_KHR_get_surface_capabilities2, version = 1
+Vulkan available extension: VK_KHR_surface, version = 25
+Vulkan available extension: VK_KHR_surface_maintenance1, version = 1
+Vulkan available extension: VK_KHR_surface_protected_capabilities, version = 1
+Vulkan available extension: VK_EXT_debug_report, version = 10
+Vulkan available extension: VK_EXT_debug_utils, version = 2
+Vulkan available extension: VK_EXT_headless_surface, version = 1
+Vulkan available extension: VK_EXT_layer_settings, version = 2
+Vulkan available extension: VK_EXT_metal_surface, version = 1
+Vulkan available extension: VK_EXT_surface_maintenance1, version = 1
+Vulkan available extension: VK_EXT_swapchain_colorspace, version = 5
+Vulkan available extension: VK_MVK_macos_surface, version = 3
+Vulkan available extension: VK_MVK_moltenvk, version = 37
+Vulkan available layer: MoltenVK, specVersion = 4211045, implVersion = 10402, MoltenVK driver layer
+Vulkan loader version: 1.4.357
+Vulkan device: Apple M4
+	queue family: { Graphics | Compute | Transfer } [count = 1], [present = true]
+	selected universal queue family 0
+colorWriteEnable is not supported
+image view minLod is not supported
+depthClipEnable is not supported
+shaderBufferInt64Atomics is not supported
+shaderCullDistance is not supported
+depthBounds is not supported
+--- Build ---
+Official build KytyPS5-2026-10-07-bb98f26
+--- Error ---
+Could not find suitable device:
+  Apple M4: image view minLod is not supported; shaderBufferInt64Atomics is not supported; shaderCullDistance is not supported in /Users/runner/work/KytyPS5/KytyPS5/src/graphics/presentation/window/vulkanWindow.cpp:966

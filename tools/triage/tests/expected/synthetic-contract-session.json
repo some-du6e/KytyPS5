@@ -1,0 +1,31 @@
+{
+ "_source": "synthetic",
+ "_note": "stub calls just before the guest fault: imports ranked first",
+ "outcome": "crash",
+ "primary_category": "HOST_FAULT_GUEST",
+ "primary_rule": "host-fault-guest",
+ "crash_site": "runtimeLinker.cpp:833",
+ "top_rule": "unresolved-import-called",
+ "top_fix_area": "src/libs/libNet.cpp",
+ "fatal_count": 1,
+ "title_id": "PPSA00001",
+ "build_label": "Fork build some-du6e/KytyPS5 1234abc",
+ "gpu": "NVIDIA GeForce RTX 3050",
+ "guest_pc": "eboot.bin+0x1234567",
+ "fault_class": "host-fault-guest",
+ "truncated": false,
+ "imports_called": [
+  "AAAAAAAAAAA[NpManager_v1][NpManager_v1.1][Func]",
+  "BBBBBBBBBBB[Http2_v1][Http2_v1.1][Func]",
+  "DDDDDDDDDDD[Net_v1][Net_v1.1][Func]",
+  "EEEEEEEEEEE[Ajm_v1][Ajm_v1.1][Func]"
+ ],
+ "srt_hashes": [],
+ "shader_opcodes": [
+  "VOP3:0x344"
+ ],
+ "hacks": [
+  "skip unsupported shader instruction"
+ ],
+ "vuids": []
+}

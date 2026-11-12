@@ -1,0 +1,23 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/1458",
+ "outcome": "no-fatal",
+ "primary_category": "NO_FATAL",
+ "primary_rule": null,
+ "crash_site": null,
+ "top_rule": "vuid-mention",
+ "top_fix_area": "src/graphics/host_gpu/renderer/pipeline/descriptors.cpp",
+ "fatal_count": 0,
+ "title_id": null,
+ "build_label": null,
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": [
+  "VUID-vkCmdDrawIndexed-None-06479"
+ ]
+}

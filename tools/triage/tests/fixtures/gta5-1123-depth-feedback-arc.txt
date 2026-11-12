@@ -1,0 +1,210 @@
+KytyPS5 GTA V crash log excerpt
+========================================
+
+STARTUP / SYSTEM INFO
+----------------------------------------
+TITLE_ID, string = PPSA04264
+CONTENT_ID, string = UP1004-PPSA04264_00-GTAVFULLGAMEDISC
+APP_VER, string = 01.005.000
+ATTRIBUTE3, int = 0x00000084
+USER_DEFINED_PARAM_1, int = 0x0000000a
+USER_DEFINED_PARAM_2, int = 0x00000000
+USER_DEFINED_PARAM_3, int = 0x00000000
+USER_DEFINED_PARAM_4, int = 0x00000000
+TITLE, string = Grand Theft Auto V
+Can't open <game>\sce_sys\playgo-chunk.dat
+Can't open <game>\playgo-chunkdefs.xml
+Can't open <game>\Data\chunkmanifest
+	 guest address-space self-test: ok
+	 direct-memory sub-64K placeholder self-test: ok
+WindowCreate(): width = 1280, height = 720
+Vulkan required extension: VK_KHR_surface
+Vulkan required extension: VK_KHR_win32_surface
+Vulkan required extension: VK_EXT_debug_utils
+Vulkan available extension: VK_KHR_surface, version = 25
+Vulkan available extension: VK_KHR_win32_surface, version = 6
+Vulkan available extension: VK_KHR_external_memory_capabilities, version = 1
+Vulkan available extension: VK_KHR_external_semaphore_capabilities, version = 1
+Vulkan available extension: VK_KHR_external_fence_capabilities, version = 1
+Vulkan available extension: VK_KHR_get_physical_device_properties2, version = 2
+Vulkan available extension: VK_KHR_get_surface_capabilities2, version = 1
+Vulkan available extension: VK_KHR_device_group_creation, version = 1
+Vulkan available extension: VK_EXT_swapchain_colorspace, version = 5
+Vulkan available extension: VK_EXT_debug_utils, version = 2
+Vulkan available extension: VK_EXT_debug_report, version = 10
+Vulkan available extension: VK_KHR_portability_enumeration, version = 1
+Vulkan available extension: VK_LUNARG_direct_driver_loading, version = 1
+Vulkan available layer: VK_LAYER_LIVESTUDIO_HOOK, specVersion = 4206831, implVersion = 1, Tiktok Live Studio
+Vulkan available layer: VK_LAYER_OBS_HOOK, specVersion = 4206808, implVersion = 1, Open Broadcaster Software hook
+Vulkan available layer: VK_LAYER_VALVE_steam_overlay, specVersion = 4206799, implVersion = 1, Steam Overlay Layer
+Vulkan available layer: VK_LAYER_VALVE_steam_fossilize, specVersion = 4210991, implVersion = 1, Steam Pipeline Caching Layer
+Vulkan available layer: VK_LAYER_EOS_Overlay, specVersion = 4202632, implVersion = 1, Vulkan overlay layer for Epic Online Services
+Vulkan loader version: 1.4.350
+Vulkan device: Intel(R) Arc(TM) B580 Graphics
+	queue family: { Graphics | Compute | Transfer | SparseBinding } [count = 1], [present = true]
+	selected universal queue family 0
+Format vk::Format::eB8G8R8A8Srgb cannot be used as storage image
+Select device: Intel(R) Arc(TM) B580 Graphics
+Block Texel View support: Yes
+WARNING: Native 64-bit LDS atomics are unavailable: shaderSharedInt64Atomics=false, workgroupMemoryExplicitLayout=true. Continuing with the selected Vulkan device.
+Vulkan subgroup: default=32 min=16 max=32 stages=0x000000e0 size_control=false wave64=false
+Vulkan depth feedback support: false
+Vulkan MeshEXT: invocations=1024 vertices=1024 primitives=1024 shared=131072
+Vulkan robustness: robustImageAccess=true robustImageAccess2=true
+Vulkan pipeline cache: initializing _PipelineCache\PPSA04264.bin
+Vulkan pipeline cache: initialized empty
+Build
+  version: Official build KytyPS5-2026-10-06-6ef4065
+
+Host
+  os:      Windows
+  cpu:     Intel 13th Gen Core i5-13600K
+  threads: 20
+
+Title ID: PPSA04264
+Mounted /download0 -> _DownloadData/PPSA04264
+Mounted /temp0 -> _TempData/PPSA04264
+Mounted /temp -> _TempData/PPSA04264
+Loading: <game>\eboot.bin
+base_vaddr             = 0x0000000900000000
+base_size              = 0x00000000059ea8b0
+base_size_aligned      = 0x00000000059ec000
+mapped_size            = 0x00000000061ed000
+tls_handler_size       = 0x0000000000001000
+[0] addr        = 0x0000000900000000
+[0] file_size   = 50832444
+[0] memory_size = 50839552
+[0] mode        = Execute
+Patch tls at addr: [000000090027abe4]
+Patch tls at addr: [000000090027b207]
+Patch tls at addr: [000000090027b257]
+Patch tls at addr: [000000090027b291]
+Patch tls at addr: [000000090027b2cc]
+Patch tls at addr: [000000090027b35c]
+Patch tls at addr: [000000090027b3f0]
+Patch tls at addr: [000000090027b4af]
+
+CRASH CONTEXT
+----------------------------------------
+	 size_in_dwords = 4056
+	 arg4           = 0x0000000000569f80
+	 arg5           = 0x0000000000000080
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d40c58
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d40c58
+	 data = 0x000000000002e8a2
+	 cmd            = 0x0000000242d9c500
+	 arg1           = 0x0000000000000002
+	 target         = 0x00000002404f0080
+	 size_in_dwords = 148
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x0000000242d9c558
+	 data = 0x000000000002e8a3
+	 cmd            = 0x0000000242d40c80
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023fcd0080
+	 size_in_dwords = 4305
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000242d40cd8
+	 size_in_dwords = 14
+	 initial_state = 0x00000000
+	 mode           = 0x01
+	 cache_policy   = 0x02
+	 target         = 0x0000000000000000
+	 size_in_dwords = 0
+	 cmd  = 0x0000000242d40cd8
+	 data = 0x000000000002e8a4
+	 cmd            = 0x0000000242d9c580
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023ea10080
+	 size_in_dwords = 508
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x0000000242d99e58
+	 data = 0x000000000002e8a5
+	 cmd            = 0x0000000242d40d00
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f870080
+	 size_in_dwords = 9006
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x0000000242d97458
+	 data = 0x000000000002e8a6
+	 cmd            = 0x0000000242d99e80
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023dd90080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x0000000242d974d8
+	 data = 0x000000000002e8a7
+	 cmd            = 0x0000000242d97480
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023fc80080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x0000000242d97558
+	 data = 0x000000000002e8a8
+	 cmd            = 0x0000000242d97500
+	 arg1           = 0x0000000000000002
+	 target         = 0x00000002402c0080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x0000000242d975d8
+	 data = 0x000000000002e8a9
+	 cmd            = 0x0000000242d97580
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023e830080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x0000000242d97658
+	 data = 0x000000000002e8aa
+	 cmd            = 0x0000000242d97600
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f0f0080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x0000000242d976d8
+	 data = 0x000000000002e8ab
+	 cmd            = 0x0000000242d97680
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023e740080
+	 size_in_dwords = 4
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 cmd  = 0x000000023f370150
+	 data = 0x000000000002e8ac
+	 cmd            = 0x0000000242d97700
+	 arg1           = 0x0000000000000002
+	 target         = 0x000000023f370080
+	 size_in_dwords = 60
+	 arg4           = 0x7ffffffffffffffc
+	 arg5           = 0x000000ff6a0b8978
+	 user_id = 1000
+	 large_motor = 0
+	 small_motor = 0
+--- Build ---
+Official build KytyPS5-2026-10-06-6ef4065
+--- Error ---
+depth attachment feedback loop is not supported by the host
+ in D:\a\KytyPS5\KytyPS5\src\graphics\host_gpu\renderer\renderDraw.cpp:542

@@ -1,0 +1,21 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/1133",
+ "outcome": "crash",
+ "primary_category": "DEVICE_SELECTION",
+ "primary_rule": "device-selection",
+ "crash_site": "vulkanWindow.cpp:966",
+ "top_rule": "device-selection",
+ "top_fix_area": "src/graphics/presentation/window/vulkanWindow.cpp",
+ "fatal_count": 1,
+ "title_id": null,
+ "build_label": "Official build KytyPS5-2026-10-07-bb98f26",
+ "gpu": "Apple M4",
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

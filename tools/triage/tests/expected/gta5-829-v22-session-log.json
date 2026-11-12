@@ -1,0 +1,24 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/829",
+ "_note": "real cruz v22 session log: no fatal, one [HACK] notice",
+ "outcome": "no-fatal",
+ "primary_category": "NO_FATAL",
+ "primary_rule": null,
+ "crash_site": null,
+ "top_rule": "no-fatal-no-fatal",
+ "top_fix_area": null,
+ "fatal_count": 0,
+ "title_id": "PPSA04263",
+ "build_label": "Fork build TheCruZ/KytyPS5-GTA 5ea31b6",
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [
+  "sampler border color word changed"
+ ],
+ "vuids": []
+}

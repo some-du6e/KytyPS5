@@ -1,0 +1,21 @@
+{
+ "_source": "synthetic",
+ "outcome": "crash",
+ "primary_category": "UNRESOLVED_IMPORT",
+ "primary_rule": "strict-import-exit",
+ "crash_site": "runtimeLinker.cpp:285",
+ "top_rule": "strict-import-exit",
+ "top_fix_area": "src/libs/",
+ "fatal_count": 1,
+ "title_id": "PPSA00003",
+ "build_label": "Source build 0badc0de",
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": null,
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

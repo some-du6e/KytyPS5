@@ -1,0 +1,21 @@
+{
+ "_source": "https://github.com/KytyPS5/KytyPS5/issues/1123",
+ "outcome": "crash",
+ "primary_category": "HOST_FAULT_HOST",
+ "primary_rule": "host-fault-host",
+ "crash_site": null,
+ "top_rule": "host-fault-host",
+ "top_fix_area": "src/loader/runtimeLinker.cpp",
+ "fatal_count": 1,
+ "title_id": null,
+ "build_label": "Fork build TheCruZ/KytyPS5-GTA 83f5884",
+ "gpu": null,
+ "guest_pc": null,
+ "fault_class": "host-fault-host",
+ "truncated": false,
+ "imports_called": [],
+ "srt_hashes": [],
+ "shader_opcodes": [],
+ "hacks": [],
+ "vuids": []
+}

@@ -1,0 +1,1195 @@
+TITLE_ID, string = PPSA23566
+CONTENT_ID, string = EP0006-PPSA23566_00-EASPORTSUFC6GAME
+APP_VER, string = 01.004.000
+ATTRIBUTE, int = 0x20000000
+ATTRIBUTE3, int = 0x005c0000
+USER_DEFINED_PARAM_1, int = 0x00005c0e
+TITLE, string = EA SPORTS™ UFC® 6
+PlayGo: chunks num = 35
+	 guest address-space self-test: ok
+	 direct-memory sub-64K placeholder self-test: ok
+WindowCreate(): width = 1280, height = 720
+Vulkan required extension: VK_KHR_surface
+Vulkan required extension: VK_KHR_win32_surface
+Vulkan required extension: VK_EXT_debug_utils
+Vulkan available extension: VK_KHR_device_group_creation, version = 1
+Vulkan available extension: VK_KHR_external_fence_capabilities, version = 1
+Vulkan available extension: VK_KHR_external_memory_capabilities, version = 1
+Vulkan available extension: VK_KHR_external_semaphore_capabilities, version = 1
+Vulkan available extension: VK_KHR_get_physical_device_properties2, version = 2
+Vulkan available extension: VK_KHR_get_surface_capabilities2, version = 1
+Vulkan available extension: VK_KHR_surface, version = 25
+Vulkan available extension: VK_KHR_surface_maintenance1, version = 1
+Vulkan available extension: VK_KHR_win32_surface, version = 6
+Vulkan available extension: VK_EXT_debug_report, version = 10
+Vulkan available extension: VK_EXT_debug_utils, version = 2
+Vulkan available extension: VK_EXT_swapchain_colorspace, version = 5
+Vulkan available extension: VK_KHR_portability_enumeration, version = 1
+Vulkan available extension: VK_LUNARG_direct_driver_loading, version = 1
+Vulkan available layer: VK_LAYER_AMD_switchable_graphics, specVersion = 4211043, implVersion = 1, AMD switchable graphics layer
+Vulkan available layer: VK_LAYER_VALVE_steam_overlay, specVersion = 4206799, implVersion = 1, Steam Overlay Layer
+Vulkan available layer: VK_LAYER_VALVE_steam_fossilize, specVersion = 4210991, implVersion = 1, Steam Pipeline Caching Layer
+Vulkan available layer: VK_LAYER_LUNARG_api_dump, specVersion = 4211045, implVersion = 2, LunarG API dump layer
+Vulkan available layer: VK_LAYER_LUNARG_gfxreconstruct, specVersion = 4211045, implVersion = 4194309, GFXReconstruct Capture Layer Version 1.0.5
+Vulkan available layer: VK_LAYER_KHRONOS_synchronization2, specVersion = 4211045, implVersion = 1, Khronos Synchronization2 layer
+Vulkan available layer: VK_LAYER_KHRONOS_validation, specVersion = 4211045, implVersion = 1, Khronos Validation Layer
+Vulkan available layer: VK_LAYER_LUNARG_monitor, specVersion = 4211045, implVersion = 1, Execution Monitoring Layer
+Vulkan available layer: VK_LAYER_LUNARG_screenshot, specVersion = 4211045, implVersion = 1, LunarG image capture layer
+Vulkan available layer: VK_LAYER_KHRONOS_profiles, specVersion = 4211045, implVersion = 1, Khronos Profiles layer
+Vulkan available layer: VK_LAYER_KHRONOS_shader_object, specVersion = 4211045, implVersion = 1, Khronos Shader object layer
+Vulkan available layer: VK_LAYER_LUNARG_crash_diagnostic, specVersion = 4211045, implVersion = 1, Crash Diagnostic Layer is a crash/hang debugging tool that helps determines GPU progress in a Vulkan application.
+Vulkan loader version: 1.4.357
+Vulkan device: AMD Radeon RX 9070 XT
+	queue family: { Graphics | Compute | Transfer | SparseBinding } [count = 8], [present = true]
+	selected universal queue family 0
+Format vk::Format::eR8G8B8A8Srgb cannot be used as storage image
+Format vk::Format::eB8G8R8A8Srgb cannot be used as storage image
+Select device: AMD Radeon RX 9070 XT
+Block Texel View support: Yes
+Vulkan subgroup: default=64 min=32 max=64 stages=0x000000f0 size_control=true wave64=true
+Vulkan depth/color copy support: true
+Vulkan depth feedback support: false
+Vulkan MeshEXT: invocations=256 vertices=256 primitives=256 shared=32768
+Vulkan robustness: robustImageAccess=true robustImageAccess2=true
+[amd-diag] test build for KytyPS5 issue #829; please send the whole _kyty.txt
+[amd-diag] device AMD Radeon RX 9070 XT vendor=0x1002 id=0x7550 driver=AMD proprietary driver (26.9.2 (LLPC)) driverVersion=0x00800196 api=1.4.355
+[amd-diag] limits: boundSets=32 perStage(samplers=4294967295 storageBuffers=4294967295 sampledImages=4294967295 storageImages=4294967295 resources=4294967295) perSet(samplers=4294967295 storageBuffers=4294967295 sampledImages=4294967295 storageImages=4294967295) maxPerSetDescriptors=4294967295 maxMemoryAllocationSize=2048 MiB maxPushDescriptors=32
+[amd-diag] update-after-bind perSet: samplers=4294967295 storageBuffers=4294967295 sampledImages=4294967295 storageImages=4294967295
+[amd-diag] memory heap 0: 16048 MiB { DeviceLocal | MultiInstance }
+[amd-diag] memory heap 1: 16318 MiB {}
+[amd-diag] memory heap 2: 256 MiB { DeviceLocal | MultiInstance }
+[amd-diag] memory type 0: heap 0 { DeviceLocal }
+[amd-diag] memory type 1: heap 1 { HostVisible | HostCoherent }
+[amd-diag] memory type 2: heap 2 { DeviceLocal | HostVisible | HostCoherent }
+[amd-diag] memory type 3: heap 1 { HostVisible | HostCoherent | HostCached }
+[amd-diag] memory type 4: heap 0 { DeviceLocal | DeviceCoherentAMD | DeviceUncachedAMD }
+[amd-diag] memory type 5: heap 1 { HostVisible | HostCoherent | DeviceCoherentAMD | DeviceUncachedAMD }
+[amd-diag] memory type 6: heap 2 { DeviceLocal | HostVisible | HostCoherent | DeviceCoherentAMD | DeviceUncachedAMD }
+[amd-diag] memory type 7: heap 1 { HostVisible | HostCoherent | HostCached | DeviceCoherentAMD | DeviceUncachedAMD }
+[amd-diag] memory type 8: heap 0 { DeviceLocal }
+[amd-diag] memory type 9: heap 1 { HostVisible | HostCoherent }
+[amd-diag] memory type 10: heap 2 { DeviceLocal | HostVisible | HostCoherent }
+[amd-diag] memory type 11: heap 1 { HostVisible | HostCoherent | HostCached }
+[amd-diag] memory type 12: heap 0 { DeviceLocal | DeviceCoherentAMD | DeviceUncachedAMD }
+[amd-diag] memory type 13: heap 1 { HostVisible | HostCoherent | DeviceCoherentAMD | DeviceUncachedAMD }
+[amd-diag] memory type 14: heap 2 { DeviceLocal | HostVisible | HostCoherent | DeviceCoherentAMD | DeviceUncachedAMD }
+[amd-diag] memory type 15: heap 1 { HostVisible | HostCoherent | HostCached | DeviceCoherentAMD | DeviceUncachedAMD }
+Vulkan pipeline cache: loading _PipelineCache\PPSA23566.bin
+Vulkan pipeline cache: loaded 3938428 bytes from _PipelineCache\PPSA23566.bin
+Shader program store: 277 programs from _PipelineCache\PPSA23566.098b5fd26c9c.programs queued for compilation
+ShaderRecompiler VS phase begin: stage=VS hash=0x242e18a079fa38b1 CFG BuildGraph
+ShaderRecompiler PS phase begin: stage=PS hash=0x62cbcbdc72ceec7e CFG BuildGraph
+ShaderRecompiler CS phase begin: stage=CS hash=0x7e80065d6f78525b CFG BuildGraph
+ShaderRecompiler VS phase end: stage=VS hash=0x242e18a079fa38b1 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x7e80065d6f78525b CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0x242e18a079fa38b1 CFG Structurize
+ShaderRecompiler CS phase begin: stage=CS hash=0x7e80065d6f78525b CFG Structurize
+ShaderRecompiler CS phase begin: stage=CS hash=0x14a9b13c31ffb669 CFG BuildGraph
+ShaderRecompiler PS phase end: stage=PS hash=0x62cbcbdc72ceec7e CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0x62cbcbdc72ceec7e CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: stage=VS hash=0x242e18a079fa38b1 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler PS phase end: stage=PS hash=0x62cbcbdc72ceec7e CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0x242e18a079fa38b1 IR TranslateProgram
+ShaderRecompiler PS phase begin: stage=PS hash=0x62cbcbdc72ceec7e IR TranslateProgram
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: stage=CS hash=0x14a9b13c31ffb669 CFG BuildGraph blocks=3 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x7e80065d6f78525b CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x14a9b13c31ffb669 CFG Structurize
+ShaderRecompiler CS phase begin: stage=CS hash=0x7e80065d6f78525b IR TranslateProgram
+ShaderRecompiler CS phase begin: stage=CS hash=0xfea7abc8f8264e95 CFG BuildGraph
+ShaderRecompiler CS structured CFG success: blocks=3
+ShaderRecompiler CS phase end: stage=CS hash=0x14a9b13c31ffb669 CFG Structurize blocks=3 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x14a9b13c31ffb669 IR TranslateProgram
+ShaderRecompiler CS phase end: stage=CS hash=0xfea7abc8f8264e95 CFG BuildGraph blocks=20 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0xfea7abc8f8264e95 CFG Structurize
+ShaderRecompiler CS phase begin: stage=CS hash=0x7f5764a807a33289 CFG BuildGraph
+ShaderRecompiler CS phase end: stage=CS hash=0x7f5764a807a33289 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x7f5764a807a33289 CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: stage=CS hash=0x7f5764a807a33289 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x7f5764a807a33289 IR TranslateProgram
+ShaderRecompiler PS phase end: stage=PS hash=0x62cbcbdc72ceec7e IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x7e80065d6f78525b IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS structured CFG success: blocks=21
+ShaderRecompiler CS phase end: stage=CS hash=0xfea7abc8f8264e95 CFG Structurize blocks=21 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0xfea7abc8f8264e95 IR TranslateProgram
+ShaderRecompiler VS phase end: stage=VS hash=0x242e18a079fa38b1 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0x62cbcbdc72ceec7e SPIR-V EmitProgram
+ShaderRecompiler CS phase begin: stage=CS hash=0x7e80065d6f78525b SPIR-V EmitProgram
+ShaderRecompiler VS phase begin: stage=VS hash=0x242e18a079fa38b1 SPIR-V EmitProgram
+ShaderRecompiler PS phase end: stage=PS hash=0x62cbcbdc72ceec7e SPIR-V EmitProgram words=1174 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x7e80065d6f78525b SPIR-V EmitProgram words=519 elapsed_ms=0
+Shader: emitted zero-position clip guard
+ShaderRecompiler CS phase begin: stage=CS hash=0x34bb9338542c4c7a CFG BuildGraph
+ShaderRecompiler CS phase begin: stage=CS hash=0x34bb9338542c4c7a CFG BuildGraph
+ShaderRecompiler CS phase end: stage=CS hash=0x34bb9338542c4c7a CFG BuildGraph blocks=3 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x34bb9338542c4c7a CFG Structurize
+ShaderRecompiler VS phase end: stage=VS hash=0x242e18a079fa38b1 SPIR-V EmitProgram words=680 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x34bb9338542c4c7a CFG BuildGraph blocks=3 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x34bb9338542c4c7a CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=3
+ShaderRecompiler CS phase end: stage=CS hash=0x34bb9338542c4c7a CFG Structurize blocks=3 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x34bb9338542c4c7a IR TranslateProgram
+ShaderRecompiler CS structured CFG success: blocks=3
+ShaderRecompiler CS phase end: stage=CS hash=0x34bb9338542c4c7a CFG Structurize blocks=3 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x34bb9338542c4c7a IR TranslateProgram
+ShaderRecompiler CS phase end: stage=CS hash=0x7f5764a807a33289 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x89bdd959103d4835 CFG BuildGraph
+ShaderRecompiler CS phase end: stage=CS hash=0x89bdd959103d4835 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x89bdd959103d4835 CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: stage=CS hash=0x89bdd959103d4835 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x89bdd959103d4835 IR TranslateProgram
+ShaderRecompiler CS phase end: stage=CS hash=0x89bdd959103d4835 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x14a9b13c31ffb669 IR TranslateProgram blocks=4 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x89bdd959103d4835 SPIR-V EmitProgram
+ShaderRecompiler CS phase end: stage=CS hash=0x34bb9338542c4c7a IR TranslateProgram blocks=4 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x89bdd959103d4835 SPIR-V EmitProgram words=684 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0xdb39121662e3ed4a CFG BuildGraph
+ShaderRecompiler CS phase end: stage=CS hash=0xdb39121662e3ed4a CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0xdb39121662e3ed4a CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: stage=CS hash=0xdb39121662e3ed4a CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0xdb39121662e3ed4a IR TranslateProgram
+ShaderRecompiler CS phase end: stage=CS hash=0x34bb9338542c4c7a IR TranslateProgram blocks=4 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0xdb39121662e3ed4a IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0xdb39121662e3ed4a SPIR-V EmitProgram
+ShaderRecompiler CS phase begin: stage=CS hash=0x7f5764a807a33289 SPIR-V EmitProgram
+ShaderRecompiler CS phase end: stage=CS hash=0xdb39121662e3ed4a SPIR-V EmitProgram words=578 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x34bb9338542c4c7a SPIR-V EmitProgram
+ShaderRecompiler VS phase begin: stage=VS hash=0x5c4469c2d7f047f8 CFG BuildGraph
+ShaderRecompiler VS phase end: stage=VS hash=0x5c4469c2d7f047f8 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0x5c4469c2d7f047f8 CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: stage=VS hash=0x5c4469c2d7f047f8 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0x5c4469c2d7f047f8 IR TranslateProgram
+ShaderRecompiler CS phase begin: stage=CS hash=0x34bb9338542c4c7a SPIR-V EmitProgram
+ShaderRecompiler VS phase end: stage=VS hash=0x5c4469c2d7f047f8 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x34bb9338542c4c7a SPIR-V EmitProgram words=868 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0x34bb9338542c4c7a SPIR-V EmitProgram words=906 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x14a9b13c31ffb669 SPIR-V EmitProgram
+ShaderRecompiler CS phase begin: stage=CS hash=0xdbce934365accda7 CFG BuildGraph
+ShaderRecompiler VS phase begin: stage=VS hash=0x5c4469c2d7f047f8 SPIR-V EmitProgram
+ShaderRecompiler CS phase end: stage=CS hash=0x7f5764a807a33289 SPIR-V EmitProgram words=2023 elapsed_ms=0
+ShaderRecompiler CS phase end: stage=CS hash=0xdbce934365accda7 CFG BuildGraph blocks=3 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0xdbce934365accda7 CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=3
+ShaderRecompiler CS phase begin: stage=CS hash=0x3a4e5bbe9a04043e CFG BuildGraph
+ShaderRecompiler CS phase end: stage=CS hash=0xdbce934365accda7 CFG Structurize blocks=3 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0xdbce934365accda7 IR TranslateProgram
+ShaderRecompiler CS phase end: stage=CS hash=0x3a4e5bbe9a04043e CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x3a4e5bbe9a04043e CFG Structurize
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: stage=CS hash=0x3a4e5bbe9a04043e CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x3a4e5bbe9a04043e IR TranslateProgram
+ShaderRecompiler VS phase end: stage=VS hash=0x5c4469c2d7f047f8 SPIR-V EmitProgram words=692 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0x374d5c6554f31728 CFG BuildGraph
+ShaderRecompiler PS phase end: stage=PS hash=0x374d5c6554f31728 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0x374d5c6554f31728 CFG Structurize
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler PS phase end: stage=PS hash=0x374d5c6554f31728 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0x374d5c6554f31728 IR TranslateProgram
+ShaderRecompiler CS phase begin: stage=CS hash=0x7e80065d6f78525b CFG BuildGraph
+ShaderRecompiler CS phase end: stage=CS hash=0x7e80065d6f78525b CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x7e80065d6f78525b CFG Structurize
+ShaderRecompiler PS phase end: stage=PS hash=0x374d5c6554f31728 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler CS structured CFG success: blocks=1
+ShaderRecompiler CS phase end: stage=CS hash=0x7e80065d6f78525b CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler CS phase begin: stage=CS hash=0x7e80065d6f78525b IR TranslateProgram
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: stage=PS hash=0x374d5c6554f31728 SPIR-V EmitProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: stage=PS hash=0x374d5c6554f31728 SPIR-V EmitProgram words=207 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xc9da6eba4a5a3f3f CFG BuildGraph
+ShaderRecompiler PS phase end: stage=PS hash=0xc9da6eba4a5a3f3f CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xc9da6eba4a5a3f3f CFG Structurize
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+ShaderRecompiler PS phase end: stage=PS hash=0xc9da6eba4a5a3f3f CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xc9da6eba4a5a3f3f IR TranslateProgram
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=10
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: stage=PS hash=0xc9da6eba4a5a3f3f IR TranslateProgram blocks=2 elapsed_ms=0
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=3
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=4
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: stage=PS hash=0xa8a01e9841b2bbdb CFG BuildGraph
+ShaderRecompiler PS phase end: stage=PS hash=0xa8a01e9841b2bbdb CFG BuildGraph blocks=19 loops=2 back_edges=2 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xa8a01e9841b2bbdb CFG Structurize
+ShaderRecompiler PS phase begin: stage=PS hash=0xc9da6eba4a5a3f3f SPIR-V EmitProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=24
+ShaderRecompiler PS phase end: stage=PS hash=0xa8a01e9841b2bbdb CFG Structurize blocks=24 loops=2 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xa8a01e9841b2bbdb IR TranslateProgram
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: stage=PS hash=0xc9da6eba4a5a3f3f SPIR-V EmitProgram words=2323 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xa2e6dcf1bc9b32ca CFG BuildGraph
+ShaderRecompiler VS phase end: stage=VS hash=0xa2e6dcf1bc9b32ca CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xa2e6dcf1bc9b32ca CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: stage=VS hash=0xa2e6dcf1bc9b32ca CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xa2e6dcf1bc9b32ca IR TranslateProgram
+ShaderRecompiler VS phase end: stage=VS hash=0xa2e6dcf1bc9b32ca IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xa2e6dcf1bc9b32ca SPIR-V EmitProgram
+ShaderRecompiler VS phase end: stage=VS hash=0xa2e6dcf1bc9b32ca SPIR-V EmitProgram words=727 elapsed_ms=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=13
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=3
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase end: stage=PS hash=0xa8a01e9841b2bbdb IR TranslateProgram blocks=25 elapsed_ms=1
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=3
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: stage=VS hash=0xead6641a7db7f435 CFG BuildGraph
+ShaderRecompiler VS phase end: stage=VS hash=0xead6641a7db7f435 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xead6641a7db7f435 CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: stage=VS hash=0xead6641a7db7f435 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xead6641a7db7f435 IR TranslateProgram
+ShaderRecompiler VS phase end: stage=VS hash=0xead6641a7db7f435 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xead6641a7db7f435 SPIR-V EmitProgram
+ShaderRecompiler VS phase end: stage=VS hash=0xead6641a7db7f435 SPIR-V EmitProgram words=710 elapsed_ms=0
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS phase begin: stage=VS hash=0x2b674f1283836609 CFG BuildGraph
+ShaderRecompiler VS phase end: stage=VS hash=0x2b674f1283836609 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0x2b674f1283836609 CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: stage=VS hash=0x2b674f1283836609 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0x2b674f1283836609 IR TranslateProgram
+ShaderRecompiler VS phase end: stage=VS hash=0x2b674f1283836609 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0x2b674f1283836609 SPIR-V EmitProgram
+ShaderRecompiler VS phase end: stage=VS hash=0x2b674f1283836609 SPIR-V EmitProgram words=627 elapsed_ms=0
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=3
+[... 14 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=7
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: stage=PS hash=0xa8a01e9841b2bbdb SPIR-V EmitProgram
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: stage=PS hash=0xf5f95dd141c558f4 CFG BuildGraph
+ShaderRecompiler PS phase end: stage=PS hash=0xf5f95dd141c558f4 CFG BuildGraph blocks=15 loops=2 back_edges=2 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xf5f95dd141c558f4 CFG Structurize
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=18
+ShaderRecompiler PS phase end: stage=PS hash=0xf5f95dd141c558f4 CFG Structurize blocks=18 loops=2 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xf5f95dd141c558f4 IR TranslateProgram
+ShaderRecompiler PS phase end: stage=PS hash=0xa8a01e9841b2bbdb SPIR-V EmitProgram words=10109 elapsed_ms=0
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=37
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=3
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS phase begin: stage=PS hash=0x9cc359b7fcf2be70 CFG BuildGraph
+ShaderRecompiler PS phase end: stage=PS hash=0x9cc359b7fcf2be70 CFG BuildGraph blocks=11 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0x9cc359b7fcf2be70 CFG Structurize
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=11
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=3
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=39
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=39
+[... 13 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=45
+[... 2 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=37
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=43
+[... 13 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=5
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=3
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=5
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=13
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=25
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=19
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=5
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=18
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=7
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=29
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=29
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=32
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=46
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler CS structured CFG success: blocks=1
+[... 105 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 23 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 60 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=33
+[... 42 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=18
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=22
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 12 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=108
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=33
+[... 6 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=33
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=33
+[... 13 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=33
+[... 14 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=4
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=46
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 44 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=46
+[... 21 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 53 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=3
+[... 23 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=33
+[... 3 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=33
+[... 11 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=7
+[... 29 lines omitted by make_fixture.py ...]
+ShaderRecompiler PS structured CFG success: blocks=1
+[... 28 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 12 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=1
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 26 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 14 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 20 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=4
+[... 42 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 18 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 5 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 7 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 4 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 8 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 10 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=3
+[... 21 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 9 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=1
+[... 1 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS embedded vertex fetch plan: detected=2
+[... 76 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=112
+[... 183 lines omitted by make_fixture.py ...]
+ShaderRecompiler VS structured CFG success: blocks=112
+[... 191 lines omitted by make_fixture.py ...]
+Build
+  version: Fork build TheCruZ/KytyPS5-GTA 098b5fd
+
+Host
+  os:      Windows
+  cpu:     Intel 11th Gen Core i7-11700
+  threads: 16
+
+Title ID: PPSA23566
+Mounted /download0 -> _DownloadData/PPSA23566
+Mounted /temp0 -> _TempData/PPSA23566
+Mounted /temp -> _TempData/PPSA23566
+ShaderRecompiler CS phase begin: stage=CS hash=0x094c3cfd1cae56b8 SPIR-V EmitProgram
+ShaderRecompiler CS phase end: stage=CS hash=0x094c3cfd1cae56b8 SPIR-V EmitProgram words=13655 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xfee3bf04ee7e82b7 CFG BuildGraph
+ShaderRecompiler VS phase end: stage=VS hash=0xfee3bf04ee7e82b7 CFG BuildGraph blocks=3 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xfee3bf04ee7e82b7 CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=3
+ShaderRecompiler VS phase end: stage=VS hash=0xfee3bf04ee7e82b7 CFG Structurize blocks=3 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xfee3bf04ee7e82b7 IR TranslateProgram
+Loading: <game>\eboot.bin
+ShaderRecompiler VS phase end: stage=VS hash=0xfee3bf04ee7e82b7 IR TranslateProgram blocks=4 elapsed_ms=0
+base_vaddr             = 0x0000000900000000
+base_size              = 0x000000000c2dcb30
+base_size_aligned      = 0x000000000c2e0000
+mapped_size            = 0x000000000c2e1000
+tls_handler_size       = 0x0000000000001000
+[0] addr        = 0x0000000900000000
+[0] file_size   = 133006892
+[0] memory_size = 133021696
+[0] mode        = Execute
+ShaderRecompiler VS phase begin: stage=VS hash=0xfee3bf04ee7e82b7 SPIR-V EmitProgram
+ShaderRecompiler VS phase end: stage=VS hash=0xfee3bf04ee7e82b7 SPIR-V EmitProgram words=4295 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xc46a4da004ae75d6 CFG BuildGraph
+ShaderRecompiler PS phase end: stage=PS hash=0xc46a4da004ae75d6 CFG BuildGraph blocks=7 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xc46a4da004ae75d6 CFG Structurize
+ShaderRecompiler PS structured CFG success: blocks=11
+ShaderRecompiler PS phase end: stage=PS hash=0xc46a4da004ae75d6 CFG Structurize blocks=11 loops=0 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xc46a4da004ae75d6 IR TranslateProgram
+ShaderRecompiler PS phase end: stage=PS hash=0xc46a4da004ae75d6 IR TranslateProgram blocks=12 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xc46a4da004ae75d6 SPIR-V EmitProgram
+ShaderRecompiler PS phase end: stage=PS hash=0xc46a4da004ae75d6 SPIR-V EmitProgram words=3175 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xd1a6ff1fdf50ea62 CFG BuildGraph
+ShaderRecompiler VS phase end: stage=VS hash=0xd1a6ff1fdf50ea62 CFG BuildGraph blocks=1 loops=0 back_edges=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xd1a6ff1fdf50ea62 CFG Structurize
+ShaderRecompiler VS structured CFG success: blocks=1
+ShaderRecompiler VS phase end: stage=VS hash=0xd1a6ff1fdf50ea62 CFG Structurize blocks=1 loops=0 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xd1a6ff1fdf50ea62 IR TranslateProgram
+ShaderRecompiler VS phase end: stage=VS hash=0xd1a6ff1fdf50ea62 IR TranslateProgram blocks=2 elapsed_ms=0
+ShaderRecompiler VS phase begin: stage=VS hash=0xd1a6ff1fdf50ea62 SPIR-V EmitProgram
+ShaderRecompiler VS phase end: stage=VS hash=0xd1a6ff1fdf50ea62 SPIR-V EmitProgram words=3529 elapsed_ms=0
+ShaderRecompiler PS phase begin: stage=PS hash=0xe726d47590058a30 CFG BuildGraph
+[... 1528 lines omitted by make_fixture.py ...]
+Loading: <game>\sce_module/libc.prx
+base_vaddr             = 0x0000000910000000
+[... 2 lines omitted by make_fixture.py ...]
+mapped_size            = 0x00000000001e4000
+[... 173 lines omitted by make_fixture.py ...]
+Window 6 size changed to 1280x720
+Window 6 got unknown event 532
+Window 6 shown
+Window 6 gained keyboard focus
+[... 2 lines omitted by make_fixture.py ...]
+Window 6 exposed
+[... 18 lines omitted by make_fixture.py ...]
+Relocate: unresolved non-PLT import patched to stub [542378] [0000000909c042e0] <- 0000000200000000, i-XwZjw0OOY[Json2_v1][Json_v1.1][Func], Func, Global, <game>\eboot.bin
+PS5 NID fallback: 23LRUSvYu1M -> 23LRUSvYu1M[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: BfBDZGbti7A -> BfBDZGbti7A[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: j3EtxFkSIhQ -> j3EtxFkSIhQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: k3GhuSNmBLU -> k3GhuSNmBLU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: wr23dPKyWc0 -> wr23dPKyWc0[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: n2fD4A+pb+g -> n2fD4A+pb+g[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: UZbQjYAwwXM -> UZbQjYAwwXM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: -HOOCn0JY48 -> -HOOCn0JY48[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: ZvwO9euwYzc -> ZvwO9euwYzc[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: hvUfkUIQcOE -> hvUfkUIQcOE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: WmAc2MEj6Io -> WmAc2MEj6Io[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: i1jyy49AjXU -> i1jyy49AjXU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: CtB+A9-VxO0 -> CtB+A9-VxO0[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: Yw0jKSqop+E -> Yw0jKSqop+E[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: q88lQ+GP5Yk -> q88lQ+GP5Yk[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 1q1titRBL6o -> 1q1titRBL6o[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: ypVBz4uPKcQ -> ypVBz4uPKcQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: t1vNu082-jM -> t1vNu082-jM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: aJf+j5yntiU -> aJf+j5yntiU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: RmaJwLtc8rY -> RmaJwLtc8rY[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: -KRzWekV120 -> -KRzWekV120[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: l4fM9K-Lyks -> l4fM9K-Lyks[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 8N2tmT3jmC8 -> 8N2tmT3jmC8[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: tSBxhAPyytQ -> tSBxhAPyytQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: u2T2DiA5hRI -> u2T2DiA5hRI[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: VmW0Tdpy420 -> VmW0Tdpy420[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: Qrj4c+61z4A -> Qrj4c+61z4A[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: z2duB-hHQSM -> z2duB-hHQSM[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: vcmNN+AAXnY -> vcmNN+AAXnY[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: d-6uF9sZDIU -> d-6uF9sZDIU[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 6lNcCp+fxi4 -> 6lNcCp+fxi4[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: vRoArM9zaIk -> vRoArM9zaIk[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: V++UgBtQhn0 -> V++UgBtQhn0[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: 2JtWUUiYBXs -> 2JtWUUiYBXs[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: wRbq6ZjNop4 -> wRbq6ZjNop4[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: dbOlWdppb4o -> dbOlWdppb4o[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: D9sr1xGUriE -> D9sr1xGUriE[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: T6xuVw0KUJo -> T6xuVw0KUJo[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: bxGoVxpdSPQ -> bxGoVxpdSPQ[Graphics5_v1][Graphics5_v1.1][Func]
+PS5 NID fallback: UglJIZjGssM -> UglJIZjGssM[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+PS5 NID fallback: AhGvpITrf4M -> AhGvpITrf4M[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+Relocate: unresolved PLT import patched to stub [97] [0000000909d28808] <- 0000000200000022, +KDWny9Y-6k[ContentExport_v1][ContentExport_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [98] [0000000909d28810] <- 0000000200000044, FCygF4Ec4so[ContentExport_v1][ContentExport_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [99] [0000000909d28818] <- 0000000200000066, tb3cZTCl8Ps[ContentExport_v1][ContentExport_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [100] [0000000909d28820] <- 0000000200000088, OWCJUmrWH1g[ContentExport_v1][ContentExport_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [101] [0000000909d28828] <- 00000002000000aa, S-Gni2KIJRY[ConvertKeycode_v1][ConvertKeycode_v1.0][Func], Func, Global, <game>\eboot.bin
+PS5 NID fallback: 8zLSfEfW5AU -> 8zLSfEfW5AU[Coredump_v1][Coredump_v1.1][Func]
+PS5 NID fallback: fFkhOgztiCA -> fFkhOgztiCA[Coredump_v1][Coredump_v1.1][Func]
+Relocate: unresolved PLT import patched to stub [105] [0000000909d28848] <- 00000002000000cc, Dbbkj6YHWdo[Coredump_v1][libkernel_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [116] [0000000909d288a0] <- 00000002000000ee, 0onIrKx9NIE[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [120] [0000000909d288c0] <- 0000000200000110, P5pdoykPYTk[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [123] [0000000909d288d8] <- 0000000200000132, Kh6bS2HQKbo[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [127] [0000000909d288f8] <- 0000000200000154, h9wmFZX4i-4[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [135] [0000000909d28938] <- 0000000200000176, f42K37mm5RM[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [136] [0000000909d28940] <- 0000000200000198, JBN6N-EY+3M[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [137] [0000000909d28948] <- 00000002000001ba, DK+GoXCNT04[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [139] [0000000909d28958] <- 00000002000001dc, zXqcE0fizz0[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [140] [0000000909d28960] <- 00000002000001fe, U5ExQGyyx9s[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [141] [0000000909d28968] <- 0000000200000220, PDxS48xGQLs[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [142] [0000000909d28970] <- 0000000200000242, i9mhafzkEi8[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [143] [0000000909d28978] <- 0000000200000264, vO4B-42ef-k[Http_v1][Http_v1.1][Func], Func, Global, <game>\eboot.bin
+PS5 NID fallback: -hJRce8wn1U -> -hJRce8wn1U[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: OcAgPxcq5Vk -> OcAgPxcq5Vk[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: cK6bYHf-Q5E -> cK6bYHf-Q5E[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: RujUxbr3haM -> RujUxbr3haM[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: PR5k1penBLM -> PR5k1penBLM[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: Cxwy7wHq4J0 -> Cxwy7wHq4J0[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: IXW-z8pggfg -> IXW-z8pggfg[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: qSmqLXXCPas -> qSmqLXXCPas[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: cG1VE2HMl6c -> cG1VE2HMl6c[Json2_v1][Json2_v1.1][Func]
+Relocate: unresolved PLT import patched to stub [160] [0000000909d28a00] <- 0000000200000286, wM4LO2iK3s8[Json2_v1][Json_v1.1][Func], Func, Global, <game>\eboot.bin
+PS5 NID fallback: L1KAkYWml-M -> L1KAkYWml-M[Json2_v1][Json2_v1.1][Func]
+Relocate: unresolved PLT import patched to stub [162] [0000000909d28a10] <- 00000002000002a8, VbFjEs--uiA[Json2_v1][Json_v1.1][Func], Func, Global, <game>\eboot.bin
+PS5 NID fallback: 9yLjn46Ypfs -> 9yLjn46Ypfs[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: 5AZPp99ogrc -> 5AZPp99ogrc[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: wcgr5mte7T8 -> wcgr5mte7T8[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: w5+VCznos5E -> w5+VCznos5E[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: bcH5EnFE2xY -> bcH5EnFE2xY[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: WXF2ihRF+B8 -> WXF2ihRF+B8[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: WTtYf+cNnXI -> WTtYf+cNnXI[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: qBMjqyBn3OM -> qBMjqyBn3OM[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: Ncel8t2Rrpc -> Ncel8t2Rrpc[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: FIjXN2TkuTs -> FIjXN2TkuTs[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: SHtAad20YYM -> SHtAad20YYM[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: epJ6x2LV0kU -> epJ6x2LV0kU[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: ONT8As5R1ug -> ONT8As5R1ug[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: DIxvoy7Ngvk -> DIxvoy7Ngvk[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: zTwZdI8AZ5Y -> zTwZdI8AZ5Y[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: XlWbvieLj2M -> XlWbvieLj2M[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: HwDt5lD9Bfo -> HwDt5lD9Bfo[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: RBw+4NukeGQ -> RBw+4NukeGQ[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: S5JxQnoGF3E -> S5JxQnoGF3E[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: WSOuge5IsCg -> WSOuge5IsCg[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: I2QC8PYhJWY -> I2QC8PYhJWY[Json2_v1][Json2_v1.1][Func]
+PS5 NID fallback: Eu95jmqn5Rw -> Eu95jmqn5Rw[Json2_v1][Json2_v1.1][Func]
+Relocate: unresolved PLT import patched to stub [203] [0000000909d28b58] <- 00000002000002ca, TCkRD0DWNLg[Net_v1][Net_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [218] [0000000909d28bd0] <- 00000002000002ec, J5i3hiLJMPk[Net_v1][Net_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [225] [0000000909d28c08] <- 000000020000030e, zJGf8xjFnQE[Net_v1][Net_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [238] [0000000909d28c70] <- 0000000200000330, NU3ckGHMFXo[NpCommerce_v1][NpCommerce_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [240] [0000000909d28c80] <- 0000000200000352, CCbC+lqqvF0[NpCommerce_v1][NpCommerce_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [243] [0000000909d28c98] <- 0000000200000374, IXmfUaze9So[NpCommerce_v1][NpCommerce_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [246] [0000000909d28cb0] <- 0000000200000396, DHmwsa6S8Tc[NpCommerce_v1][NpCommerce_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [247] [0000000909d28cb8] <- 00000002000003b8, dsqCVsNM0Zg[NpCommerce_v1][NpCommerce_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [248] [0000000909d28cc0] <- 00000002000003da, uKTDW8hk-ts[NpCommerce_v1][NpCommerce_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [249] [0000000909d28cc8] <- 00000002000003fc, Y295ygEccqk[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [250] [0000000909d28cd0] <- 000000020000041e, UYPxv8MIzGo[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [251] [0000000909d28cd8] <- 0000000200000440, oTirsxQpqj0[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [252] [0000000909d28ce0] <- 0000000200000462, 8x++mBOUeso[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [253] [0000000909d28ce8] <- 0000000200000484, 52AlYvq+dmk[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [254] [0000000909d28cf0] <- 00000002000004a6, dVCh5JiPsSY[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [255] [0000000909d28cf8] <- 00000002000004c8, vzKNY2nY7Jk[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [256] [0000000909d28d00] <- 00000002000004ea, 8eqBiqB72AE[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [257] [0000000909d28d08] <- 000000020000050c, Jv4JETvYzWg[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [258] [0000000909d28d10] <- 000000020000052e, 4rpx-P+kdJQ[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+Relocate: unresolved PLT import patched to stub [259] [0000000909d28d18] <- 0000000200000550, nXa0s7xnbsQ[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>\eboot.bin
+[... 169 lines omitted by make_fixture.py ...]
+PS5 NID fallback: RXXqi4CtF8w -> RXXqi4CtF8w[libkernel_v1][libkernel_v1.1][Func]
+PS5 NID fallback: 27bAgiJmOh0 -> 27bAgiJmOh0[libkernel_v1][libkernel_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: QcteRwbsnV0 -> QcteRwbsnV0[libkernel_v1][libkernel_v1.1][Func]
+[... 13 lines omitted by make_fixture.py ...]
+PS5 NID fallback: hdpVEUDFW3s -> hdpVEUDFW3s[Ssl_v1][Ssl_v1.1][Func]
+PS5 NID fallback: 0K1yQ6Lv-Yc -> 0K1yQ6Lv-Yc[Ssl_v1][Ssl_v1.1][Func]
+[... 24 lines omitted by make_fixture.py ...]
+PS5 NID fallback: P41kTWUS3EI -> P41kTWUS3EI[Posix_v1][libkernel_v1.1][Func]
+PS5 NID fallback: oIRFTjoILbg -> oIRFTjoILbg[Posix_v1][libkernel_v1.1][Func]
+[... 3 lines omitted by make_fixture.py ...]
+PS5 NID fallback: yS8U2TGCe1A -> yS8U2TGCe1A[Posix_v1][libkernel_v1.1][Func]
+[... 3 lines omitted by make_fixture.py ...]
+PS5 NID fallback: al3JzFI9MQ0 -> al3JzFI9MQ0[LibcInternal_v1][LibcInternal_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: cfwBSQyr5Ys -> cfwBSQyr5Ys[Posix_v1][libkernel_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: NhpspxdjEKU -> NhpspxdjEKU[Posix_v1][libkernel_v1.1][Func]
+[... 8 lines omitted by make_fixture.py ...]
+--- Start module: <game>\sce_module/libc.prx
+[... 1418 lines omitted by make_fixture.py ...]
+--- Execute: Main
+[... 4482 lines omitted by make_fixture.py ...]
+Unresolved import stub called [0]: patch_vaddr=0x0000000909d2a458 jmprela_index=1003 symbol=WlyEA-sLDf0[libkernel_v1][libkernel_v1.1][Func] type=Func bind=Global program=<game>\eboot.bin
+[... 1126 lines omitted by make_fixture.py ...]
+Loading: <game>\Engine.Render.Core2.PlatformPs5.prx
+base_vaddr             = 0x0000000920000000
+[... 2 lines omitted by make_fixture.py ...]
+mapped_size            = 0x00000000003c0000
+[... 140 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 23LRUSvYu1M -> 23LRUSvYu1M[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: BfBDZGbti7A -> BfBDZGbti7A[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: h9z6+0hEydk -> h9z6+0hEydk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: KT-hTp-Ch14 -> KT-hTp-Ch14[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: qzMN2XKGA4k -> qzMN2XKGA4k[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: j3EtxFkSIhQ -> j3EtxFkSIhQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: -RnpfpxIhec -> -RnpfpxIhec[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: cFazmnXpJOE -> cFazmnXpJOE[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: eZ4+17OQz4Q -> eZ4+17OQz4Q[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: htn36gPnBk4 -> htn36gPnBk4[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: xAeBOa0A3kk -> xAeBOa0A3kk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: cpCILPya5Zk -> cpCILPya5Zk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 6mFxkVqdmbQ -> 6mFxkVqdmbQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: k3GhuSNmBLU -> k3GhuSNmBLU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: LtTouSCZjHM -> LtTouSCZjHM[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: wr23dPKyWc0 -> wr23dPKyWc0[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: n2fD4A+pb+g -> n2fD4A+pb+g[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: UZbQjYAwwXM -> UZbQjYAwwXM[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: -HOOCn0JY48 -> -HOOCn0JY48[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: ZvwO9euwYzc -> ZvwO9euwYzc[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: hvUfkUIQcOE -> hvUfkUIQcOE[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: w4-d0n60hdo -> w4-d0n60hdo[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 57labkp+rSQ -> 57labkp+rSQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: qj7QZpgr9Uw -> qj7QZpgr9Uw[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 1rZSWUv1IRc -> 1rZSWUv1IRc[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: WmAc2MEj6Io -> WmAc2MEj6Io[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: i1jyy49AjXU -> i1jyy49AjXU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: CtB+A9-VxO0 -> CtB+A9-VxO0[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: Yw0jKSqop+E -> Yw0jKSqop+E[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: q88lQ+GP5Yk -> q88lQ+GP5Yk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: kUlvghKs-mA -> kUlvghKs-mA[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: ypVBz4uPKcQ -> ypVBz4uPKcQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: aJf+j5yntiU -> aJf+j5yntiU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: RmaJwLtc8rY -> RmaJwLtc8rY[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: -KRzWekV120 -> -KRzWekV120[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: l4fM9K-Lyks -> l4fM9K-Lyks[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 8N2tmT3jmC8 -> 8N2tmT3jmC8[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: tSBxhAPyytQ -> tSBxhAPyytQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: u2T2DiA5hRI -> u2T2DiA5hRI[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: VmW0Tdpy420 -> VmW0Tdpy420[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: TRO721eVt4g -> TRO721eVt4g[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: QhCbS4X9Rl8 -> QhCbS4X9Rl8[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: +kSrjIVxKFE -> +kSrjIVxKFE[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: H7uZqCoNuWk -> H7uZqCoNuWk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: YUeqkyT7mEQ -> YUeqkyT7mEQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: MWiElSNE8j8 -> MWiElSNE8j8[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: Qrj4c+61z4A -> Qrj4c+61z4A[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: z2duB-hHQSM -> z2duB-hHQSM[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: vcmNN+AAXnY -> vcmNN+AAXnY[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: d-6uF9sZDIU -> d-6uF9sZDIU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 6lNcCp+fxi4 -> 6lNcCp+fxi4[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: vRoArM9zaIk -> vRoArM9zaIk[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: V++UgBtQhn0 -> V++UgBtQhn0[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 3KDcnM3lrcU -> 3KDcnM3lrcU[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 0fWWK5uG9rQ -> 0fWWK5uG9rQ[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: fPSCdQxgpSw -> fPSCdQxgpSw[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 2JtWUUiYBXs -> 2JtWUUiYBXs[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: wRbq6ZjNop4 -> wRbq6ZjNop4[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: f3dg2CSgRKY -> f3dg2CSgRKY[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: fd5Bp5tGTgo -> fd5Bp5tGTgo[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: dbOlWdppb4o -> dbOlWdppb4o[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: D9sr1xGUriE -> D9sr1xGUriE[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: T6xuVw0KUJo -> T6xuVw0KUJo[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: UglJIZjGssM -> UglJIZjGssM[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: AhGvpITrf4M -> AhGvpITrf4M[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: 6UzEidRZwkg -> 6UzEidRZwkg[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: +T8Xo6LtFJI -> +T8Xo6LtFJI[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: HF3YllT3mXU -> HF3YllT3mXU[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: XlNp7jzGiPo -> XlNp7jzGiPo[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: MM4IZSEYytQ -> MM4IZSEYytQ[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: w2rJhmD+dsE -> w2rJhmD+dsE[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: DL2RXaXOy88 -> DL2RXaXOy88[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: Ddwk4gLT5j0 -> Ddwk4gLT5j0[Graphics5Driver_v1][Graphics5Driver_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+Stubbed: [00000009201ede40] <- 0000000000000000, qspAL8bgcBY[AgcDriver_v1][AgcDriver_v1.1][Func], Func, Global, 
+[... 2 lines omitted by make_fixture.py ...]
+Stubbed: [00000009201ede48] <- 0000000000000000, WHIOMbb+iIU[AgcDriver_v1][AgcDriver_v1.1][Func], Func, Global, 
+[... 2 lines omitted by make_fixture.py ...]
+Stubbed: [00000009201ede50] <- 0000000000000000, ICaGtkEIXTk[AgcDriver_v1][AgcDriver_v1.1][Func], Func, Global, 
+[... 2 lines omitted by make_fixture.py ...]
+PS5 NID fallback: X-Nm5KLREeg -> X-Nm5KLREeg[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: W5z4eZrjEas -> W5z4eZrjEas[Graphics5_v1][Graphics5_v1.1][Func]
+[... 1 lines omitted by make_fixture.py ...]
+PS5 NID fallback: pWLG7WOpVcw -> pWLG7WOpVcw[Graphics5_v1][Graphics5_v1.1][Func]
+[... 2 lines omitted by make_fixture.py ...]
+Stubbed: [00000009201ede78] <- 0000000000000000, ZLL31lzzxr4[Psml_mfsr2_v1][Psml_v1.1][Func], Func, Global, 
+[... 2 lines omitted by make_fixture.py ...]
+Stubbed: [00000009201ede80] <- 0000000000000000, lrJwpLjKXRc[Psml_mfsr2_v1][Psml_v1.1][Func], Func, Global, 
+[... 3 lines omitted by make_fixture.py ...]
+Stubbed: [00000009201ede90] <- 0000000000000000, 94iBp3KvIuI[Psml_v1][Psml_v1.1][Func], Func, Global, 
+[... 115 lines omitted by make_fixture.py ...]
+--- Start module: <game>\Engine.Render.Core2.PlatformPs5.prx
+[... 100546 lines omitted by make_fixture.py ...]
+Unresolved import stub called [1]: patch_vaddr=0x0000000909d291d8 jmprela_index=411 symbol=7CxI50-xlCk[NpPartner001_v1][NpPartner001_v1.1][Func] type=Func bind=Global program=<game>\eboot.bin
+Unresolved import stub called [2]: patch_vaddr=0x0000000909d291f8 jmprela_index=415 symbol=eDXKe9FndlE[NpEntitlementAccessPft_v1][NpEntitlementAccess_v1.1][Func] type=Func bind=Global program=<game>\eboot.bin
+[... 2980 lines omitted by make_fixture.py ...]
+Warning: format Bc5UnormBlock does not support storage access; block-compressed textures written by the guest will not render.
+[... 237125 lines omitted by make_fixture.py ...]
+GPU: using buffer device address (BDA) shader memory access.
+[... 18854 lines omitted by make_fixture.py ...]
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000f72, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x00000000000006fd, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x00000000000006fe, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f73, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000f74, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x00000000000006ff, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000a97, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x00000000000017d3, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	 handle = 1
+	 data   = 0x00000007ece7f2d8
+	Equeue wait received 1 events: ident = 0x0000000000000958, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000700, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f75, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000701, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f76, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000702, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f77, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x00000000000017d4, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f78, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000a98, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait received 1 events: ident = 0x0000000000000703, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000f79, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	 handle = 1
+	 data   = 0x00000007ece7f2d8
+	Equeue wait received 1 events: ident = 0x0000000000000000, filter = -14, flags = 0x0000, fflags = 0x00000001, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: GfxEopQueue, caller = 0x000000092009ed28, eq = 0x000000000000001c, ev = 0x00000007ed5a3f90, num = 1, timo = inf, thread_id = 27
+	 queue = 0x00000028
+	 count = 2
+	Equeue wait: init, caller = 0x000000090555dcaa, eq = 0x000000000000001d, ev = 0x00000007ed34bdb0, num = 1, timo = inf, thread_id = 29
+vkQueueSubmit failed: ErrorDeviceLost (-4), tick=28186 debug_op=0 debug_submit=14568 args=60,2160,1,65,0x00000011604c8000
+--- Build ---
+Fork build TheCruZ/KytyPS5-GTA 098b5fd
+--- Fatal Error ---
+Not implemented (result != vk::Result::eSuccess) in D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\host_gpu\renderer\commandScheduler.cpp:548
+	Equeue wait received 1 events: ident = 0x0000000000000704, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f7a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000705, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f7b, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x00000000000017d5, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000706, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f7c, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000a99, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000002, ev = 0x00000007efdf2ce8, num = 1, timo = inf, thread_id = 3
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000f7d, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000707, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000f7e, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000708, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f7f, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000709, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000a9a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f80, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x00000000000017d6, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000070a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait received 1 events: ident = 0x0000000000000f81, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x000000000000070b, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000959, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000f82, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000070c, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f83, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000070d, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x000000000000070e, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x00000000000017d7, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000a9b, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait received 1 events: ident = 0x0000000000000f84, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+--- Build ---
+Fork build TheCruZ/KytyPS5-GTA 098b5fd
+--- Error ---
+vkAcquireNextImageKHR failed: ErrorDeviceLost
+ in D:\a\KytyPS5-GTA\KytyPS5-GTA\src\graphics\presentation\window\swapchain.cpp:623
+	Equeue wait received 1 events: ident = 0x0000000000000f85, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000070f, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000f86, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000015a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000007, ev = 0x00000007ef3dfdf8, num = 1, timo = inf, thread_id = 8
+	Equeue wait received 1 events: ident = 0x0000000000000710, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f87, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000711, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f88, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000712, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000a9c, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x00000000000017d8, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f89, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000713, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000002, ev = 0x00000007efdf2ce8, num = 1, timo = inf, thread_id = 3
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000f8a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000714, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f8b, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000715, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f8c, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000716, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f8d, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000717, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f8e, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x00000000000017d9, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait received 1 events: ident = 0x0000000000000a9d, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000718, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x000000000000095a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f8f, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000719, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f90, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000071a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f91, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000f92, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000071b, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000f93, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000071c, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000a9e, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x00000000000017da, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000f94, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000071d, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f95, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000071e, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f96, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x000000000000071f, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 instance = 0x0000401b
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000002, ev = 0x00000007efdf2ce8, num = 1, timo = inf, thread_id = 3
+	Equeue wait received 1 events: ident = 0x0000000000000f97, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x00000000000017db, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait received 1 events: ident = 0x0000000000000720, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000a9f, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000f98, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000721, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f99, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000722, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000f9a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000095b, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000723, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 *size = 0x0000000040000000
+	 *size = 0x0000000040000000
+	Equeue wait received 1 events: ident = 0x00000000000017dc, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000f9b, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait received 1 events: ident = 0x0000000000000aa0, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000724, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000725, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f9c, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000726, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f9d, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000727, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000f9e, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x00000000000017dd, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000aa1, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x0000000000000f9f, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000728, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x0000000000000fa0, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x0000000000000729, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000fa1, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000002, ev = 0x00000007efdf2ce8, num = 1, timo = inf, thread_id = 3
+	Equeue wait received 1 events: ident = 0x0000000000000fa2, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000072a, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000aa2, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000011, ev = 0x00000007ee53be28, num = 1, timo = inf, thread_id = 17
+	Equeue wait received 1 events: ident = 0x000000000000072b, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x00000000000017de, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000fa3, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x000000000000001a, ev = 0x00000007ed7a7df8, num = 1, timo = inf, thread_id = 26
+	 instance = 0x0000401b
+	Equeue wait received 1 events: ident = 0x000000000000072c, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait received 1 events: ident = 0x0000000000000fa4, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x0000000000000fa5, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000021, ev = 0x00000007ed0030a8, num = 1, timo = inf, thread_id = 31
+	Equeue wait received 1 events: ident = 0x000000000000072d, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	Equeue wait: EAThread Timer Queue, caller = 0x000000090555dcaa, eq = 0x0000000000000020, ev = 0x00000007ed147d78, num = 1, timo = inf, thread_id = 30
+	Equeue wait received 1 events: ident = 0x000000000000095c, filter = -15, flags = 0x0011, fflags = 0x00000000, data = 0x0000000000000000, udata = 0x0000000000000000
+	 handle = 1
+	 data   = 0x00000007ece7f2d8

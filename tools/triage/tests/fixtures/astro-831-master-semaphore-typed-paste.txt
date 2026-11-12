@@ -1,0 +1,21 @@
+# source: https://github.com/KytyPS5/KytyPS5/issues/831 body by ajmi982 at 2026-09-25T17:56:00Z
+# untrusted user text, saved verbatim (markdown included); marker hits: 1
+
+For 2 weeks I have gotten the exact same crash error when trying to run AstroBot and some in discord have speculated it only impacts ppl with XX90 GPUS (which i find insane but maybe it is true).
+
+The error is "not implemented (result != vk: : Results: : eSuccess) in D:\a\KytyPS5\KytyPS4\src\graphics\host_gpu\renderer\masterSemaphore.cpp:53"
+
+
+
+**UPDATE**: To help everyone who is working on this error PLEASE include the following in your post
+
+OS
+GPU + DRIVER VERSION
+EMULATOR: 
+ -KytyPS5 version (mainline? fork? what build?)
+ -Settings in EMU
+THE GAME:
+ -Name
+  -Version
+
+Any other details you find would be helpful. thank you.

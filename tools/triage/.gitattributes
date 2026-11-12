@@ -1,0 +1,2 @@
+# Fixtures are raw log bytes (missing final newlines, invalid UTF-8): no line-ending conversion.
+tests/fixtures/** -text
