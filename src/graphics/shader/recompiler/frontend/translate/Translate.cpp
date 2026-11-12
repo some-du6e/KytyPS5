@@ -896,6 +896,23 @@ void IncludeInstructionVectorRegisters(const Decoder::Instruction& inst, uint32_
 		case Decoder::Opcode::V_CVT_F64_I32:
 		case Decoder::Opcode::V_CVT_F64_F32:
 		case Decoder::Opcode::V_CVT_F64_U32: include_vector(inst.dst, 2u); break;
+		// gta6-prep: shader-alu: the 64-bit halves of the VOP3 64-bit ALU operands, so that
+		// V_MOVRELS/V_MOVRELD reach the high VGPR of a pair nothing else names.
+		case Decoder::Opcode::V_MAD_U64_U32:
+		case Decoder::Opcode::V_MAD_I64_I32:
+			include_vector(inst.dst, 2u);
+			include_vector(inst.src2, 2u);
+			break;
+		case Decoder::Opcode::V_DIV_SCALE_F64:
+		case Decoder::Opcode::V_DIV_FMAS_F64:
+		case Decoder::Opcode::V_DIV_FIXUP_F64:
+			include_vector(inst.dst, 2u);
+			include_vector(inst.src0, 2u);
+			include_vector(inst.src1, 2u);
+			include_vector(inst.src2, 2u);
+			break;
+		case Decoder::Opcode::V_CMP_CLASS_F64:
+		case Decoder::Opcode::V_CMPX_CLASS_F64: include_vector(inst.src0, 2u); break;
 		case Decoder::Opcode::V_FMA_F64: include_vector(inst.src2, 2u); [[fallthrough]];
 		case Decoder::Opcode::V_ADD_F64:
 		case Decoder::Opcode::V_MIN_F64:
