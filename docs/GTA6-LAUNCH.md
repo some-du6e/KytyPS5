@@ -200,6 +200,7 @@ Read this before relying on anything above.
 | TheCruZ fork, own CI | Green on Linux and Windows at `c00f2f27` (run 43081193192 in TheCruZ/KytyPS5-GTA). |
 | Merge `8025b6bd` | Did not compile (missing `c00f2f27` pieces). Fixed in `58cd1f5c`, which has not been built. |
 | Everything after `58cd1f5c` | Not built. Not tested. Every changed C++ file (83 of them, launcher excepted) passes `clang++ -fsyntax-only` on Linux. That catches typos and type errors, not link errors and not clang-cl-only problems. |
+| Static build review | A separate reviewer checked link inputs of every new test target, platform guards for clang-cl, and syntax-checked the 124 unchanged files that include a changed header. Nothing found. Static only. |
 | Python triage tool | 56 tests pass locally, 2 skipped without pwsh. |
 | GPU behaviour, NVIDIA behaviour, VRAM use | Unverified on hardware. The machine that did this work has no usable GPU. |
 
