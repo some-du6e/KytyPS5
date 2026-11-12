@@ -14429,6 +14429,9 @@ static void TestPsrCodeRecognition() {
         "Psr: the fingerprint depends on where the code is or ignores constants");
 }
 
+// gta6-prep: shader-mem
+#include "ShaderMemDecodeTests.inc"
+
 } // namespace
 } // namespace Libs::Graphics
 
@@ -14661,6 +14664,9 @@ int main() {
   TestNullImageKeepsShaderDimension();
   TestStorageSwizzleOfAbsentChannelsKeepsProgram();
   TestUnboundScalarBufferKeepsProgram();
+
+  // gta6-prep: shader-mem
+  RunShaderMemDecodeTests();
 
   return 0;
 }

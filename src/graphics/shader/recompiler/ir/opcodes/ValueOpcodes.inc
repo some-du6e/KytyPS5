@@ -335,6 +335,15 @@ VALUE_OPCODE(SharedAtomicOr32, U32, U32, U32, U1)
 VALUE_OPCODE(SharedAtomicOr64, Void, U32, U64, U1)
 VALUE_OPCODE(SharedAtomicXor32, U32, U32, U32, U1)
 VALUE_OPCODE(SharedAtomicMaskedOr32, Void, U32, U32, U32, U1)
+// gta6-prep: shader-mem
+// Address, DATA, [DATA2,] EXEC, as the DS encoding orders them: compare-stores compare DATA and
+// store DATA2, a reverse subtract stores DATA - MEM.
+VALUE_OPCODE(SharedAtomicRSub32, U32, U32, U32, U1)
+VALUE_OPCODE(SharedAtomicCmpSwapF32, U32, U32, U32, U32, U1)
+VALUE_OPCODE(SharedAtomicFAdd32, U32, U32, U32, U1)
+VALUE_OPCODE(SharedAtomicFMinReturn32, U32, U32, U32, U1)
+VALUE_OPCODE(SharedAtomicFMaxReturn32, U32, U32, U32, U1)
+VALUE_OPCODE(SharedAtomicMaskedOrReturn32, U32, U32, U32, U32, U1)
 VALUE_OPCODE(DataAppend, U32, U32, U32, U32, U1)
 VALUE_OPCODE(DataConsume, U32, U32, U32, U32, U1)
 VALUE_OPCODE(SwizzleU32, U32, U32, U32, U1)

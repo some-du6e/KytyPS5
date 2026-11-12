@@ -199,7 +199,14 @@ SharedAccess SharedAccessOf(ValueOpcode opcode) {
 		case ValueOpcode::SharedAtomicOr32:
 		case ValueOpcode::SharedAtomicOr64:
 		case ValueOpcode::SharedAtomicXor32:
-		case ValueOpcode::SharedAtomicMaskedOr32: return SharedAccess::Atomic;
+		case ValueOpcode::SharedAtomicMaskedOr32:
+		// gta6-prep: shader-mem
+		case ValueOpcode::SharedAtomicRSub32:
+		case ValueOpcode::SharedAtomicCmpSwapF32:
+		case ValueOpcode::SharedAtomicFAdd32:
+		case ValueOpcode::SharedAtomicFMinReturn32:
+		case ValueOpcode::SharedAtomicFMaxReturn32:
+		case ValueOpcode::SharedAtomicMaskedOrReturn32: return SharedAccess::Atomic;
 		case ValueOpcode::DataAppend: return SharedAccess::Append;
 		case ValueOpcode::DataConsume: return SharedAccess::Consume;
 		default: return SharedAccess::None;

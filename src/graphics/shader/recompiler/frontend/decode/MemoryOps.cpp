@@ -148,6 +148,12 @@ constexpr MemoryOpcodeInfo DS_OPCODE_LIST[] = {
     {0xdeu, Opcode::DS_WRITE_B96, 3, 32},        {0xdfu, Opcode::DS_WRITE_B128, 4, 32},
     {0xe1u, Opcode::DS_BVH_STACK_PUSH8_POP1_RTN_B32, 1, 32},
     {0xfeu, Opcode::DS_READ_B96, 3, 32},         {0xffu, Opcode::DS_READ_B128, 4, 32},
+    // gta6-prep: shader-mem
+    {0x02u, Opcode::DS_RSUB_U32, 1, 32},         {0x10u, Opcode::DS_CMPST_B32, 1, 32},
+    {0x11u, Opcode::DS_CMPST_F32, 1, 32},        {0x15u, Opcode::DS_ADD_F32, 1, 32},
+    {0x22u, Opcode::DS_RSUB_RTN_U32, 1, 32},     {0x2cu, Opcode::DS_MSKOR_RTN_B32, 1, 32},
+    {0x31u, Opcode::DS_CMPST_RTN_F32, 1, 32},    {0x32u, Opcode::DS_MIN_RTN_F32, 1, 32},
+    {0x33u, Opcode::DS_MAX_RTN_F32, 1, 32},      {0x55u, Opcode::DS_ADD_RTN_F32, 1, 32},
 };
 
 constexpr auto SMEM_OPS  = Detail::MakeOpcodeTable<0x100>(SMEM_OPCODE_LIST);
@@ -198,6 +204,23 @@ bool IsDsWriteOpcode(Opcode opcode) {
 	}
 }
 
+bool IsDsShaderMemAtomicOpcode(Opcode opcode) {
+	// gta6-prep: shader-mem
+	switch (opcode) {
+		case Opcode::DS_RSUB_U32:
+		case Opcode::DS_RSUB_RTN_U32:
+		case Opcode::DS_CMPST_B32:
+		case Opcode::DS_CMPST_F32:
+		case Opcode::DS_CMPST_RTN_F32:
+		case Opcode::DS_ADD_F32:
+		case Opcode::DS_ADD_RTN_F32:
+		case Opcode::DS_MIN_RTN_F32:
+		case Opcode::DS_MAX_RTN_F32:
+		case Opcode::DS_MSKOR_RTN_B32: return true;
+		default: return false;
+	}
+}
+
 namespace {
 
 bool IsDsAtomicOpcode(Opcode opcode) {
@@ -231,7 +254,7 @@ bool IsDsAtomicOpcode(Opcode opcode) {
 		case Opcode::DS_XOR_RTN_B32:
 		case Opcode::DS_MSKOR_B32:
 		case Opcode::DS_WRXCHG_RTN_B32: return true;
-		default: return false;
+		default: return IsDsShaderMemAtomicOpcode(opcode);
 	}
 }
 
@@ -244,7 +267,11 @@ uint32_t DsSourceCount(Opcode opcode) {
 		case Opcode::DS_WRITE2ST64_B64:
 		case Opcode::DS_CMPST_RTN_B32:
 		case Opcode::DS_CMPST_RTN_B64:
-		case Opcode::DS_MSKOR_B32: return 3u;
+		case Opcode::DS_MSKOR_B32:
+		case Opcode::DS_CMPST_B32:
+		case Opcode::DS_CMPST_F32:
+		case Opcode::DS_CMPST_RTN_F32:
+		case Opcode::DS_MSKOR_RTN_B32: return 3u;
 		case Opcode::DS_MIN_F32:
 		case Opcode::DS_MAX_F32:
 		case Opcode::DS_PERMUTE_B32:
@@ -491,6 +518,10 @@ void DecodeDs(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index, 
 	}
 	if (inst.gds && inst.opcode == Opcode::DS_CMPST_RTN_B32) {
 		SetUnsupported(inst, Family::DS, opcode, "DS compare-store return B32 GDS variant is not implemented");
+	}
+	if (inst.gds && (inst.opcode == Opcode::DS_CMPST_B32 || inst.opcode == Opcode::DS_CMPST_F32 ||
+	                 inst.opcode == Opcode::DS_CMPST_RTN_F32)) {
+		SetUnsupported(inst, Family::DS, opcode, "DS compare-store GDS variant is not implemented");
 	}
 	if (inst.gds &&
 	    (inst.opcode == Opcode::DS_SWIZZLE_B32 || inst.opcode == Opcode::DS_PERMUTE_B32 ||

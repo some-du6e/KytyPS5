@@ -1144,6 +1144,28 @@ void Translator::EmitMemory(const Decoder::Instruction& inst) {
 		case Decoder::Opcode::DS_WRXCHG_RTN_B32:
 			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicSwap32, true);
 
+		// gta6-prep: shader-mem
+		case Decoder::Opcode::DS_RSUB_U32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicRSub32, false);
+		case Decoder::Opcode::DS_RSUB_RTN_U32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicRSub32, true);
+		case Decoder::Opcode::DS_CMPST_B32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicCmpSwap32, false);
+		case Decoder::Opcode::DS_CMPST_F32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicCmpSwapF32, false);
+		case Decoder::Opcode::DS_CMPST_RTN_F32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicCmpSwapF32, true);
+		case Decoder::Opcode::DS_ADD_F32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicFAdd32, false);
+		case Decoder::Opcode::DS_ADD_RTN_F32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicFAdd32, true);
+		case Decoder::Opcode::DS_MIN_RTN_F32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicFMinReturn32, true);
+		case Decoder::Opcode::DS_MAX_RTN_F32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicFMaxReturn32, true);
+		case Decoder::Opcode::DS_MSKOR_RTN_B32:
+			return DS_ATOMIC(inst, IR::ValueOpcode::SharedAtomicMaskedOrReturn32, true);
+
 		case Decoder::Opcode::IMAGE_ATOMIC_CMPSWAP:
 			return IMAGE_ATOMIC(inst, IR::ValueOpcode::ImageAtomicCompareSwap32);
 		case Decoder::Opcode::IMAGE_ATOMIC_SWAP:

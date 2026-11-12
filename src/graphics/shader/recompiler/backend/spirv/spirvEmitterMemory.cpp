@@ -2519,4 +2519,65 @@ uint32_t EmitBpermuteU32(ValueEmitContext& ctx, const IR::Inst& inst) {
 	return EmitDsMaskedLaneRead(state, source, target, ctx.Arg(inst, 2));
 }
 
+// gta6-prep: shader-mem
+// DS read-modify-write forms without a native SPIR-V atomic: each runs the compare-exchange loop
+// of AtomicUpdate over the DWORD, so the result is exact on every host (no float atomic extension).
+namespace {
+
+uint32_t BitsToF32(EmitterState& state, uint32_t bits) {
+	return Unary(state, spv::OpBitcast, TypeF32(state), bits);
+}
+
+} // namespace
+
+uint32_t EmitSharedAtomicRSub32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [](EmitterState& state, uint32_t old, uint32_t value) {
+		                        return Binary(state, spv::OpISub, TypeU32(state), value, old);
+	                        });
+}
+
+uint32_t EmitSharedAtomicCmpSwapF32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	// DS_CMPST_F32: MEM = MEM == DATA (as floats: -0 == +0, NaN never equal) ? DATA2 : MEM.
+	const auto& mem        = ctx.Memory(inst);
+	const auto  comparator = ctx.Arg(inst, 1);
+	const auto  source     = ctx.Arg(inst, 2);
+	return EmitAtomicAccess(ctx, inst, mem, [&](uint32_t pointer) {
+		return AtomicUpdate(ctx.state, pointer, mem.kind, [&](uint32_t old) {
+			auto&      state = ctx.state;
+			const auto equal = Binary(state, spv::OpFOrdEqual, TypeBool(state),
+			                          BitsToF32(state, old), BitsToF32(state, comparator));
+			return Select(state, TypeU32(state), equal, source, old);
+		});
+	});
+}
+
+uint32_t EmitSharedAtomicFAdd32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [](EmitterState& state, uint32_t old, uint32_t value) {
+		                        const auto sum = Binary(state, spv::OpFAdd, TypeF32(state),
+		                                                BitsToF32(state, old), BitsToF32(state, value));
+		                        return Unary(state, spv::OpBitcast, TypeU32(state), sum);
+	                        });
+}
+
+uint32_t EmitSharedFloatAtomicReturn(ValueEmitContext& ctx, const IR::Inst& inst) {
+	const bool max_value = inst.GetOpcode() == IR::ValueOpcode::SharedAtomicFMaxReturn32;
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [max_value](EmitterState& state, uint32_t old, uint32_t value) {
+		                        return EmitDsFloatAtomicReplacement(state, old, value, max_value);
+	                        });
+}
+
+uint32_t EmitSharedAtomicMaskedOrReturn32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	const auto keep = Unary(ctx.state, spv::OpNot, TypeU32(ctx.state), ctx.Arg(inst, 1));
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [keep](EmitterState& state, uint32_t old, uint32_t value) {
+		                        return Binary(state, spv::OpBitwiseOr, TypeU32(state),
+		                                      Binary(state, spv::OpBitwiseAnd, TypeU32(state), old,
+		                                             keep),
+		                                      value);
+	                        });
+}
+
 } // namespace Libs::Graphics::ShaderRecompiler::Spirv::Emitter

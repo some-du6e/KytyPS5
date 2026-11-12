@@ -353,6 +353,14 @@ inline constexpr auto EmitSharedAtomicAnd32     = EmitAtomic32;
 inline constexpr auto EmitSharedAtomicOr32      = EmitAtomic32;
 inline constexpr auto EmitSharedAtomicOr64      = EmitSharedAtomic64;
 inline constexpr auto EmitSharedAtomicXor32     = EmitAtomic32;
+// gta6-prep: shader-mem
+uint32_t              EmitSharedAtomicRSub32(ValueEmitContext& ctx, const IR::Inst& inst);
+uint32_t              EmitSharedAtomicCmpSwapF32(ValueEmitContext& ctx, const IR::Inst& inst);
+uint32_t              EmitSharedAtomicFAdd32(ValueEmitContext& ctx, const IR::Inst& inst);
+uint32_t              EmitSharedFloatAtomicReturn(ValueEmitContext& ctx, const IR::Inst& inst);
+uint32_t              EmitSharedAtomicMaskedOrReturn32(ValueEmitContext& ctx, const IR::Inst& inst);
+inline constexpr auto EmitSharedAtomicFMinReturn32 = EmitSharedFloatAtomicReturn;
+inline constexpr auto EmitSharedAtomicFMaxReturn32 = EmitSharedFloatAtomicReturn;
 inline constexpr auto EmitDataAppend            = EmitAppendConsume;
 inline constexpr auto EmitDataConsume           = EmitAppendConsume;
 uint32_t              EmitSwizzleU32(ValueEmitContext& ctx, const IR::Inst& inst);

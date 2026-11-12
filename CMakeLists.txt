@@ -1021,6 +1021,9 @@ if(BUILD_TESTING)
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --htile-clear-only)
 	add_test(NAME buffer_cache_ranges
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --buffer-cache-range-only)
+	# gta6-prep: shader-mem
+	add_test(NAME shader_recompiler_shader_mem
+		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --shader-mem-only)
 
 	add_custom_target(kyty_tests DEPENDS
 		ime_dialog_tests

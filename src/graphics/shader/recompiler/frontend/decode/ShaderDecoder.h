@@ -772,6 +772,17 @@ enum class Opcode {
 	RT_COMMIT,
 	RT_EXIT,
 	RT_ALPHA,
+	// gta6-prep: shader-mem
+	DS_RSUB_U32,
+	DS_RSUB_RTN_U32,
+	DS_CMPST_B32,
+	DS_CMPST_F32,
+	DS_CMPST_RTN_F32,
+	DS_ADD_F32,
+	DS_ADD_RTN_F32,
+	DS_MIN_RTN_F32,
+	DS_MAX_RTN_F32,
+	DS_MSKOR_RTN_B32,
 	COUNT
 };
 

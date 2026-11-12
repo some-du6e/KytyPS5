@@ -50089,6 +50089,9 @@ TestCase DispatcherIrreducibleControlFlow() {
 
 #include "ShaderRayTracingGpuTests.inc"
 
+// gta6-prep: shader-mem
+#include "ShaderMemComputeTests.inc"
+
 std::vector<TestCase> MakeCases() {
   std::vector<TestCase> cases;
   cases.reserve(128);
@@ -50742,6 +50745,8 @@ std::vector<TestCase> MakeCases() {
   AddCase(ImageAtomicGlc0DoesNotReturnOldValue);
   AddCase(MultipleWorkitemsGlobalId);
   AddCase(DispatcherIrreducibleControlFlow);
+  // gta6-prep: shader-mem
+  AppendShaderMemCases(cases);
 
   return cases;
 }
@@ -57171,6 +57176,14 @@ int main(int argc, char **argv) {
   EnsureConfigInitialized();
   CheckLeastRecentlyUsedCacheOrdering();
   CheckPipelineManifestFormat();
+  // gta6-prep: shader-mem
+  if (argc == 2 && std::strcmp(argv[1], "--shader-mem-only") == 0) {
+    VulkanHarness vulkan;
+    std::vector<TestCase> cases;
+    AppendShaderMemCases(cases);
+    for (const auto &test : cases) RunCase(&vulkan, test);
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "--mul-hi24-only") == 0) {
     VulkanHarness vulkan;
     RunCase(&vulkan, VectorMulHi24(32));
