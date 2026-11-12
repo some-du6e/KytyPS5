@@ -8672,6 +8672,9 @@ void TestEmbeddedVertexFormatSwizzle() {
       {Prospero::BufferFormat::k32_32_32_32Float, DstSel(7, 6, 5, 4), 3, 4, 4,
        {0x3e800000, 0x3f000000, 0x3f400000, 0x40000000},
        Prospero::VertexAttribFormat::k32_32_32_32Float},
+      // gta6-prep: shader-mem: a reserved DST_SEL (2) reads zero instead of ending translation.
+      {Prospero::BufferFormat::k32Float, DstSel(4, 2, 1, 0), 3, 4, 1,
+       {0x3e800000, 0, 0x3f800000, 0}},
   };
   std::array<uint16_t, static_cast<size_t>(DirectResourceType::Last) + 1> offsets;
   offsets.fill(ILLEGAL_DIRECT_OFFSET);

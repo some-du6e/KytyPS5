@@ -2,8 +2,13 @@
 
 #include "graphics/host_gpu/renderer/cache/bufferCache.h"
 #include "graphics/shader/recompiler/frontend/decode/ShaderDecoder.h"
+#include "common/logging/log.h"
+
+#include <fmt/format.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <bit>
 #include <tuple>
 #include <utility>
@@ -1454,6 +1459,22 @@ uint32_t LoadRawBuffer(ValueEmitContext& ctx, const IR::Inst& inst, const IR::Me
 	return result;
 }
 
+// gta6-prep: shader-mem
+// A formatted access whose format has no decoder (a V# format GetFormatInfo does not know, such
+// as the 113/121 vertex formats pipelineCache special-cases) moves raw DWORDs, which is wrong for
+// any format that is not 32 bits per component. Say so once per format and direction.
+static void LogFormattedRawFallback(ValueEmitContext& ctx, Prospero::BufferFormat format, bool store) {
+	if (format == Prospero::BufferFormat::kInvalid) return; // unbound V#: no data either way
+	static std::array<std::atomic<uint64_t>, 16> logged {};
+	const auto bit  = (static_cast<uint32_t>(format) & 0x1ffu) * 2u + (store ? 1u : 0u);
+	const auto mask = uint64_t {1} << (bit % 64u);
+	if ((logged[bit / 64u].fetch_or(mask, std::memory_order_relaxed) & mask) != 0u) return;
+	Log::WriteToConsoleAndLog(fmt::format(
+	    "Shader: formatted buffer {} with unsupported format {} falls back to raw DWORDs "
+	    "(first in shader 0x{:016x})\n",
+	    store ? "store" : "load", static_cast<uint32_t>(format), ctx.state.program.shader_hash));
+}
+
 uint32_t LoadBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t components) {
 	auto& state = ctx.state;
 	const auto mem = ctx.Memory(inst);
@@ -1475,6 +1496,9 @@ uint32_t LoadBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t compon
 			        selected.formatted ? BufferFormat(ctx, selected) : Prospero::BufferFormat::kInvalid);
 			    if (info.type != Format::ComponentType::Unknown) {
 				    return LoadFormattedPrepared(ctx, inst, selected, resource, info, components);
+			    }
+			    if (selected.formatted) {
+				    LogFormattedRawFallback(ctx, BufferFormat(ctx, selected), false);
 			    }
 			    if (resource.object_pointer == 0u) return ConstantU32CompositeZero(state, components);
 			    return LoadRawBuffer(ctx, inst, selected, resource, components);
@@ -1548,6 +1572,9 @@ void StoreBuffer(ValueEmitContext& ctx, const IR::Inst& inst, uint32_t component
 			if (info.type != Format::ComponentType::Unknown) {
 				StoreFormattedPrepared(ctx, inst, selected, resource, info, composite, components);
 				return;
+			}
+			if (selected.formatted) {
+				LogFormattedRawFallback(ctx, BufferFormat(ctx, selected), true);
 			}
 			if (selected.IsCoherentBufferPairStore(inst.GetOpcode()) && resource.object_pointer != 0u) {
 				StoreRawBufferPair(ctx, inst, selected, resource, composite, [&]() {
