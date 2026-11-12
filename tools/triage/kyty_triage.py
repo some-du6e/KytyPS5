@@ -704,8 +704,8 @@ class Scanner:
                 f.seek(tail_start)
                 f.readline()  # partial line
                 self._scan_stream(f, info, None, label="tail")
-                self.block = None
-                self.block_handler = None
+                # A report cut off at the end of the file (no " in file:line") is kept, as in a full scan.
+                self._close_block()
                 f.seek(0)
                 self._scan_stream(f, info, 0, limit=segments[0][1], label="head")
         finally:

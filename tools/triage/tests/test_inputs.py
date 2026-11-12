@@ -143,6 +143,25 @@ class InputTests(unittest.TestCase):
         # generous bound: CI runners are slow, but a quadratic or per-line-decode slip shows up here
         self.assertLess(t_full, 60.0)
 
+    def test_quick_mode_keeps_a_report_cut_off_at_the_end(self):
+        # A killed or crashing process can leave the report without its " in file:line" line.
+        p = self.path("big_cut_kyty.txt")
+        chunk = NOISE * 4000
+        with open(p, "wb") as f:
+            f.write(b"Vulkan device: NVIDIA GeForce RTX 3050\n")
+            for _ in range(int((40 << 20) / len(chunk))):
+                f.write(chunk)
+            f.write(b"--- Build ---\nOfficial build KytyPS5-2026-11-19-abcdef1\n--- Error ---\n"
+                    b"Unhandled host exception: type=1 code=3221225477 pc=0x0000000901c2d3e4 access=1 "
+                    b"address=0x0000000000000010\n")
+        full = self.run_paths(p)
+        quick = self.run_paths(p, quick=True)
+        self.assertTrue(quick["sources"][0]["scanned"].startswith("quick"))
+        for rep in (full, quick):
+            self.assertEqual(rep["outcome"], "crash")
+            self.assertEqual(rep["primary"]["category"], "HOST_FAULT_GUEST")
+            self.assertEqual(len(rep["fatal_blocks"]), 1)
+
     def test_small_printf_log_keeps_indented_build_block(self):
         # Under LENIENT_MAX_BYTES a file is read leniently; the indented printf prefixes must still match.
         p = self.write("_kyty.txt", b"Build\n  version: Official build KytyPS5-2026-10-02-39e23ac\n"
