@@ -131,6 +131,11 @@ static Config::ConfigOptions ApplyTitleProfile(const RunOptions& options) {
 	    Common::FormatTitleProfileLine(title, match.profile, quirks, preset_name) + "\n");
 	const auto reason = Common::TitleMatchReasonName(match.reason);
 	LOGF("Title profile: chosen by %.*s\n", static_cast<int>(reason.size()), reason.data());
+	if (Common::NeedsTitleProfileHint(title, match)) {
+		Log::WriteToConsoleAndLog(
+		    "Title profile hint: the title is named like Grand Theft Auto but matched no profile; "
+		    "if it is GTA V or GTA VI, run it with --title-profile gta5 or --title-profile gta6\n");
+	}
 	return effective;
 }
 

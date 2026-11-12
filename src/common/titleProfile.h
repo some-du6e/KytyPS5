@@ -96,6 +96,11 @@ struct TitleMatch {
 [[nodiscard]] TitleMatch MatchTitle(const TitleInfo& title, std::string_view forced_key,
                                     std::string_view gta6_ids = {});
 
+// Whether a title that matched no profile by itself (not --title-profile none) has a name that
+// starts with "grand theft auto": another SKU or a localized name of GTA V or GTA 6 that the user
+// may want to run with --title-profile gta5|gta6.
+[[nodiscard]] bool NeedsTitleProfileHint(const TitleInfo& title, const TitleMatch& match);
+
 // The quirks in effect: the profile's, plus `on`, minus `off`.
 [[nodiscard]] constexpr QuirkMask ResolveQuirks(const TitleProfile* profile, QuirkMask on,
                                                 QuirkMask off) {

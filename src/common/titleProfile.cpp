@@ -7,8 +7,10 @@ namespace Common {
 
 namespace {
 
-// GTA V for PS5: the PlayStation 5 releases of 2022 (both regions the fork was tested with).
-constexpr std::string_view Gta5Ids[]   = {"PPSA04263", "PPSA04264"};
+// GTA V for PS5: the PlayStation 5 releases of 2022. PPSA04263 and PPSA04264 are the two the fork
+// was tested with; PPSA03420 is listed as Grand Theft Auto V by prosperopatches.com and
+// serialstation.com. (PPSA04288, which comments next to PPSA04264 mention, is Resident Evil 2.)
+constexpr std::string_view Gta5Ids[]   = {"PPSA03420", "PPSA04263", "PPSA04264"};
 constexpr std::string_view Gta5Names[] = {"grand theft auto v", "grand theft auto v (playstation 5)"};
 
 // GTA 6: no dump exists before its release, so it is recognized by its name (or forced with
@@ -247,6 +249,11 @@ TitleMatch MatchTitle(const TitleInfo& title, std::string_view forced_key,
 		}
 	}
 	return {};
+}
+
+bool NeedsTitleProfileHint(const TitleInfo& title, const TitleMatch& match) {
+	return match.profile == nullptr && match.reason == TitleMatchReason::None &&
+	       NormalizeTitleName(title.name).starts_with("grand theft auto");
 }
 
 std::string FormatTitleProfileLine(const TitleInfo& title, const TitleProfile* profile,

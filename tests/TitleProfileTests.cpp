@@ -90,6 +90,11 @@ void TestMatchById() {
         "PPSA04264 did not select gta5");
   Check(MatchedKey(Title("ppsa04264", "")) == "gta5",
         "the ID compare was case sensitive");
+  Check(MatchedKey(Title("PPSA03420", "")) == "gta5",
+        "PPSA03420 did not select gta5");
+  // Resident Evil 2, which comments next to PPSA04264 mention.
+  Check(MatchedKey(Title("PPSA04288", "")) == "none",
+        "PPSA04288 selected a profile");
   Check(MatchTitle(Title("PPSA04263", ""), {}).reason == TitleMatchReason::Id,
         "an ID match did not report the ID reason");
   // Exact only: a longer or shorter ID is another title.
@@ -139,6 +144,23 @@ void TestMatchByName() {
   Check(MatchedKey(Title("", "")) == "none" &&
             MatchTitle(Title("", ""), {}).reason == TitleMatchReason::None,
         "an empty title matched");
+}
+
+void TestTitleProfileHint() {
+  const auto hint = [](const TitleInfo &title, std::string_view forced = {}) {
+    return Common::NeedsTitleProfileHint(title, MatchTitle(title, forced));
+  };
+  Check(hint(Title("PPSA99999", "Grand Theft Auto V: Premium Edition")),
+        "an unmatched GTA V name gave no hint");
+  Check(hint(Title("", "GRAND THEFT AUTO\xE2\x84\xA2 VI - Edition")),
+        "an unmatched GTA 6 name with noise gave no hint");
+  Check(!hint(Title("PPSA04263", "")) &&
+            !hint(Title("PPSA99999", "Grand Theft Auto VI")),
+        "a matched title gave a hint");
+  Check(!hint(Title("PPSA99999", "Grand Theft Auto V: Premium Edition"), "none"),
+        "--title-profile none gave a hint");
+  Check(!hint(Title("PPSA04288", "Resident Evil 2")) && !hint(Title("", "")),
+        "another title gave a hint");
 }
 
 void TestForcedAndEnvironment() {
@@ -430,6 +452,7 @@ int main() {
   TestMakeTitleInfo();
   TestMatchById();
   TestMatchByName();
+  TestTitleProfileHint();
   TestForcedAndEnvironment();
   TestQuirks();
   TestProfileTable();
