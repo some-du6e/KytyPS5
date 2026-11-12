@@ -69,6 +69,16 @@ constexpr FormatInfo kFormatInfo[] = {
 	{BufferFormat::k32_32_32_32UInt, 16, 0, 16, true, true},
 	{BufferFormat::k32_32_32_32SInt, 16, 0, 16, true, false, true},
 	{BufferFormat::k32_32_32_32Float, 16, 0, 16, true, false},
+	// gta6-prep: shader-mem: the remaining USCALED/SSCALED layouts, sampled through their
+	// UNorm/SNorm backing like 16_16_16_16 (RemapTextureFormat).
+	{BufferFormat::k8SScaled, 1, 0, 0, true, false},
+	{BufferFormat::k16UScaled, 2, 0, 0, true, false},
+	{BufferFormat::k16SScaled, 2, 0, 0, true, false},
+	{BufferFormat::k8_8SScaled, 2, 0, 0, true, false},
+	{BufferFormat::k16_16UScaled, 4, 0, 0, true, false},
+	{BufferFormat::k16_16SScaled, 4, 0, 0, true, false},
+	{BufferFormat::k8_8_8_8UScaled, 4, 0, 0, true, false},
+	{BufferFormat::k8_8_8_8SScaled, 4, 0, 0, true, false},
 	{BufferFormat::k8Srgb, 1, 0, 1, true, false},
 	{BufferFormat::k8_8Srgb, 2, 0, 2, true, false},
 	{BufferFormat::k8_8_8_8Srgb, 4, 0, 4, true, false},
@@ -254,6 +264,16 @@ BufferFormat RemapTextureFormat(BufferFormat format) {
 		case BufferFormat::k8_8UScaled: return BufferFormat::k8_8UNorm;
 		case BufferFormat::k16_16_16_16UScaled: return BufferFormat::k16_16_16_16UNorm;
 		case BufferFormat::k16_16_16_16SScaled: return BufferFormat::k16_16_16_16SNorm;
+		// gta6-prep: shader-mem: the shader scales by 2^bits - 1 (UScaled) or 2^(bits-1) - 1
+		// (SScaled), as for 16_16_16_16.
+		case BufferFormat::k8SScaled: return BufferFormat::k8SNorm;
+		case BufferFormat::k16UScaled: return BufferFormat::k16UNorm;
+		case BufferFormat::k16SScaled: return BufferFormat::k16SNorm;
+		case BufferFormat::k8_8SScaled: return BufferFormat::k8_8SNorm;
+		case BufferFormat::k16_16UScaled: return BufferFormat::k16_16UNorm;
+		case BufferFormat::k16_16SScaled: return BufferFormat::k16_16SNorm;
+		case BufferFormat::k8_8_8_8UScaled: return BufferFormat::k8_8_8_8UNorm;
+		case BufferFormat::k8_8_8_8SScaled: return BufferFormat::k8_8_8_8SNorm;
 		case BufferFormat::k11_11_10UNorm:
 		case BufferFormat::k11_11_10UInt: return BufferFormat::k32UInt;
 		default: return format;

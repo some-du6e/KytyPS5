@@ -24178,8 +24178,9 @@ public:
                   unchanged(F::k16_16_16_16SInt, C::Sint, F::k16_16_16_16SInt) &&
                   unchanged(F::k8UScaled, C::Float, F::k8UNorm) &&
                   unchanged(F::k8_8UScaled, C::Float, F::k8_8UNorm) &&
-                  unchanged(F::k8SScaled, C::Unsupported, F::k8SScaled) &&
-                  unchanged(F::k16UScaled, C::Unsupported, F::k16UScaled) &&
+                  // gta6-prep: shader-mem: the 8/16-bit scaled layouts remap too.
+                  unchanged(F::k8SScaled, C::Float, F::k8SNorm) &&
+                  unchanged(F::k16UScaled, C::Float, F::k16UNorm) &&
                   unchanged(F::k16_16_16_16UNorm, C::Float, F::k16_16_16_16UNorm) &&
                   Prospero::NumBytesPerElement(F::k16_16_16_16UScaled) == 8 &&
                   Prospero::NumBytesPerElement(F::k16_16_16_16SScaled) == 8,

@@ -523,7 +523,53 @@ TestCase ShaderMemImageSampleDerivativeG16() {
   return test;
 }
 
+// 8_8_8_8 USCALED/SSCALED texel fetches read the UNorm/SNorm backing and scale back to the
+// stored integer (as ImageScaled16 does for 16_16_16_16). SNorm cannot tell -128 from -127, so
+// the signed texels stay in [-127, 127].
+template <bool is_signed> TestCase ShaderMemImageLoadScaled8888() {
+  using O = ShaderOpcode;
+  constexpr int texels[4][4] = {{0, 1, is_signed ? -1 : 254, is_signed ? 127 : 255},
+                                {is_signed ? -127 : 128, is_signed ? 64 : 3, 17, is_signed ? -5 : 200},
+                                {is_signed ? 100 : 77, is_signed ? -100 : 7, 2, is_signed ? -2 : 99},
+                                {is_signed ? -64 : 1, 2, 3, 4}};
+  TestCase test;
+  test.name = is_signed ? "ShaderMemImageLoadRGBA8SScaled" : "ShaderMemImageLoadRGBA8UScaled";
+  test.image_width = test.image_height = 2;
+  for (const auto &texel : texels) {
+    test.sampled_image_rgba.push_back((texel[0] & 0xff) | ((texel[1] & 0xff) << 8) |
+                                      ((texel[2] & 0xff) << 16) |
+                                      (static_cast<u32>(texel[3] & 0xff) << 24));
+  }
+  test.sampled_image_format = is_signed ? vk::Format::eR8G8B8A8Snorm : vk::Format::eR8G8B8A8Unorm;
+  test.sampled_image_dwords_per_pixel = 1;
+  test.user_data = MakeSampledTextureData(is_signed ? Prospero::BufferFormat::k8_8_8_8SScaled
+                                                    : Prospero::BufferFormat::k8_8_8_8UScaled);
+  test.user_data[1] |= 1u << 30u;
+  test.user_data[2] = 1u << 14u;
+  test.has_user_data = true;
+  auto &code = test.code;
+  for (u32 pixel = 0; pixel < 4u; ++pixel) {
+    AppendVMovU32(&code, 28, pixel & 1u);
+    AppendVMovU32(&code, 29, pixel >> 1u);
+    code.push_back(EncodeMimg0(0x00, 0xf));
+    code.push_back(EncodeMimg1(pixel * 4u, 28));
+    for (const auto value : texels[pixel]) {
+      test.expected.push_back(std::bit_cast<u32>(static_cast<float>(value)));
+    }
+  }
+  for (u32 dword = 0; dword < 16u; ++dword) AppendStoreVgpr(&code, dword, dword);
+  AppendEnd(&code);
+  test.user_data[50] = test.expected.size() * sizeof(u32);
+  test.user_data[51] = 3u << 28u;
+  // 8-bit UScaled keeps its unrounded n / 255 * 255 product (see UnpackImageTexel).
+  test.expected_float_tolerance = is_signed ? 0.0f : 0.001f;
+  test.opcodes = {O::V_MOV_B32, O::IMAGE_LOAD, O::BUFFER_STORE_DWORD, O::S_ENDPGM};
+  return test;
+}
+
 void AppendShaderMemCases(std::vector<TestCase> &cases) {
+  cases.push_back(ShaderMemImageLoadScaled8888<false>());
+  cases.push_back(ShaderMemImageLoadScaled8888<true>());
   cases.push_back(ShaderMemImageSampleDerivativeG16());
   cases.push_back(ShaderMemGlobalByteD16Loads());
   cases.push_back(ShaderMemBufferAtomicsWrap());
