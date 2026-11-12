@@ -1,7 +1,9 @@
 """Input handling: .gz, .zip members in memory, stdin, CRLF, truncated lines, bad UTF-8, big files."""
 
+import contextlib
 import gzip
 import io
+import json
 import os
 import shutil
 import sys
@@ -191,6 +193,26 @@ class InputTests(unittest.TestCase):
                 self.assertEqual(u.golden_summary(strict), u.golden_summary(lenient))
                 self.assertEqual(strict["identity"].get("host"), lenient["identity"].get("host"))
                 self.assertEqual(strict["progress"]["flips"], lenient["progress"]["flips"])
+
+    def test_make_fixture_records_the_zip_member_of_a_path_with_a_colon(self):
+        # Windows: "C:\\dl\\log.zip" -> source name "C:\\dl\\log.zip:_kyty.txt"; the member is not split at the drive colon.
+        import make_fixture  # next to kyty_triage.py, which triage_test_util put on sys.path
+        d = self.path("C:")
+        os.makedirs(d)
+        z = os.path.join(d, "log.zip")
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr("_kyty.txt", FATAL)
+        out = self.path("fixtures")
+        index = self.path("INDEX.json")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(make_fixture.main([z, "--case", "x", "--out-dir", out, "--index", index]), 0)
+            self.assertEqual(make_fixture.main([z, "--case", "y", "--member", "_kyty.txt", "--out-dir", out,
+                                                "--index", index]), 0)
+        with open(index, "r", encoding="utf-8") as f:
+            entries = {e["case"]: e for e in json.load(f)}
+        self.assertEqual(entries["x"]["zip_member"], "_kyty.txt")
+        self.assertEqual(entries["y"]["zip_member"], "_kyty.txt")
+        self.assertTrue(os.path.isfile(os.path.join(out, "y.txt")))
 
     def test_pasted_markdown_quotes_and_backticks(self):
         text = (b"### GPU\n\nNVIDIA GeForce RTX 3050 8GB\n\n### OS\n\nWindows 11\n\n"

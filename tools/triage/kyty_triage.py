@@ -252,8 +252,9 @@ class RuleSet:
 class Source:
     """One log stream: a plain file, a .gz, one member of a .zip, or stdin."""
 
-    def __init__(self, name, opener, size=None, path=None, compressed=False):
+    def __init__(self, name, opener, size=None, path=None, compressed=False, member=None):
         self.name = name
+        self.member = member        # the zip member name, for a .zip member
         self.opener = opener
         self.size = size
         self.path = path            # set for plain seekable files only
@@ -292,14 +293,14 @@ def _zip_sources(path, display):
         if head[:2] == b"\x1f\x8b":
             def opener(m=member):
                 return gzip.GzipFile(fileobj=zf.open(m))
-            out.append(Source("%s:%s" % (display, member), opener, None, None, True))
+            out.append(Source("%s:%s" % (display, member), opener, None, None, True, member))
             continue
         if _looks_binary(head):
             continue
 
         def opener(m=member):
             return io.BufferedReader(zf.open(m), 1 << 20)
-        out.append(Source("%s:%s" % (display, member), opener, info.file_size, None, True))
+        out.append(Source("%s:%s" % (display, member), opener, info.file_size, None, True, member))
     return out
 
 

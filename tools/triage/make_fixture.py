@@ -121,7 +121,7 @@ def main(argv=None):
 
     sources = kt.expand_inputs([args.raw])
     if args.member:
-        sources = [s for s in sources if s.name.endswith(":" + args.member)]
+        sources = [s for s in sources if s.member == args.member]
     if not sources:
         ap.error("no readable log in %s" % args.raw)
     source = sources[0]
@@ -151,8 +151,9 @@ def main(argv=None):
     if args.source_url:
         entry["source_url"] = args.source_url
     entry["original_filename"] = args.original_name or os.path.basename(args.raw)
-    if args.member or source.name != args.raw:
-        entry["zip_member"] = source.name.split(":", 1)[1] if ":" in source.name else args.member
+    if source.member or args.member:
+        # The source name is "<path>:<member>" and a Windows path has a drive colon: use the member itself.
+        entry["zip_member"] = source.member or args.member
     entry["sha256"] = sha256_file(args.raw)
     if args.raw_sha256:
         entry["raw_sha256"] = args.raw_sha256
