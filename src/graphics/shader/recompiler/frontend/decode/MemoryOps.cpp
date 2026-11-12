@@ -96,6 +96,10 @@ constexpr MemoryOpcodeInfo MUBUF_OPCODE_LIST[] = {
     {0x5bu, Opcode::BUFFER_ATOMIC_XOR_X2, 2, 32},
     {0x5cu, Opcode::BUFFER_ATOMIC_INC_X2, 2, 32},
     {0x5du, Opcode::BUFFER_ATOMIC_DEC_X2, 2, 32},
+    // FCMPSWAP reads DATA[1:0]: source, then comparison.
+    {0x3cu, Opcode::BUFFER_ATOMIC_INC, 1, 32},
+    {0x3du, Opcode::BUFFER_ATOMIC_DEC, 1, 32},
+    {0x3eu, Opcode::BUFFER_ATOMIC_FCMPSWAP, 1, 32},
 };
 
 constexpr MemoryOpcodeInfo MTBUF_OPCODE_LIST[] = {
@@ -286,7 +290,10 @@ bool IsShaderMemBufferAtomicOpcode(Opcode opcode) {
 		case Opcode::BUFFER_ATOMIC_UMAX_X2:
 		case Opcode::BUFFER_ATOMIC_XOR_X2:
 		case Opcode::BUFFER_ATOMIC_INC_X2:
-		case Opcode::BUFFER_ATOMIC_DEC_X2: return true;
+		case Opcode::BUFFER_ATOMIC_DEC_X2:
+		case Opcode::BUFFER_ATOMIC_INC:
+		case Opcode::BUFFER_ATOMIC_DEC:
+		case Opcode::BUFFER_ATOMIC_FCMPSWAP: return true;
 		default: return false;
 	}
 }

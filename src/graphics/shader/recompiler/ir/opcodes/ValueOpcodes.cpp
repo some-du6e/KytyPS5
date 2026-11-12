@@ -153,6 +153,9 @@ BufferAccess BufferAccessOf(ValueOpcode opcode) {
 		case ValueOpcode::BufferAtomicXor64:
 		case ValueOpcode::BufferAtomicInc64:
 		case ValueOpcode::BufferAtomicDec64:
+		case ValueOpcode::BufferAtomicInc32:
+		case ValueOpcode::BufferAtomicDec32:
+		case ValueOpcode::BufferAtomicFCmpSwap32:
 			return BufferAccess::Atomic;
 		default: return BufferAccess::None;
 	}
@@ -317,6 +320,11 @@ ImageOpcodeInfo ImageOpcodeInfoOf(ValueOpcode opcode) {
 		case ValueOpcode::ImageAtomicXor64:
 		case ValueOpcode::ImageAtomicFMin32:
 		case ValueOpcode::ImageAtomicFMax32:
+		// gta6-prep: shader-mem
+		case ValueOpcode::ImageAtomicISub32:
+		case ValueOpcode::ImageAtomicInc32:
+		case ValueOpcode::ImageAtomicDec32:
+		case ValueOpcode::ImageAtomicFCmpSwap32:
 			return {ImageAccess::Atomic, ImageResourceClass::Storage, false};
 		default: return {};
 	}

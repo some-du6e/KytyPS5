@@ -141,7 +141,41 @@ void TestShaderMemAtomics64() {
   Check(gds.opcode == O::UNSUPPORTED, "DS 64-bit atomics must reject GDS");
 }
 
+// Wrapping inc/dec and float compare-swap for MUBUF; sub/inc/dec/fcmpswap for MIMG (decode only:
+// the image forms run in ShaderRecompilerComputeTests with a real storage image).
+void TestShaderMemIncDecAtomics() {
+  using O = ShaderRecompiler::Decoder::Opcode;
+  const ShaderMemDecodeCase cases[] = {
+      {"buffer_atomic_inc v4, v1, s[0:3], 0 offen glc", {0xe0f05000u, 0x80000401u},
+       O::BUFFER_ATOMIC_INC, 3, 4, 1, -1, -1, 0, 1, "BufferAtomicInc32", "OpAtomicCompareExchange"},
+      {"buffer_atomic_dec v4, v1, s[0:3], 0 offen glc", {0xe0f45000u, 0x80000401u},
+       O::BUFFER_ATOMIC_DEC, 3, 4, 1, -1, -1, 0, 1, "BufferAtomicDec32", "OpAtomicCompareExchange"},
+      {"buffer_atomic_fcmpswap v[4:5], v1, s[0:3], 0 offen glc", {0xe0f85000u, 0x80000401u},
+       O::BUFFER_ATOMIC_FCMPSWAP, 3, 4, 1, -1, -1, 0, 1, "BufferAtomicFCmpSwap32", "OpFOrdEqual"},
+      {"image_atomic_sub v4, v[0:1], s[8:15] dmask:0x1 dim:SQ_RSRC_IMG_2D unorm glc",
+       {0xf0483108u, 0x00020400u}, O::IMAGE_ATOMIC_SUB, 3, 4, 0, -1, -1, 0, 1, nullptr, nullptr,
+       false},
+      {"image_atomic_inc v4, v[0:1], s[8:15] dmask:0x1 dim:SQ_RSRC_IMG_2D unorm glc",
+       {0xf06c3108u, 0x00020400u}, O::IMAGE_ATOMIC_INC, 3, 4, 0, -1, -1, 0, 1, nullptr, nullptr,
+       false},
+      {"image_atomic_dec v4, v[0:1], s[8:15] dmask:0x1 dim:SQ_RSRC_IMG_2D unorm glc",
+       {0xf0703108u, 0x00020400u}, O::IMAGE_ATOMIC_DEC, 3, 4, 0, -1, -1, 0, 1, nullptr, nullptr,
+       false},
+      {"image_atomic_fcmpswap v[4:5], v[0:1], s[8:15] dmask:0x3 dim:SQ_RSRC_IMG_2D unorm glc",
+       {0xf0743308u, 0x00020400u}, O::IMAGE_ATOMIC_FCMPSWAP, 3, 4, 0, -1, -1, 0, 2, nullptr,
+       nullptr, false},
+  };
+  for (const auto &test : cases) CheckShaderMemDecodeCase(test);
+
+  // Only the compare-swaps take two DWORDs per texel; a 64-bit inc is not implemented.
+  ShaderRecompiler::Decoder::Instruction decoded;
+  const uint32_t inc64[] = {0xf06c3308u, 0x00020400u};
+  ShaderRecompiler::Decoder::DecodeInstruction(inc64, 0u, decoded);
+  Check(decoded.opcode == O::UNSUPPORTED, "IMAGE_ATOMIC_INC dmask 0x3 must stay unsupported");
+}
+
 void RunShaderMemDecodeTests() {
+  TestShaderMemIncDecAtomics();
   TestShaderMemDsAtomics32();
   TestShaderMemAtomics64();
 }

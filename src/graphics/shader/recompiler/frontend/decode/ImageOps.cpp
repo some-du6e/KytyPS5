@@ -256,6 +256,11 @@ constexpr MimgAtomicInfo MIMG_ATOMIC_OPCODE_LIST[] = {
     {0x1au, Opcode::IMAGE_ATOMIC_XOR, true},
     {0x1eu, Opcode::IMAGE_ATOMIC_FMIN},
     {0x1fu, Opcode::IMAGE_ATOMIC_FMAX},
+    // gta6-prep: shader-mem
+    {0x12u, Opcode::IMAGE_ATOMIC_SUB},
+    {0x1bu, Opcode::IMAGE_ATOMIC_INC},
+    {0x1cu, Opcode::IMAGE_ATOMIC_DEC},
+    {0x1du, Opcode::IMAGE_ATOMIC_FCMPSWAP},
 };
 
 constexpr auto MIMG_SAMPLE_OPS = Detail::MakeOpcodeTable<0x100>(MIMG_SAMPLE_OPCODE_LIST);
@@ -406,7 +411,8 @@ void DecodeMimg(uint32_t pc, std::span<const uint32_t> code, uint32_t word_index
 		               "MIMG image gather requires exactly one dmask bit");
 	}
 	if (atomic != nullptr) {
-		const bool compare_swap = inst.opcode == Opcode::IMAGE_ATOMIC_CMPSWAP;
+		const bool compare_swap = inst.opcode == Opcode::IMAGE_ATOMIC_CMPSWAP ||
+		                          inst.opcode == Opcode::IMAGE_ATOMIC_FCMPSWAP;
 		const auto mask32       = compare_swap ? 0x3u : 0x1u;
 		const auto mask64       = compare_swap ? 0xfu : 0x3u;
 		if (inst.dmask != mask32 && inst.dmask != mask64) {

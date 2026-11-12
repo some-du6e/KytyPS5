@@ -2670,4 +2670,23 @@ uint32_t EmitSharedAtomicMaskedOrReturn32(ValueEmitContext& ctx, const IR::Inst&
 	                        });
 }
 
+uint32_t EmitBufferAtomicIncDec(ValueEmitContext& ctx, const IR::Inst& inst) {
+	const bool decrement = inst.GetOpcode() == IR::ValueOpcode::BufferAtomicDec32;
+	return EmitAtomicUpdate(ctx, inst, ctx.Memory(inst),
+	                        [decrement](EmitterState& state, uint32_t old, uint32_t limit) {
+		                        return EmitWrappingIncDecReplacement(state, old, limit, decrement);
+	                        });
+}
+
+uint32_t EmitBufferAtomicFCmpSwap32(ValueEmitContext& ctx, const IR::Inst& inst) {
+	const auto& mem        = ctx.Memory(inst);
+	const auto  source     = ctx.Arg(inst, inst.NumArgs() - 3);
+	const auto  comparator = ctx.Arg(inst, inst.NumArgs() - 2);
+	return EmitAtomicAccess(ctx, inst, mem, [&](uint32_t pointer) {
+		return AtomicUpdate(ctx.state, pointer, mem.kind, [&](uint32_t old) {
+			return EmitFloatCompareSwapReplacement(ctx.state, old, source, comparator);
+		});
+	});
+}
+
 } // namespace Libs::Graphics::ShaderRecompiler::Spirv::Emitter

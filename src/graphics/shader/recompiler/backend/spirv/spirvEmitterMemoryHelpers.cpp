@@ -657,6 +657,7 @@ spv::Op SpirvAtomicOpcode(IR::ValueOpcode opcode) {
 		case IR::ValueOpcode::SharedAtomicOrReturn64: return spv::OpAtomicOr;
 		case IR::ValueOpcode::BufferAtomicXor64:
 		case IR::ValueOpcode::SharedAtomicXor64: return spv::OpAtomicXor;
+		case IR::ValueOpcode::ImageAtomicISub32: return spv::OpAtomicISub;
 		default: return spv::OpNop;
 	}
 }
@@ -739,6 +740,30 @@ uint32_t EmitFloatAtomicReplacement(EmitterState& state, uint32_t old, uint32_t 
 	return EmitSelectValueU32(
 	    state, EmitLogicalAndBool(state, EmitLogicalNotBool(state, unordered), compare), source,
 	    old);
+}
+
+// gta6-prep: shader-mem
+uint32_t EmitFloatCompareSwapReplacement(EmitterState& state, uint32_t old, uint32_t source,
+                                         uint32_t comparator) {
+	const auto equal =
+	    Binary(state, spv::OpFOrdEqual, TypeBool(state),
+	           Unary(state, spv::OpBitcast, TypeF32(state), old),
+	           Unary(state, spv::OpBitcast, TypeF32(state), comparator));
+	return Select(state, TypeU32(state), equal, source, old);
+}
+
+uint32_t EmitWrappingIncDecReplacement(EmitterState& state, uint32_t old, uint32_t limit,
+                                       bool decrement) {
+	if (!decrement) {
+		const auto wrap = Binary(state, spv::OpUGreaterThanEqual, TypeBool(state), old, limit);
+		const auto next = Binary(state, spv::OpIAdd, TypeU32(state), old, ConstantU32(state, 1));
+		return Select(state, TypeU32(state), wrap, ConstantU32(state, 0), next);
+	}
+	const auto zero  = Binary(state, spv::OpIEqual, TypeBool(state), old, ConstantU32(state, 0));
+	const auto above = Binary(state, spv::OpUGreaterThan, TypeBool(state), old, limit);
+	const auto wrap  = Binary(state, spv::OpLogicalOr, TypeBool(state), zero, above);
+	const auto next  = Binary(state, spv::OpISub, TypeU32(state), old, ConstantU32(state, 1));
+	return Select(state, TypeU32(state), wrap, limit, next);
 }
 
 uint32_t EmitDsFloatAtomicReplacement(EmitterState& state, uint32_t old, uint32_t source,

@@ -322,7 +322,134 @@ TestCase ShaderMemDsAtomics64() {
   return ShaderMemSingleThread(std::move(test));
 }
 
+// BUFFER_ATOMIC_INC/DEC wrap at DATA (inc: old >= DATA ? 0 : old + 1; dec: old == 0 || old >
+// DATA ? DATA : old - 1), unlike SPIR-V's OpAtomicIIncrement; FCMPSWAP compares as floats.
+TestCase ShaderMemBufferAtomicsWrap() {
+  using O = ShaderOpcode;
+  struct Boundary {
+    u32 before, limit;
+  };
+  constexpr Boundary boundaries[] = {
+      {4, 5},          {5, 5},          {6, 5},          {0, 5},
+      {0, 0},          {1, 0},          {0xffffffffu, 0xffffffffu},
+      {0xfffffffeu, 0xffffffffu},      {0, 0xffffffffu}, {0x80000000u, 0x7fffffffu}};
+  struct FloatCase {
+    u32 before, source, compare;
+  };
+  constexpr FloatCase floats[] = {
+      {0x80000000u, 0x3f800000u, 0u},          // -0 == +0: swap
+      {0x7fc00000u, 0x3f800000u, 0x7fc00000u}, // NaN never equal
+      {0x40000000u, 0x40400000u, 0x40000000u}, // 2 == 2: swap
+      {0x3f800000u, 0x40400000u, 0x40000000u}, // 1 != 2
+  };
+  constexpr u32 count = static_cast<u32>(std::size(boundaries));
+  constexpr u32 float_count = static_cast<u32>(std::size(floats));
+  constexpr u32 slots = count * 2u + float_count + 1u;
+  TestCase test;
+  test.name = "ShaderMemBufferAtomicsWrap";
+  auto &code = test.code;
+  test.initial.resize(slots * 2u, 0u);
+  test.expected.resize(slots * 2u, 0u);
+  u32 slot = 0;
+  const auto atomic = [&](u32 opcode, u32 before, u32 data, u32 data2, u32 after, bool glc) {
+    test.initial[slot] = before;
+    test.expected[slot] = after;
+    AppendVMovU32(&code, 20, slot * 4u);
+    AppendVMovLiteral(&code, 2, data);
+    AppendVMovLiteral(&code, 3, data2);
+    AppendBufferStoreOpcode(&code, opcode, 2, 20, glc);
+    AppendStoreVgpr(&code, 2, slots + slot);
+    test.expected[slots + slot] = glc ? before : data;
+    slot++;
+  };
+  for (const auto &item : boundaries) {
+    atomic(0x3c, item.before, item.limit, 0, item.before >= item.limit ? 0u : item.before + 1u,
+           true);
+  }
+  for (const auto &item : boundaries) {
+    const bool wrap = item.before == 0u || item.before > item.limit;
+    atomic(0x3d, item.before, item.limit, 0, wrap ? item.limit : item.before - 1u, slot % 2u == 0u);
+  }
+  for (const auto &item : floats) {
+    const bool equal = std::bit_cast<float>(item.before) == std::bit_cast<float>(item.compare);
+    atomic(0x3e, item.before, item.source, item.compare, equal ? item.source : item.before, true);
+  }
+  // EXEC = 0 leaves memory and VDATA alone.
+  code.push_back(EncodeSop1(0x04, 10, 126));
+  code.push_back(EncodeSop1(0x04, 126, InlineU32(0)));
+  test.initial[slot] = 7;
+  test.expected[slot] = 7;
+  AppendVMovU32(&code, 20, slot * 4u);
+  AppendVMovLiteral(&code, 2, 0x13579bdfu);
+  AppendBufferStoreOpcode(&code, 0x3c, 2, 20, true);
+  code.push_back(EncodeSop1(0x04, 126, 10));
+  AppendStoreVgpr(&code, 2, slots + slot);
+  test.expected[slots + slot] = 0x13579bdfu;
+  AppendEnd(&code);
+  test.opcodes = {O::V_MOV_B32,         O::S_MOV_B64,         O::BUFFER_ATOMIC_INC,
+                  O::BUFFER_ATOMIC_DEC, O::BUFFER_ATOMIC_FCMPSWAP, O::BUFFER_STORE_DWORD,
+                  O::S_ENDPGM};
+  test.required_spirv = {"OpAtomicCompareExchange %uint", "OpFOrdEqual"};
+  return ShaderMemSingleThread(std::move(test));
+}
+
+// IMAGE_ATOMIC_SUB/INC/DEC through the shared image atomic harness (ImageAtomicInputs gives
+// {input, old} per texel; expected32 is the texel after the atomic).
+constexpr ImageAtomicIntegerCase ShaderMemImageAtomicCases[] = {
+    {0x12u, ShaderOpcode::IMAGE_ATOMIC_SUB, "ShaderMemImageAtomicSub32GlcAndExec", "", "OpAtomicISub",
+     {}, {0xfffffffeu, 0x00000002u, 0xffffffffu, 0x00000002u, 0x00000001u}},
+    {0x1bu, ShaderOpcode::IMAGE_ATOMIC_INC, "ShaderMemImageAtomicInc32GlcAndExec", "",
+     "OpAtomicCompareExchange", {}, {0x00000000u, 0x00000002u, 0x00000000u, 0x00000002u, 0x00000001u}},
+    {0x1cu, ShaderOpcode::IMAGE_ATOMIC_DEC, "ShaderMemImageAtomicDec32GlcAndExec", "",
+     "OpAtomicCompareExchange", {}, {0x00000001u, 0x00000000u, 0x00000000u, 0x00000000u, 0xffffffffu}},
+};
+
+// IMAGE_ATOMIC_FCMPSWAP (dmask 0x3): VDATA is the source, VDATA+1 the comparison, compared as
+// floats; GLC returns the old texel.
+TestCase ShaderMemImageAtomicFCmpSwap() {
+  using O = ShaderOpcode;
+  struct FloatCase {
+    u32 before, source, compare;
+  };
+  constexpr FloatCase floats[] = {
+      {0x80000000u, 0x3f800000u, 0u},
+      {0x7fc00000u, 0x3f800000u, 0x7fc00000u},
+      {0x40000000u, 0x40400000u, 0x40000000u},
+      {0x3f800000u, 0x40400000u, 0x40000000u},
+  };
+  TestCase test;
+  test.name = "ShaderMemImageAtomicFCmpSwap";
+  test.user_data = MakeStorageTextureData(Prospero::BufferFormat::k32UInt);
+  test.has_user_data = true;
+  test.storage_image_r32ui.assign(16, 0);
+  test.expected_storage_image_r32ui = test.storage_image_r32ui;
+  auto &code = test.code;
+  for (u32 i = 0; i < std::size(floats); ++i) {
+    const auto &item = floats[i];
+    AppendVMovU32(&code, 0, i);
+    AppendVMovU32(&code, 1, 0);
+    AppendVMovLiteral(&code, 2, item.source);
+    AppendVMovLiteral(&code, 3, item.compare);
+    code.push_back(EncodeMimg0(0x1du, 3u, 0, true));
+    code.push_back(EncodeMimg1(2, 0));
+    AppendStoreVgpr(&code, 2, i);
+    test.expected.push_back(item.before);
+    const bool equal = std::bit_cast<float>(item.before) == std::bit_cast<float>(item.compare);
+    test.storage_image_r32ui[i] = item.before;
+    test.expected_storage_image_r32ui[i] = equal ? item.source : item.before;
+  }
+  AppendEnd(&code);
+  test.opcodes = {O::V_MOV_B32, O::IMAGE_ATOMIC_FCMPSWAP, O::BUFFER_STORE_DWORD, O::S_ENDPGM};
+  test.required_spirv = {"OpImageTexelPointer", "OpAtomicCompareExchange", "OpFOrdEqual"};
+  return ShaderMemSingleThread(std::move(test));
+}
+
 void AppendShaderMemCases(std::vector<TestCase> &cases) {
+  cases.push_back(ShaderMemBufferAtomicsWrap());
+  for (const auto &atomic : ShaderMemImageAtomicCases) {
+    cases.push_back(ImageAtomicIntegerGlcAndExec(atomic, false));
+  }
+  cases.push_back(ShaderMemImageAtomicFCmpSwap());
   cases.push_back(ShaderMemBufferAtomics64());
   cases.push_back(ShaderMemDsAtomics64());
   cases.push_back(ShaderMemDsAtomics32());

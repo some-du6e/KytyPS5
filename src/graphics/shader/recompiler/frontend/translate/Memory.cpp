@@ -55,6 +55,18 @@ bool IsBufferAtomic(Decoder::Opcode opcode) {
 	       Decoder::IsShaderMemBufferAtomicOpcode(opcode);
 }
 
+bool IsImageAtomic(Decoder::Opcode opcode) {
+	switch (opcode) {
+		case Decoder::Opcode::IMAGE_ATOMIC_SUB:
+		case Decoder::Opcode::IMAGE_ATOMIC_INC:
+		case Decoder::Opcode::IMAGE_ATOMIC_DEC:
+		case Decoder::Opcode::IMAGE_ATOMIC_FCMPSWAP: return true;
+		default:
+			return opcode >= Decoder::Opcode::IMAGE_ATOMIC_SWAP &&
+			       opcode <= Decoder::Opcode::IMAGE_ATOMIC_FMAX;
+	}
+}
+
 ResourceKind MemoryKind(const Decoder::Instruction& decoded) {
 	switch (decoded.family) {
 		case Decoder::Family::SMEM:
@@ -181,8 +193,7 @@ Decoder::Operand MemorySourceAt(const Decoder::Instruction& decoded, uint32_t in
 	if (decoded.family == Decoder::Family::MIMG) {
 		const bool store_or_atomic = decoded.opcode == Decoder::Opcode::IMAGE_STORE ||
 		                             decoded.opcode == Decoder::Opcode::IMAGE_STORE_MIP ||
-		                             (decoded.opcode >= Decoder::Opcode::IMAGE_ATOMIC_SWAP &&
-		                              decoded.opcode <= Decoder::Opcode::IMAGE_ATOMIC_FMAX);
+		                             IsImageAtomic(decoded.opcode);
 		if (store_or_atomic) {
 			return index == 0u ? decoded.dst : decoded.src0;
 		}
@@ -523,7 +534,8 @@ void Translator::BUFFER_ATOMIC(const Decoder::Instruction& inst, IR::ValueOpcode
 	const auto data_src = MemorySourceAt(inst, 0);
 	const auto flags    = AddMemoryInfo(memory, inst.pc);
 	IR::Value  result;
-	if (opcode == IR::ValueOpcode::BufferAtomicCmpSwap32) {
+	if (opcode == IR::ValueOpcode::BufferAtomicCmpSwap32 ||
+	    opcode == IR::ValueOpcode::BufferAtomicFCmpSwap32) {
 		const auto desired    = ReadU32(data_src);
 		const auto comparator = ReadU32(OffsetOperand(data_src, 1u));
 		result = ir.Emit(opcode,
@@ -561,7 +573,8 @@ void Translator::IMAGE_ATOMIC(const Decoder::Instruction& inst, IR::ValueOpcode 
 	const auto data     = MemorySourceAt(inst, 0);
 	const auto flags    = AddMemoryInfo(memory, inst.pc);
 	IR::Value  result;
-	if (opcode == IR::ValueOpcode::ImageAtomicCompareSwap32) {
+	if (opcode == IR::ValueOpcode::ImageAtomicCompareSwap32 ||
+	    opcode == IR::ValueOpcode::ImageAtomicFCmpSwap32) {
 		// VDATA supplies the replacement; VDATA+1 supplies the comparison.
 		result = ir.Emit(opcode,
 		                 {resource, address, ReadU32(data), ReadU32(OffsetOperand(data, 1u)),
@@ -1245,6 +1258,20 @@ void Translator::EmitMemory(const Decoder::Instruction& inst) {
 			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicInc64);
 		case Decoder::Opcode::BUFFER_ATOMIC_DEC_X2:
 			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicDec64);
+		case Decoder::Opcode::BUFFER_ATOMIC_INC:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicInc32);
+		case Decoder::Opcode::BUFFER_ATOMIC_DEC:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicDec32);
+		case Decoder::Opcode::BUFFER_ATOMIC_FCMPSWAP:
+			return BUFFER_ATOMIC(inst, IR::ValueOpcode::BufferAtomicFCmpSwap32);
+		case Decoder::Opcode::IMAGE_ATOMIC_SUB:
+			return IMAGE_ATOMIC(inst, IR::ValueOpcode::ImageAtomicISub32);
+		case Decoder::Opcode::IMAGE_ATOMIC_INC:
+			return IMAGE_ATOMIC(inst, IR::ValueOpcode::ImageAtomicInc32);
+		case Decoder::Opcode::IMAGE_ATOMIC_DEC:
+			return IMAGE_ATOMIC(inst, IR::ValueOpcode::ImageAtomicDec32);
+		case Decoder::Opcode::IMAGE_ATOMIC_FCMPSWAP:
+			return IMAGE_ATOMIC(inst, IR::ValueOpcode::ImageAtomicFCmpSwap32);
 
 		case Decoder::Opcode::IMAGE_ATOMIC_CMPSWAP:
 			return IMAGE_ATOMIC(inst, IR::ValueOpcode::ImageAtomicCompareSwap32);
