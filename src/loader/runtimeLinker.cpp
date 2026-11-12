@@ -1755,6 +1755,11 @@ std::vector<ImportDiagnostics::ImportReportEntry> RuntimeLinker::CollectImportRe
 			if (symbol.GetBind() != STB_GLOBAL && symbol.GetBind() != STB_WEAK) {
 				return;
 			}
+			// A symbol the program defines itself is one of its exports (CreateSymbolDatabase
+			// splits on st_value the same way); a relocation against it is not an import.
+			if (symbol.st_value != 0) {
+				return;
+			}
 			SymbolType type = SymbolType::Unknown;
 			switch (symbol.GetType()) {
 				case STT_NOTYPE: type = SymbolType::NoType; break;
