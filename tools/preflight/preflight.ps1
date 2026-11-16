@@ -169,17 +169,22 @@ function Get-FullPath([string]$Path) {
     return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
 }
 
+# The last $Bytes of a file as text, also while another process writes it.
+function Read-Tail([string]$Path, [long]$Bytes) {
+    $stream = [System.IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite, Delete')
+    try {
+        $take = [int][Math]::Min($Bytes, $stream.Length)
+        [void]$stream.Seek(-$take, 'End')
+        $buffer = New-Object byte[] $take
+        $read = $stream.Read($buffer, 0, $take)
+    } finally { $stream.Dispose() }
+    return $Utf8.GetString($buffer, 0, $read)
+}
+
 # The last lines a child printed: what follows "--- stdout ---" in its log, without the markers.
 function Get-LastLines([string]$Path, [int]$Count = 3) {
     try {
-        $stream = [System.IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite, Delete')
-        try {
-            $take = [int][Math]::Min([long]16384, $stream.Length)
-            [void]$stream.Seek(-$take, 'End')
-            $buffer = New-Object byte[] $take
-            $read = $stream.Read($buffer, 0, $take)
-        } finally { $stream.Dispose() }
-        $all = @($Utf8.GetString($buffer, 0, $read) -split '\r?\n')
+        $all = @((Read-Tail $Path 16384) -split '\r?\n')
         $start = [Array]::LastIndexOf($all, '--- stdout ---') + 1
         if ($start -ge $all.Count) { return @() }
         $lines = @($all[$start..($all.Count - 1)] | Where-Object { $_.Trim() -and $_ -notmatch '^--- ' })
@@ -187,6 +192,12 @@ function Get-LastLines([string]$Path, [int]$Count = 3) {
     } catch {
         return @()
     }
+}
+
+# Whether a test lost the GPU device: the harness's last words are then "... returned
+# ErrorDeviceLost" (vulkan.hpp's name for VK_ERROR_DEVICE_LOST).
+function Test-DeviceLost([string]$Path) {
+    try { return (Read-Tail $Path 65536) -match 'ErrorDeviceLost|VK_ERROR_DEVICE_LOST' } catch { return $false }
 }
 
 # Ctrl+C arrives as a key (see the main block), so that stopping early goes through the usual
@@ -206,6 +217,15 @@ function Stop-OnKey {
     if (Test-StopKey) {
         $script:StopRequested = $true
         throw 'stopped with Ctrl+C'
+    }
+}
+
+# Waits $Seconds, in short waits so that Ctrl+C gets through.
+function Wait-Seconds([int]$Seconds) {
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($clock.Elapsed.TotalSeconds -lt $Seconds) {
+        Stop-OnKey
+        Start-Sleep -Milliseconds 250
     }
 }
 
@@ -1041,6 +1061,15 @@ function Invoke-Tests($Manifest, [object[]]$Selected, [string]$PackageDir) {
         Say "$space$($step.status) ($(Format-Seconds $seconds) s$extra)" $colors[$step.status]
         if ($step.status -ne 'PASS') {
             foreach ($line in @(Get-LastLines $log 1)) { Say "      $line" 'DarkGray' }
+        }
+        # A lost device probably means Windows reset the GPU (a TDR). After 5 resets within 60 s it
+        # stops the PC with a blue screen, so after one the next test waits a minute.
+        if ($step.status -ne 'PASS' -and (Test-DeviceLost $log)) {
+            $step.device_lost = $true
+            if ($i -lt $count - 1) {
+                Say '      The GPU was reset (ErrorDeviceLost). The next test starts in 60 s, so that Windows does not restart the PC.' 'Yellow'
+                Wait-Seconds 60
+            }
         }
     }
     Save-Progress

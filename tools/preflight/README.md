@@ -36,6 +36,10 @@ Nobody has timed the 42 tests on a real GPU yet. Expect something like 10 to 30 
 hangs gets stopped after 5 minutes, and `shader_recompiler_compute`, which runs every case, after 30.
 Failed tests are as useful as passing ones: the zip says which ones failed and why.
 
+Save your work in other programs first. If the screen goes black for a moment during a test,
+Windows reset the GPU because the test hung it. Preflight then waits a minute before the next
+test, since Windows restarts the PC after five such resets within a minute.
+
 For a short check first, open a command prompt in the `preflight` folder: click the folder's address
 bar in Explorer, type `cmd` and press Enter. Then run:
 

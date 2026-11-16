@@ -37,6 +37,9 @@ SCRIPTS = {
     "env.sh": '[ "$KYTY_FAKE_VALUE" = "a b=c" ] || exit 9\ncase "$(pwd)" in */tests) ;; *) exit 8 ;; esac\n'
               'echo "env ok"\n',
     "willfail.sh": "exit 1\n",
+    # What the harness prints after a TDR, before it aborts.
+    "lost.sh": "echo 'ShaderRecompilerComputeTests: Gta6Alu failed at dispatch: vkWaitForFences returned "
+               "ErrorDeviceLost' >&2\nexit 134\n",
     "args.sh": 'for a in "$@"; do echo "arg:[$a]"; done\n',
 }
 
@@ -270,6 +273,22 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         _, summary, _ = self.results()
         self.assertEqual([s["name"] for s in summary["steps"]], ["args", "pass"])
+
+    def test_wait_after_a_lost_device(self):
+        """After a test that lost the GPU device the next one waits 60 s; a failure without it does not."""
+        self.manifest["tests"].append({"name": "lost", "executable": "bin/lost.sh", "args": [], "timeout": 30,
+                                       "quick": False})
+        self.write_manifest()
+        r = self.run_preflight("-Only", "fail,lost,pass")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertGreaterEqual(r.seconds, 60)
+        self.assertEqual(r.stdout.count("The next test starts in 60 s"), 1, r.stdout)
+        _, summary, _ = self.results()
+        steps = {s["name"]: s for s in summary["steps"]}
+        self.assertEqual([(n, steps[n]["status"]) for n in ("fail", "lost", "pass")],
+                         [("fail", "FAIL"), ("lost", "FAIL"), ("pass", "PASS")])
+        self.assertTrue(steps["lost"]["device_lost"])
+        self.assertNotIn("device_lost", steps["fail"])
 
     def test_bad_arguments(self):
         cases = [
