@@ -214,12 +214,34 @@ def load_names(path):
     return table
 
 
+def _items_after_dashes(argv):
+    """argv with the options first and the other arguments after '--', in their order. argparse
+    takes an argument that starts with '-' for an option, and about one NID in 64 does
+    (-Rjp3-YViXc). One that starts with '-' and is not a NID or an import name stays an option, so
+    a mistyped option still fails."""
+    options, items = [], []
+    args = iter(argv)
+    for arg in args:
+        if arg == "--":
+            items.extend(args)
+        elif arg == "--names":
+            options.append(arg)
+            value = next(args, None)
+            if value is not None:
+                options.append(value)
+        elif arg.startswith("-") and not is_nid(nid_from_name(arg)):
+            options.append(arg)
+        else:
+            items.append(arg)
+    return options + ["--"] + items
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="nid.py", description="Compute NIDs of symbol names, or look NIDs up "
-                                 "in a names file (the --nid-names format).")
+                                 "in a names file (the --nid-names format).", allow_abbrev=False)
     ap.add_argument("items", nargs="+", help="symbol names; with --names, NIDs or import names to look up")
     ap.add_argument("--names", metavar="FILE", help="names file to look the items up in")
-    args = ap.parse_args(argv)
+    args = ap.parse_args(_items_after_dashes(sys.argv[1:] if argv is None else argv))
     out = []
     if args.names:
         table = load_names(args.names)

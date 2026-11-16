@@ -168,6 +168,19 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(self.run_main(["--names", u.data("names.txt"), "Fc8qxlKINYQ[VideoRecordingP_v1]", "AAAAAAAAAAA"]),
                          "Fc8qxlKINYQ[VideoRecordingP_v1] sceVideoRecordingSetInfo\nAAAAAAAAAAA ?\n")
 
+    def test_lookup_of_nids_that_start_with_a_dash(self):
+        # argparse would take these for options; -h... would even print the help.
+        names = u.data("names.txt")
+        self.assertEqual(self.run_main(["--names", names, "-2IRUCO--PM"]), "-2IRUCO--PM sceKernelReadTsc\n")
+        self.assertEqual(self.run_main(["1jfXLRVzisc", "-2IRUCO--PM[libkernel_v1][libkernel_v1.1][Func]", "--names", names,
+                                        "-hAbcdefghk"]),
+                         "1jfXLRVzisc sceKernelUsleep\n-2IRUCO--PM[libkernel_v1][libkernel_v1.1][Func] sceKernelReadTsc\n"
+                         "-hAbcdefghk ?\n")
+        self.assertEqual(self.run_main(["--names", names, "--", "-2IRUCO--PM"]), "-2IRUCO--PM sceKernelReadTsc\n")
+        for bad in (["--nmaes", names, "1jfXLRVzisc"], ["--names", names], ["--names"]):
+            with self.subTest(argv=bad), self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                nid.main(bad)
+
 
 if __name__ == "__main__":
     unittest.main()
