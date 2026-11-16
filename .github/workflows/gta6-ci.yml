@@ -50,6 +50,16 @@ jobs:
             echo "tools/triage not present yet"
           fi
 
+      - name: Run CI script and preflight tests
+        shell: bash
+        env:
+          # The preflight tests run preflight.ps1 under pwsh; here they fail instead of skipping.
+          KYTY_REQUIRE_PWSH: "1"
+        run: |
+          pwsh -NoProfile -Command '"pwsh " + $PSVersionTable.PSVersion'
+          python -m unittest discover -s .github/scripts/tests -v
+          python -m unittest discover -s tools/preflight/tests -v
+
   linux:
     name: Build and test (Linux)
     if: ${{ !inputs.bisect_shas }}
@@ -118,7 +128,7 @@ jobs:
         shell: bash
         run: |
           vulkaninfo --summary || true
-          vulkaninfo 2>/dev/null | grep -E 'fragmentShaderBarycentric|shaderImageInt64Atomics|workgroupMemoryExplicitLayout |shaderSharedInt64Atomics|shaderBufferInt64Atomics' | sort -u || true
+          vulkaninfo 2>/dev/null | grep -E 'fragmentShaderBarycentric|shaderImageInt64Atomics|workgroupMemoryExplicitLayout |shaderSharedInt64Atomics|shaderBufferInt64Atomics|subgroupSize' | sort -u || true
 
       - name: Test (host)
         shell: bash
@@ -244,12 +254,119 @@ jobs:
         shell: cmd
         run: cmake --install _Build/windows --prefix _Build/windows/install
 
+      # The GPU tests cannot run here (no GPU). They go into the artifact with tools/preflight, so
+      # that one download runs them on a PC that has one (tools/preflight/README.md).
+      - name: Package the GPU tests and preflight
+        id: preflight_package
+        shell: bash
+        run: |
+          python .github/scripts/package_gpu_tests.py _Build/windows _Build/windows/install/preflight/gpu-tests
+          cp tools/preflight/preflight.ps1 tools/preflight/preflight.cmd tools/preflight/README.md \
+            tools/triage/collect_logs.ps1 _Build/windows/install/preflight/
+
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
           name: KytyPS5-gta6-prep-Windows-x64
           path: _Build/windows/install/**
           if-no-files-found: error
+
+      # The packaged preflight under Windows PowerShell 5.1, as on a PC without pwsh. Each check
+      # fails on exit code 2 (preflight could not run), a missing summary.json or a missing zip.
+      - name: Smoke-test preflight, one GPU test (Windows PowerShell 5.1)
+        timeout-minutes: 12
+        shell: powershell
+        env:
+          KYTY_PREFLIGHT_NO_PAUSE: "1"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $preflight = Join-Path $env:GITHUB_WORKSPACE '_Build\windows\install\preflight'
+          $out = Join-Path $env:RUNNER_TEMP 'preflight-smoke\tests'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          # Through preflight.cmd, as on the PC. Without a GPU, device_creation fails (exit code 1).
+          & cmd.exe /d /c "$preflight\preflight.cmd" -Only device_creation -OutDir $out
+          $rc = $LASTEXITCODE
+          Write-Host "preflight.cmd exit code: $rc"
+          if ($rc -ne 0 -and $rc -ne 1) { throw "preflight exited with $rc" }
+          $run = @(Get-ChildItem -LiteralPath $out -Directory -Filter 'kyty-preflight-*')
+          if ($run.Count -ne 1) { throw "expected one result folder in $out, found $($run.Count)" }
+          $run = $run[0].FullName
+          Get-Content -LiteralPath (Join-Path $run 'summary.txt')
+          if (-not (Test-Path -LiteralPath "$run.zip")) { throw "no zip next to $run" }
+          $summary = [System.IO.File]::ReadAllText((Join-Path $run 'summary.json')) | ConvertFrom-Json
+          $expected = 'FAIL'
+          if ($rc -eq 0) { $expected = 'PASS' }
+          $step = @($summary.steps | Where-Object { $_.name -eq 'device_creation' })
+          if ($step.Count -ne 1 -or $step[0].status -ne $expected) {
+            throw "summary.json should list device_creation as $expected (exit code $rc)"
+          }
+          exit 0
+
+      - name: Smoke-test preflight, empty game folder (Windows PowerShell 5.1)
+        if: ${{ !cancelled() && steps.preflight_package.outcome == 'success' }}
+        timeout-minutes: 15
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $preflight = Join-Path $env:GITHUB_WORKSPACE '_Build\windows\install\preflight'
+          $game = Join-Path $env:RUNNER_TEMP 'preflight-smoke\empty-game'
+          $out = Join-Path $env:RUNNER_TEMP 'preflight-smoke\game'
+          New-Item -ItemType Directory -Force -Path $game, $out | Out-Null
+          # The emulator cannot load an empty folder: preflight must record that and still zip.
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$preflight\preflight.ps1" -Game $game -BootSeconds 20 -OutDir $out
+          $rc = $LASTEXITCODE
+          Write-Host "preflight.ps1 exit code: $rc"
+          if ($rc -ne 0 -and $rc -ne 1) { throw "preflight exited with $rc" }
+          $run = @(Get-ChildItem -LiteralPath $out -Directory -Filter 'kyty-preflight-*')
+          if ($run.Count -ne 1) { throw "expected one result folder in $out, found $($run.Count)" }
+          $run = $run[0].FullName
+          Get-Content -LiteralPath (Join-Path $run 'summary.txt')
+          if (-not (Test-Path -LiteralPath "$run.zip")) { throw "no zip next to $run" }
+          $summary = [System.IO.File]::ReadAllText((Join-Path $run 'summary.json')) | ConvertFrom-Json
+          $names = @($summary.steps | ForEach-Object { $_.name })
+          if (($names -join ',') -ne 'imports,boot,logs') { throw "summary.json steps: $($names -join ', ')" }
+          $imports = @($summary.steps)[0]
+          if ($imports.status -ne 'FAIL') { Write-Host "::warning::the import report of an empty folder is $($imports.status), not FAIL" }
+          exit 0
+
+      # A test that outlives its time limit, with a child process: preflight must stop both
+      # (taskkill /T /F) and still zip. cmd.exe and ping.exe stand in for a hung GPU test.
+      - name: Smoke-test preflight, a hung test (Windows PowerShell 5.1)
+        if: ${{ !cancelled() && steps.preflight_package.outcome == 'success' }}
+        timeout-minutes: 12
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'preflight-smoke\hung'
+          $package = Join-Path $root 'preflight\gpu-tests'
+          New-Item -ItemType Directory -Force -Path (Join-Path $package 'bin') | Out-Null
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE '_Build\windows\install\preflight\preflight.ps1') (Join-Path $root 'preflight')
+          Copy-Item (Join-Path $env:SystemRoot 'System32\cmd.exe') (Join-Path $package 'bin\cmd.exe')
+          $tests = '{"format": 1, "tests": [{"name": "hang", "executable": "bin/cmd.exe", "args": ["/d", "/c", "ping -n 600 127.0.0.1"], "timeout": 5, "quick": true}]}'
+          [System.IO.File]::WriteAllText((Join-Path $package 'tests.json'), $tests)
+          $started = Get-Date
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'preflight\preflight.ps1') -OutDir (Join-Path $root 'out')
+          $rc = $LASTEXITCODE
+          Write-Host "preflight.ps1 exit code: $rc"
+          if ($rc -ne 1) { throw "preflight exited with $rc, not 1" }
+          $run = @(Get-ChildItem -LiteralPath (Join-Path $root 'out') -Directory -Filter 'kyty-preflight-*')[0].FullName
+          Get-Content -LiteralPath (Join-Path $run 'summary.txt')
+          if (-not (Test-Path -LiteralPath "$run.zip")) { throw "no zip next to $run" }
+          $summary = [System.IO.File]::ReadAllText((Join-Path $run 'summary.json')) | ConvertFrom-Json
+          $step = @($summary.steps)[0]
+          if ($step.status -ne 'TIMEOUT' -or $step.seconds -gt 30) { throw "hang: $($step.status) after $($step.seconds) s" }
+          Start-Sleep -Seconds 2
+          $left = @(Get-Process -Name ping, cmd -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$root*" -or ($_.Name -eq 'PING' -and $_.StartTime -ge $started) })
+          if ($left.Count -gt 0) { throw "still running: $(($left | ForEach-Object { "$($_.Name) $($_.Id)" }) -join ', ')" }
+          exit 0
+
+      - name: Upload preflight smoke-test results
+        if: ${{ !cancelled() && steps.preflight_package.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: preflight-smoke-windows
+          path: ${{ runner.temp }}/preflight-smoke/**/kyty-preflight-*.zip
+          if-no-files-found: warn
 
   # Bisect mode (workflow_dispatch with bisect_shas): one job per commit, strictly one at a time,
   # each building only the requested targets with the Linux job's toolchain and flags.
