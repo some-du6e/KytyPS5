@@ -21,6 +21,10 @@ def parse(fmt, data):
 
 
 class FakeResponse(io.BytesIO):
+    def __init__(self, data, headers=None):
+        super().__init__(data)
+        self.headers = headers or {}
+
     def __enter__(self):
         return self
 
@@ -29,7 +33,8 @@ class FakeResponse(io.BytesIO):
 
 
 class FakeOpener:
-    """urllib.request.urlopen stand-in that serves fixed bytes per URL and counts the requests."""
+    """urllib.request.urlopen stand-in that serves fixed bytes per URL, or (bytes, headers), and
+    counts the requests."""
 
     def __init__(self, files):
         self.files = files
@@ -40,7 +45,8 @@ class FakeOpener:
         self.requests.append(url)
         if url not in self.files:
             raise OSError("404 for %s" % url)
-        return FakeResponse(self.files[url])
+        body = self.files[url]
+        return FakeResponse(*body) if isinstance(body, tuple) else FakeResponse(body)
 
 
 def fake_source(sid, fmt, data, **kw):
@@ -146,6 +152,22 @@ class FetchTests(unittest.TestCase):
         with self.assertRaises(bn.FetchError):
             bn.fetch(self.source, self.tmp, opener=FakeOpener({}), log=self.log.append)
         self.assertEqual(os.listdir(os.path.dirname(self.source.cache_path(self.tmp))), [])
+
+    def test_short_body_and_html_page(self):
+        # A source being re-pinned has no size or hash yet, so download() has to catch these itself.
+        unpinned = bn.Source("new", "example/new", self.source.rev, "list.txt", "lines", "none", "PS5", None, None)
+        for headers, error in (({"Content-Length": str(2 * len(self.data))}, "got %d of the" % len(self.data)),
+                               ({"Content-Type": "text/html; charset=utf-8"}, "HTML page")):
+            with self.subTest(headers=headers):
+                with self.assertRaises(bn.FetchError) as cm:
+                    bn.fetch(unpinned, self.tmp, opener=FakeOpener({unpinned.url: (self.data, headers)}),
+                             log=self.log.append)
+                self.assertIn(error, str(cm.exception))
+                self.assertEqual(os.listdir(os.path.dirname(unpinned.cache_path(self.tmp))), [])
+        headers = {"Content-Length": str(len(self.data)), "Content-Type": "text/plain; charset=utf-8"}
+        path, _digest = bn.fetch(unpinned, self.tmp, opener=FakeOpener({unpinned.url: (self.data, headers)}),
+                                 log=self.log.append)
+        self.assertEqual(u.read_bytes(path), self.data)
 
     def test_failed_refresh_keeps_the_cached_copy(self):
         path, _digest = bn.fetch(self.source, self.tmp, opener=FakeOpener({self.source.url: self.data}),

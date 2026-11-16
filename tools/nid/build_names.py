@@ -198,13 +198,18 @@ class FetchError(Exception):
 
 
 def download(url, dest, opener=None):
-    """Downloads url to dest through a temporary file next to it. Returns the byte count."""
+    """Downloads url to dest through a temporary file next to it. Returns the byte count. A body
+    shorter than its Content-Length or an HTML page (an error or login page) is a FetchError: the
+    pinned size and hash catch both, but a source being re-pinned has neither yet."""
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     tmp = "%s.download-%d.tmp" % (dest, os.getpid())
     try:
         with open(tmp, "wb") as out:
             req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with (opener or urllib.request.urlopen)(req, timeout=DOWNLOAD_TIMEOUT) as resp:
+                headers = getattr(resp, "headers", None) or {}
+                if headers.get("Content-Type", "").split(";")[0].strip().lower() == "text/html":
+                    raise FetchError("%s: the server sent an HTML page, not the list" % url)
                 total = 0
                 while True:
                     chunk = resp.read(1 << 20)
@@ -214,6 +219,10 @@ def download(url, dest, opener=None):
                     if total > MAX_DOWNLOAD_BYTES:
                         raise FetchError("%s: larger than %d MiB" % (url, MAX_DOWNLOAD_BYTES >> 20))
                     out.write(chunk)
+                # http.client ends a body that stops early without an error.
+                length = (headers.get("Content-Length") or "").strip()
+                if length.isdigit() and total != int(length):
+                    raise FetchError("%s: got %d of the %s bytes the server announced" % (url, total, length))
         os.replace(tmp, dest)
         return total
     except (OSError, ValueError, http.client.HTTPException) as e:
