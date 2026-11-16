@@ -5,6 +5,7 @@ import gzip
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -201,6 +202,34 @@ class LogTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             with contextlib.redirect_stderr(io.StringIO()):
                 ni.main(["--names", os.path.join(self.tmp, "none.txt"), u.data("synthetic-log.txt")])
+
+
+# A C++ string or character literal, or a comment.
+R_CPP_TOKEN = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|//[^\n]*|/\*.*?\*/', re.S)
+
+
+def cpp_strings(*paths):
+    """The string literals in C++ files under src/, comments left out."""
+    out = []
+    for path in paths:
+        with open(os.path.join(u.REPO, "src", path), "r", encoding="utf-8") as f:
+            out += [t[1:-1] for t in R_CPP_TOKEN.findall(f.read()) if t.startswith('"')]
+    return out
+
+
+@unittest.skipUnless(u.in_checkout(), "not inside a KytyPS5 checkout")
+class CppTextTests(unittest.TestCase):
+    """The text the tool reads is still what src/loader writes, so a changed log or report format
+    fails here instead of turning into an empty list."""
+
+    def test_log_and_report_text(self):
+        strings = cpp_strings("loader/importDiagnostics.cpp", "loader/runtimeLinker.cpp")
+        for text in ni.LOG_TEXT + (ni.REPORT_MAGIC + "1",):
+            with self.subTest(text=text):
+                self.assertTrue(any(s.startswith(text) for s in strings), "no C++ string starts with %r" % text)
+
+    def test_generated_name(self):
+        self.assertIn("{}[{}_v{}][{}_v{}.{}][{}]", cpp_strings("loader/symbolDatabase.cpp"))
 
 
 if __name__ == "__main__":
