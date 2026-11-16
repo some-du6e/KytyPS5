@@ -147,6 +147,18 @@ class FetchTests(unittest.TestCase):
             bn.fetch(self.source, self.tmp, opener=FakeOpener({}), log=self.log.append)
         self.assertEqual(os.listdir(os.path.dirname(self.source.cache_path(self.tmp))), [])
 
+    def test_failed_refresh_keeps_the_cached_copy(self):
+        path, _digest = bn.fetch(self.source, self.tmp, opener=FakeOpener({self.source.url: self.data}),
+                                 log=self.log.append)
+        # Offline or rate-limited, then a changed file: the verified copy stays.
+        for opener in (FakeOpener({}), FakeOpener({self.source.url: self.data.replace(b"Usleep", b"Usleeq")})):
+            with self.assertRaises(bn.FetchError):
+                bn.fetch(self.source, self.tmp, opener=opener, refresh=True, log=self.log.append)
+            self.assertEqual(u.read_bytes(path), self.data)
+        self.assertEqual(u.read_bytes(path + ".bad"), self.data.replace(b"Usleep", b"Usleeq"))
+        self.assertEqual(sorted(os.listdir(os.path.dirname(path))), ["list.txt", "list.txt.bad"])
+        self.assertEqual(bn.fetch(self.source, self.tmp, offline=True, log=self.log.append), (path, self.source.sha256))
+
 
 class HleScanTests(unittest.TestCase):
     def setUp(self):
@@ -280,6 +292,17 @@ class MainTests(unittest.TestCase):
         code, out, _err = self.run_main("-o", output, "--skip-failed")
         self.assertEqual(code, 0)
         self.assertIn("skipped: b", out)
+
+    def test_failed_refresh_keeps_the_cache(self):
+        output = os.path.join(self.tmp, "n.txt")
+        self.assertEqual(self.run_main("-o", output)[0], 0)
+        self.opener.files.clear()  # the network goes away
+        code, _out, err = self.run_main("-o", output + ".2", "--refresh")
+        self.assertEqual(code, 1)
+        self.assertIn("nothing written", err)
+        code, _out, _err = self.run_main("-o", output + ".2", "--offline")
+        self.assertEqual(code, 0)
+        self.assertEqual(u.read_bytes(output), u.read_bytes(output + ".2"))
 
     def test_extra_names(self):
         extra = os.path.join(self.tmp, "extra.txt")

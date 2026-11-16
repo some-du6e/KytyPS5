@@ -223,27 +223,40 @@ def download(url, dest, opener=None):
             os.unlink(tmp)
 
 
-def fetch(source, cache, offline=False, refresh=False, opener=None, log=print):
-    """The cached copy of a source, downloaded first when needed and checked against its SHA-256.
-    Returns (path, sha256)."""
-    path = source.cache_path(cache)
-    if refresh and os.path.exists(path) and not offline:
-        os.unlink(path)
-    if not os.path.exists(path):
-        if offline:
-            raise FetchError("%s: not in the cache (%s) and --offline was given" % (source.id, path))
-        log("downloading %s: %s" % (source.id, source.url))
-        download(source.url, path, opener=opener)
+def check_copy(source, path, bad):
+    """(size, SHA-256) of a copy of the source at path. A copy that does not match the pinned size
+    or hash is moved to `bad`, where it can be looked at, and FetchError is raised."""
     size = os.path.getsize(path)
     if source.size is not None and size != source.size:
-        bad = path + ".bad"
         os.replace(path, bad)
         raise FetchError("%s: %d bytes, expected %d (moved to %s)" % (source.id, size, source.size, bad))
     digest = file_sha256(path)
     if source.sha256 is not None and digest != source.sha256:
-        bad = path + ".bad"
         os.replace(path, bad)
         raise FetchError("%s: SHA-256 %s, expected %s (moved to %s)" % (source.id, digest, source.sha256, bad))
+    return size, digest
+
+
+def fetch(source, cache, offline=False, refresh=False, opener=None, log=print):
+    """The cached copy of a source, downloaded first when needed and checked against its SHA-256.
+    Returns (path, sha256). A download goes next to the cached copy and replaces it only once it
+    passes the checks, so a --refresh that fails keeps the copy that was there."""
+    path = source.cache_path(cache)
+    bad = path + ".bad"
+    if os.path.exists(path) and (offline or not refresh):
+        size, digest = check_copy(source, path, bad)
+    elif offline:
+        raise FetchError("%s: not in the cache (%s) and --offline was given" % (source.id, path))
+    else:
+        log("downloading %s: %s" % (source.id, source.url))
+        new = path + ".new"
+        try:
+            download(source.url, new, opener=opener)
+            size, digest = check_copy(source, new, bad)
+            os.replace(new, path)
+        finally:
+            if os.path.exists(new):
+                os.unlink(new)
     if source.sha256 is None:
         log("note: %s has no pinned hash; sha256=%r, size=%d" % (source.id, digest, size))
     return path, digest
