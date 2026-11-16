@@ -332,6 +332,153 @@ function Read-Arguments([object[]]$List) {
     return $result
 }
 
+# --- Windows helpers ------------------------------------------------------------------------------
+
+# Compiled once by Add-Type (C# 5, for Windows PowerShell 5.1); $NativeReady says whether it worked.
+$NativeReady = $false
+$NativeCode = @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace KytyPreflight
+{
+    public static class Native
+    {
+        [DllImport("kernel32.dll")]
+        public static extern uint SetErrorMode(uint mode);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct BasicLimitInformation
+        {
+            public long PerProcessUserTimeLimit;
+            public long PerJobUserTimeLimit;
+            public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize;
+            public UIntPtr MaximumWorkingSetSize;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass;
+            public uint SchedulingClass;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct ExtendedLimitInformation
+        {
+            public BasicLimitInformation BasicLimitInformation;
+            public ulong ReadOperationCount;
+            public ulong WriteOperationCount;
+            public ulong OtherOperationCount;
+            public ulong ReadTransferCount;
+            public ulong WriteTransferCount;
+            public ulong OtherTransferCount;
+            public UIntPtr ProcessMemoryLimit;
+            public UIntPtr JobMemoryLimit;
+            public UIntPtr PeakProcessMemoryUsed;
+            public UIntPtr PeakJobMemoryUsed;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr CreateJobObjectW(IntPtr attributes, IntPtr name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref ExtendedLimitInformation info, int length);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool QueryInformationJobObject(IntPtr job, int infoClass, IntPtr info, int length, IntPtr returnLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool result);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool CloseHandle(IntPtr handle);
+
+        // A job holding `process` that ends every process in it when its last handle closes, so
+        // also when preflight itself ends. IntPtr.Zero when that fails.
+        public static IntPtr CreateJob(IntPtr process)
+        {
+            IntPtr job = CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
+            if (job == IntPtr.Zero) return IntPtr.Zero;
+            ExtendedLimitInformation info = new ExtendedLimitInformation();
+            info.BasicLimitInformation.LimitFlags = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            if (!SetInformationJobObject(job, 9, ref info, Marshal.SizeOf(typeof(ExtendedLimitInformation))) ||
+                !AssignProcessToJobObject(job, process))
+            {
+                CloseHandle(job);
+                return IntPtr.Zero;
+            }
+            return job;
+        }
+
+        // The ids of the running processes in the job and in the jobs nested in it.
+        public static int[] JobProcessIds(IntPtr job)
+        {
+            const int capacity = 1024;
+            int size = 8 + IntPtr.Size * capacity;
+            IntPtr buffer = Marshal.AllocHGlobal(size);
+            try
+            {
+                // JOBOBJECT_BASIC_PROCESS_ID_LIST: two DWORD counts, then the ids as ULONG_PTRs.
+                if (!QueryInformationJobObject(job, 3, buffer, size, IntPtr.Zero)) return new int[0];
+                int count = Math.Min(Marshal.ReadInt32(buffer, 4), capacity);
+                int[] ids = new int[count];
+                for (int i = 0; i < count; i++) ids[i] = (int)Marshal.ReadIntPtr(buffer, 8 + IntPtr.Size * i).ToInt64();
+                return ids;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        public static bool InJob(IntPtr process, IntPtr job)
+        {
+            bool result;
+            return IsProcessInJob(process, job, out result) && result;
+        }
+
+        public static bool TerminateJob(IntPtr job)
+        {
+            return TerminateJobObject(job, 1);
+        }
+
+        public static void CloseJob(IntPtr job)
+        {
+            CloseHandle(job);
+        }
+    }
+}
+'@
+
+# Loads the helpers above. A failure leaves $NativeReady false: preflight then runs without them.
+function Initialize-Native {
+    if (-not $OnWindows) { return }
+    try {
+        if ($null -eq ('KytyPreflight.Native' -as [type])) { Add-Type -TypeDefinition $NativeCode -ErrorAction Stop }
+        $script:NativeReady = $true
+    } catch {
+        Add-Problem "could not load preflight's Windows helpers ($($_.Exception.Message)): a crashing test may wait for its time limit, and closing this window may leave a test running"
+    }
+}
+
+# The processes in a child's job, each with a handle open: while one is open, Windows does not give
+# the process's id to another one.
+function Get-JobProcesses($Job) {
+    $list = New-Object System.Collections.Generic.List[object]
+    foreach ($id in @([KytyPreflight.Native]::JobProcessIds($Job))) {
+        try {
+            $process = [System.Diagnostics.Process]::GetProcessById($id)
+            if ([KytyPreflight.Native]::InJob($process.Handle, $Job)) { $list.Add($process) } else { $process.Dispose() }
+        } catch { }
+    }
+    return $list.ToArray()
+}
+
 # --- Child processes ------------------------------------------------------------------------------
 
 # One argument, quoted the way the Windows C runtime (and .NET on Linux) splits a command line.
@@ -386,7 +533,7 @@ function Invoke-Capture([string]$File, [string[]]$Arguments, [int]$TimeoutSecond
         if ($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds) { $exited = $false; break }
     }
     if (-not $exited -and -not $NoStop) {
-        [void](Stop-Child ([pscustomobject]@{ Process = $process; Id = $process.Id; Started = $started }))
+        [void](Stop-Child ([pscustomobject]@{ Process = $process; Id = $process.Id; Job = $null; Started = $started }))
     }
     $text = ''
     if ($out.Wait(5000)) { $text += $out.Result }
@@ -416,9 +563,20 @@ function Start-Child([string]$File, [string[]]$Arguments, [string]$WorkingDirect
         Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue
         throw
     }
+    # The child and whatever it starts go into a job that Windows ends with preflight: closing this
+    # window then stops a running test too, instead of leaving it on the GPU. Without one, Stop-Child
+    # falls back to taskkill.
+    $job = $null
+    if ($NativeReady) {
+        try {
+            $handle = [KytyPreflight.Native]::CreateJob($process.Handle)
+            if ($handle -ne [IntPtr]::Zero) { $job = $handle }
+        } catch { }
+    }
     $child = [pscustomobject]@{
         Process = $process
         Id = $process.Id
+        Job = $job
         Started = Get-Date
         Clock = [System.Diagnostics.Stopwatch]::StartNew()
         Log = $LogPath
@@ -474,13 +632,37 @@ function Get-TreeIds([int[]]$Known, [datetime]$Since) {
     return $ids.ToArray()
 }
 
-# Stops a child and everything it started (taskkill /T /F; .NET Framework has no Kill(true)). With
-# $GraceSeconds it first asks the windows to close, so that the emulator shuts down and writes out
-# its logs. Returns 'closed' or 'killed'.
+# Stops a child and everything it started: the processes in its job, or without one, taskkill /T /F
+# (.NET Framework has no Kill(true)). With $GraceSeconds it first asks the windows to close, so that
+# the emulator shuts down and writes out its logs. Returns 'closed' or 'killed'.
 function Stop-Child($Child, [int]$GraceSeconds = 0, [int[]]$Known = @()) {
     if (-not $OnWindows) {
         # .NET Core: the process and its descendants.
         try { $Child.Process.Kill($true) } catch { }
+        [void]$Child.Process.WaitForExit(10000)
+        return 'killed'
+    }
+    if ($null -ne $Child.Job) {
+        # Only processes in the job: an id taken over by another program is never touched.
+        if ($GraceSeconds -gt 0) {
+            $asked = $false
+            $processes = @(Get-JobProcesses $Child.Job)
+            foreach ($process in $processes) {
+                try { if ($process.MainWindowHandle -ne [IntPtr]::Zero -and $process.CloseMainWindow()) { $asked = $true } } catch { }
+                $process.Dispose()
+            }
+            if ($asked) {
+                $clock = [System.Diagnostics.Stopwatch]::StartNew()
+                while ($clock.Elapsed.TotalSeconds -lt $GraceSeconds) {
+                    if (@([KytyPreflight.Native]::JobProcessIds($Child.Job)).Count -eq 0) {
+                        [void]$Child.Process.WaitForExit(5000)
+                        return 'closed'
+                    }
+                    Start-Sleep -Milliseconds 250
+                }
+            }
+        }
+        [void][KytyPreflight.Native]::TerminateJob($Child.Job)
         [void]$Child.Process.WaitForExit(10000)
         return 'killed'
     }
@@ -520,6 +702,11 @@ function Stop-Child($Child, [int]$GraceSeconds = 0, [int[]]$Known = @()) {
 # After the process exited or was stopped: the rest of its output, with stderr after stdout in the
 # same log. Returns the exit code, or $null when the process still runs.
 function Complete-Child($Child) {
+    # Whatever the child left running ends with its job, and so lets go of the output pipes.
+    if ($null -ne $Child.Job) {
+        try { [KytyPreflight.Native]::CloseJob($Child.Job) } catch { }
+        $Child.Job = $null
+    }
     foreach ($copy in $Child.Copies) { try { [void]$copy.Wait(5000) } catch { } }
     foreach ($stream in $Child.Streams) { try { $stream.Dispose() } catch { } }
     $script:Running = $null
@@ -1252,16 +1439,12 @@ function Invoke-Preflight([object[]]$Arguments) {
     if ($opts.Game -and (Test-Path -LiteralPath $game -PathType Container) -and -not (Test-Path -LiteralPath (Join-Path $game 'eboot.bin'))) {
         Add-Problem "$game has no eboot.bin: the emulator will probably not load it"
     }
-    if ($OnWindows) {
+    Initialize-Native
+    if ($NativeReady) {
         # SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX. Child processes
         # inherit it: a missing DLL or a crash then ends the process with its status code, instead
         # of opening a dialog box that waits for a click until the time limit.
-        try {
-            Add-Type -Namespace KytyPreflight -Name NativeMethods -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint mode);' -ErrorAction Stop
-            [void][KytyPreflight.NativeMethods]::SetErrorMode(0x8003)
-        } catch {
-            Add-Problem "could not turn off Windows error dialogs ($($_.Exception.Message)); a crashing test may wait for its time limit"
-        }
+        [void][KytyPreflight.Native]::SetErrorMode(0x8003)
     }
     Say 'Collecting system information ...'
     $system = @(Get-SystemInfo)

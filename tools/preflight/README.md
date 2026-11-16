@@ -47,7 +47,9 @@ That runs only the four quick tests: device creation and the GPU tests of this b
 A couple of minutes.
 
 To stop early, press **Ctrl+C** in the preflight window. The tests that already ran still get
-zipped. Closing the window with the X skips the zip.
+zipped. Don't close the window with the X: that stops the running test too, but no zip gets
+written. If that happened, or the PC restarted, zip the `kyty-preflight-<your PC>-<date>` folder
+yourself (right-click it, **Send to**, **Compressed (zipped) folder**) and send that.
 
 ## Launch day: the GTA 6 dump
 
