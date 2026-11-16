@@ -218,6 +218,13 @@ copies the GPU test group out of the build tree with only the DLLs each test imp
   then collects the logs. `-BootSeconds 0` keeps the game running until its window closes. A boot
   that didn't crash is `RAN`, never `PASS`, because a game stuck on a black screen keeps running
   too. Paths inside `-ExtraArgs` must be full paths, since the emulator runs in the results folder.
+- Game boots share one shader cache, `%LOCALAPPDATA%\KytyPS5\preflight-cache\_PipelineCache`,
+  linked into the run folder for the boot only. Boots of the same build reuse its translated
+  shaders. A new build ignores them, because the store records the build, but it still reuses the
+  driver's pipeline cache. After a boot whose log shows a rejected compute pipeline or a crash
+  while loading the cache, preflight renames the store to `.shaders.unusable`, so the next boot
+  cannot die on it. Boots with `--shader-validation` or a shader log leave the store out, because
+  stored shaders skip both. `-ColdCache` turns the whole thing off for a clean comparison.
 - The Windows build uses the DLL version of the MSVC runtime. Before it runs anything, preflight
   checks every packaged executable's imports. It names the VC++ redistributable when a DLL is
   missing or when `msvcp140.dll` is older than the toolset that built the package (14.51 in CI).
@@ -265,6 +272,7 @@ Read this before relying on anything above.
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
 | gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
 | Preflight package | In CI, 13 CI-script tests and 13 preflight tests pass, the preflight ones under pwsh 7.6.10. All three Windows PowerShell 5.1 smoke steps pass. The packaged tests load outside the build tree: `device_creation` fails at the hidden Vulkan window, as it does under ctest on a runner with no GPU. `-Game` on an empty folder reports FAIL for imports and boot and still writes its zip. A hung test gets stopped at 5 s with its child. On that runner `kernel_file_system` ends with 0xC0000028 (bad stack while unwinding an exception) where Linux fails cleanly, so watch for it on Karim's PC. Nothing has run on a PC with a GPU yet. |
+| Preflight shader cache | Locally, 22 preflight tests pass under pwsh 7.6.9 on Linux, the persistent path running through a symbolic link that stands in for the junction. The next CI run's Windows PowerShell 5.1 steps are the first real check of the junction, the lock and the link removal. How much time a warm boot saves is unmeasured. |
 | GPU group time limit (run 43939026905, `00f3b3b0`) | Green. Once the probe finds no device, the Linux GPU step takes 8.4 minutes instead of 54, and the Linux job 27 minutes instead of 70. The 3 device-free tests still pass on both runners. |
 | NID tools | 68 tests pass in CI and locally. The triage tool's output without `--nid-names` is byte-identical to before on all 99 fixture outputs. Not yet run on Windows. |
 | GPU behaviour, NVIDIA behaviour, VRAM use | Unverified on hardware. The machine that did this work has no usable GPU, and CI runners have none either. |
@@ -332,7 +340,9 @@ Then, depending on what happens:
 - If the first boot freezes on a loading screen, it is probably compiling pipelines. Keep
   `--pipeline-precompile ask` (the default) and wait. There is no GTA 6 pipeline manifest, so
   the first boot compiles everything cold. Record one with `--record-pipeline-manifest` and copy
-  `_PipelineCache/<ID>_<VER>.kpm` into `assets/pipelines/` for later runs.
+  `_PipelineCache/<ID>_<VER>.kpm` into `assets/pipelines/` for later runs. Under preflight,
+  `_PipelineCache` is `%LOCALAPPDATA%\KytyPS5\preflight-cache\_PipelineCache`, and every later
+  preflight boot of every build loads a manifest recorded there.
 - Start with `--native-raytracing` off, as the preset has it, then compare once the game is
   in-game: add `--native-raytracing` after the preset and compare fps and the `VRAM:` lines. On
   GTA V it took Fidelity on an RTX 3090 from about 13 fps to 20-30 (capped at 30). GTA 6 has
@@ -344,7 +354,9 @@ Then, depending on what happens:
   from one fixed folder, for example the extracted artifact:
   `kyty_emulator --game "D:\PS5\GTA6" --preset rtx3050 --title-profile gta6 --shader-cache --session-log auto`.
   Saves (`_SaveData`) and caches (`_PipelineCache`) live in the working folder, so the same
-  folder keeps your progress and the compiled shaders. Each preflight run uses a new folder.
+  folder keeps your progress and the compiled shaders. Preflight is different. Each run gets a new
+  folder, so saves don't carry over, and only its shader cache is shared between runs. A folder
+  you play from has its own cache and starts cold the first time.
 - Use the NVIDIA Studio or Game Ready driver from 2026, and turn Resizable BAR on in the BIOS if
   the board supports it.
 - If the game ran on an earlier build and broke on this one, rerun with `--preset safe`. If that
@@ -358,7 +370,8 @@ Then, depending on what happens:
 2. **Import report and first boot.** With the decrypted dump, from a command prompt in
    `preflight`, run `preflight.cmd -Game "D:\PS5\GTA6" -ExtraArgs "--title-profile gta6"`. It
    writes the `--dump-imports` report, which needs no GPU, boots the game for 5 minutes with
-   `--preset rtx3050` and a session log, and zips everything. Without preflight, run
+   `--preset rtx3050`, a session log and the shared shader cache, and zips everything. The first
+   boot compiles cold. Repeat boots of the same build start warm. Without preflight, run
    `kyty_emulator --game <path> --dump-imports imports.txt`, boot with
    `--preset rtx3050 --session-log auto`, and zip the logs with `tools/triage/collect_logs.ps1`.
 3. **Name and triage.** On the machine doing the fixes, build the names file once with
