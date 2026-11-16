@@ -18,13 +18,19 @@
                        -ExtraArgs "--title-profile gta6 --nid-names D:\PS5\names.txt". Give paths
                        in full: the emulator runs in the results folder
   -WithTests           with -Game, run the GPU tests too (before the boot; -Quick and -Only apply)
+  -ColdCache           with -Game, boot without the shader cache that earlier boots left in
+                       %LOCALAPPDATA%\KytyPS5\preflight-cache, and without --shader-cache: every
+                       shader compiles, as on a first boot. For comparing; the cache stays as it is
   -Emulator <path>     the kyty_emulator.exe to use (default: the one in the folder above this one)
   -OutDir <folder>     where the results go (default: this script's folder)
 
   Results: <OutDir>\kyty-preflight-<computer>-<yyyyMMdd-HHmmss>\ and a .zip of it next to it.
   Exit code: 0 no step failed, 1 a test or emulator step failed, 2 the script could not run. A
   boot that did not crash is RAN, not PASS: preflight cannot tell whether the game works.
-  Nothing needs administrator rights. Nothing is written outside -OutDir except the temp folder.
+  Nothing needs administrator rights. Nothing is written outside -OutDir except the temp folder
+  and the shader cache, %LOCALAPPDATA%\KytyPS5\preflight-cache. During the boot,
+  emulator\_PipelineCache links to it (a junction), and preflight removes the link afterwards. A
+  game boot started while another one runs gets a cache folder of its own.
 #>
 
 # There is no param() block: the arguments are parsed below. A PowerShell binding error (an unknown
@@ -45,6 +51,7 @@ $Steps = New-Object System.Collections.Generic.List[object]
 $Problems = New-Object System.Collections.Generic.List[string]
 $SystemData = [ordered]@{}
 $Package = [ordered]@{}
+$Cache = $null          # the boot's shader cache (Initialize-Cache), for the summary
 $Mode = 'tests'
 $Options = $null
 $RunDir = $null
@@ -238,7 +245,7 @@ function New-UsageError([string]$Message) {
 
 function Show-Usage {
     Say 'Usage: preflight.cmd [-Quick | -Only <test,...>] [-OutDir <folder>]'
-    Say '       preflight.cmd -Game <dump folder> [-BootSeconds <n>] [-ExtraArgs "<emulator options>"]'
+    Say '       preflight.cmd -Game <dump folder> [-BootSeconds <n>] [-ExtraArgs "<emulator options>"] [-ColdCache]'
     Say '                     [-WithTests [-Quick | -Only <test,...>]] [-Emulator <kyty_emulator.exe>] [-OutDir <folder>]'
     Say 'README.md next to this script explains each option.'
 }
@@ -287,14 +294,14 @@ function Get-ScriptArguments([object[]]$Fallback) {
 function Read-Arguments([object[]]$List) {
     $kinds = [ordered]@{
         Game = 'value'; Emulator = 'value'; OutDir = 'value'; BootSeconds = 'value'
-        Only = 'list'; ExtraArgs = 'list'; Quick = 'switch'; WithTests = 'switch'; Help = 'switch'
+        Only = 'list'; ExtraArgs = 'list'; Quick = 'switch'; WithTests = 'switch'; ColdCache = 'switch'; Help = 'switch'
     }
     $names = @($kinds.Keys)
     $result = @{
         Game = $null; Emulator = $null; OutDir = $null; BootSeconds = $null
         Only = (New-Object System.Collections.Generic.List[string])
         ExtraArgs = (New-Object System.Collections.Generic.List[string])
-        Quick = $false; WithTests = $false; Help = $false
+        Quick = $false; WithTests = $false; ColdCache = $false; Help = $false
     }
     $i = 0
     while ($i -lt $List.Count) {
@@ -1002,6 +1009,333 @@ function Test-MsvcRuntime([string[]]$MissingDlls) {
     }
 }
 
+# --- Shader cache ---------------------------------------------------------------------------------
+
+# The emulator keeps _PipelineCache in its working folder: the driver's pipeline cache
+# (<title>.bin), the shaders that --shader-cache stores (<title>.shaders) and the pipeline manifests
+# (.kpm). For the boot, emulator\_PipelineCache becomes a junction to one folder per user, so that
+# the next boot loads what this one compiled; after the boot the junction goes. The emulator
+# ignores the stored shaders of another build by itself (the store's header holds the executable's
+# write time); the driver's cache depends only on the GPU and its driver, so it helps a new build
+# too.
+#
+# The emulator loads the store before the game starts (PipelineCache::WarmUp) and creates a
+# pipeline for every stored compute shader there, where a pipeline the driver rejects ends the
+# emulator. A compute shader is stored when it compiles, before its pipeline exists: a pipeline
+# that fails once would fail every boot after it in WarmUp. So after a boot whose log shows such a
+# failure, or a crash during WarmUp, preflight sets the store aside (Complete-Cache).
+
+$CacheLock = $null          # preflight-cache\boot.lock, held open while a boot uses the cache
+$CacheFreeWarning = 10GB    # less free space than this on the cache's drive gets a warning
+# What Complete-Cache looks for in session.log: the emulator's lines about its caches, and those
+# that show a compute pipeline the driver rejected (a fatal error, a pipeline helper's fallback, a
+# dropped manifest record).
+$CacheLinePattern = 'Shader cache: |Vulkan pipeline cache: '
+$ComputeFailurePattern = 'vkCreateComputePipelines failed|Pipeline helpers: cs [0-9a-f]+: |Pipeline manifest: dropping compute pipeline'
+
+function Format-Bytes([long]$Bytes) {
+    if ($Bytes -ge 1GB) { return [string]::Format($Invariant, '{0:0.00} GiB', $Bytes / 1GB) }
+    if ($Bytes -ge 1MB) { return [string]::Format($Invariant, '{0:0.0} MiB', $Bytes / 1MB) }
+    if ($Bytes -ge 1KB) { return [string]::Format($Invariant, '{0:0.0} KiB', $Bytes / 1KB) }
+    return "$Bytes bytes"
+}
+
+# The files below $Path and their total size, without going into junctions or symbolic links. No
+# files when the folder does not exist, and an error instead when it cannot be read.
+function Measure-Folder([string]$Path) {
+    $size = [ordered]@{ files = 0; bytes = [long]0 }
+    try {
+        if (Test-Path -LiteralPath $Path -PathType Container) {
+            $files = New-Object System.Collections.Generic.List[object]
+            Find-Files $Path $files (New-Object System.Collections.Generic.List[object])
+            $bytes = [long]0
+            foreach ($file in $files) { $bytes += $file.Length }
+            $size.files = $files.Count
+            $size.bytes = $bytes
+        }
+    } catch {
+        $size.error = ([string]$_.Exception.Message -replace '\s+', ' ').Trim()
+    }
+    return $size
+}
+
+function Format-FolderSize($Size) {
+    if ($null -eq $Size) { return 'not measured' }
+    if ($Size.Contains('error')) { return "unknown ($($Size.error))" }
+    if ($Size.files -eq 0) { return 'no files' }
+    $plural = 's'
+    if ($Size.files -eq 1) { $plural = '' }
+    return "$($Size.files) file$plural ($(Format-Bytes $Size.bytes))"
+}
+
+# The kind of link the boot's _PipelineCache becomes. pwsh off Windows makes no junction, so there
+# the tests ask for a symbolic link (KYTY_PREFLIGHT_TEST_LINK=SymbolicLink) to run the rest of the
+# persistent cache. Windows always gets a junction.
+function Get-LinkType {
+    if (-not $OnWindows -and $env:KYTY_PREFLIGHT_TEST_LINK -eq 'SymbolicLink') { return 'SymbolicLink' }
+    return 'Junction'
+}
+
+function Test-Link([string]$Path, [string]$Type) {
+    try { return [string](Get-Item -LiteralPath $Path -Force -ErrorAction Stop).LinkType -eq $Type } catch { return $false }
+}
+
+# Why the boot must not load stored shaders, or $null. The emulator checks (--shader-validation) and
+# logs (a --shader-log-direction other than Silent) only the shaders it translates, and it loads
+# stored ones without translating them; neither option is in the store's header.
+function Get-StoreConflict([string[]]$ExtraArgs) {
+    $words = @($ExtraArgs)
+    $validation = $false
+    $direction = 'Silent'
+    for ($i = 0; $i -lt $words.Count; $i++) {
+        if ($words[$i] -ceq '--shader-validation') { $validation = $true }
+        if ($words[$i] -ceq '--shader-log-direction' -and $i + 1 -lt $words.Count) { $direction = $words[$i + 1] }
+    }
+    if ($validation) { return '--shader-validation checks only the shaders a boot translates' }
+    if ($direction -ne 'Silent') { return "--shader-log-direction $direction logs only the shaders a boot translates" }
+    return $null
+}
+
+function Close-CacheLock {
+    if ($null -ne $script:CacheLock) {
+        try { $script:CacheLock.Dispose() } catch { }
+        $script:CacheLock = $null
+    }
+}
+
+# Sets up the boot's _PipelineCache in $EmulatorDir and returns the emulator options that go with
+# it. Never fails the run: without the junction, the boot gets a folder of its own and compiles
+# every shader, as it did before preflight kept a cache.
+function Initialize-Cache([string]$EmulatorDir, [bool]$Cold, [string[]]$ExtraArgs) {
+    $folder = Join-Path $EmulatorDir '_PipelineCache'
+    $script:Cache = [ordered]@{
+        mode = 'cold'; path = $folder; reason = $null; shader_cache = (-not $Cold); shader_cache_reason = $null
+        link = $null; free_bytes = $null; before = $null; after = $null
+        emulator = @(); failures = @(); warm_up = $null; set_aside = @()
+    }
+    if ($Cold) {
+        $Cache.reason = '-ColdCache'
+        $Cache.before = Measure-Folder $folder
+        Say 'Shader cache: none (-ColdCache). This boot compiles every shader.' 'DarkGray'
+        return
+    }
+    $type = Get-LinkType
+    $base = $null
+    try {
+        if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is not set' }
+        $base = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'KytyPS5', 'preflight-cache')
+        $root = Join-Path $base '_PipelineCache'
+        New-Item -ItemType Directory -Force -Path $root | Out-Null
+        # One boot at a time: two would append to the same store, and a torn record loses the rest.
+        # The lock goes with preflight, however preflight ends.
+        try {
+            $script:CacheLock = [System.IO.File]::Open((Join-Path $base 'boot.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+        } catch {
+            $inner = $_.Exception
+            while ($null -ne $inner.InnerException) { $inner = $inner.InnerException }
+            throw "could not lock the shader cache, another game boot may be using it: $($inner.Message)"
+        }
+        if (Test-Path -LiteralPath $folder) {
+            # Without recursion, Directory.Delete removes an empty folder and nothing else.
+            try { [System.IO.Directory]::Delete($folder, $false) } catch { throw "$folder is already there and not empty" }
+        }
+        New-Item -ItemType $type -Path $folder -Target $root | Out-Null
+        # pwsh on Linux makes no junction and reports nothing.
+        if (-not (Test-Link $folder $type)) { throw 'New-Item made no junction: junctions need Windows and an NTFS drive' }
+        $target = [string]@((Get-Item -LiteralPath $folder -Force).Target)[0]
+        $Cache.link = [ordered]@{ type = $type; path = $folder; target = ($target -replace '^\\(\?\?|\\\?)\\', ''); verified = $false; removed = $false }
+        # A link can be there and still not lead into the cache: a file written through it must
+        # turn up there.
+        $probe = 'preflight-probe.tmp'
+        [System.IO.File]::WriteAllText((Join-Path $folder $probe), 'preflight')
+        $arrived = [System.IO.File]::Exists((Join-Path $root $probe))
+        [System.IO.File]::Delete((Join-Path $folder $probe))
+        if (-not $arrived) { throw "a file written through $folder did not turn up in $root" }
+        $Cache.link.verified = $true
+        $Cache.mode = 'persistent'
+        $Cache.path = $root
+    } catch {
+        $Cache.mode = 'fallback'
+        $Cache.reason = ([string]$_.Exception.Message -replace '\s+', ' ').Trim()
+        $Cache.link = $null
+        Close-CacheLock
+        # A link made above that failed a check goes, so that the boot does not write through it.
+        # Without recursion, Directory.Delete removes only the link, whatever its target holds.
+        try {
+            if ((Test-Path -LiteralPath $folder) -and ((Get-Item -LiteralPath $folder -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                [System.IO.Directory]::Delete($folder, $false)
+            }
+        } catch { }
+        try { New-Item -ItemType Directory -Force -Path $folder | Out-Null } catch { }
+    }
+    $Cache.before = Measure-Folder $Cache.path
+    if ($Cache.mode -eq 'persistent') {
+        try { $Cache.free_bytes = [long](New-Object System.IO.DriveInfo ([System.IO.Path]::GetPathRoot($Cache.path))).AvailableFreeSpace } catch { }
+    }
+    if ($Cache.mode -eq 'fallback') {
+        Say "  ! No shader cache from earlier boots ($($Cache.reason)). This boot compiles every shader." 'Yellow'
+    } elseif ((Format-FolderSize $Cache.before) -eq 'no files') {
+        Say "Shader cache: $($Cache.path), empty. This boot fills it for the next one." 'DarkGray'
+    } else {
+        Say "Shader cache: $($Cache.path), $(Format-FolderSize $Cache.before) from earlier boots." 'DarkGray'
+    }
+    # The cache stays in use: the fallback would write the same files into the results folder,
+    # which is usually on the same drive.
+    if ($null -ne $Cache.free_bytes -and $Cache.free_bytes -lt $CacheFreeWarning) {
+        Add-Problem "only $(Format-Bytes $Cache.free_bytes) free on the shader cache's drive, and the cache holds $(Format-FolderSize $Cache.before). A full drive can make the boot fail: free some space, or delete $base"
+    }
+    $conflict = Get-StoreConflict $ExtraArgs
+    if ($null -ne $conflict) {
+        # The driver's pipeline cache still goes through the link: it skips no translation.
+        $Cache.shader_cache = $false
+        $Cache.shader_cache_reason = $conflict
+        Say "Shader cache: this boot leaves out --shader-cache, since $conflict." 'DarkGray'
+        return
+    }
+    return '--shader-cache'
+}
+
+# The lines of a text file that match $Pattern, read in blocks (a log can be large), also while
+# another process still has the file open.
+function Find-Lines([string]$Path, [string]$Pattern) {
+    $regex = New-Object System.Text.RegularExpressions.Regex("(?m)^[^\r\n]*?(?:$Pattern)[^\r\n]*")
+    $found = New-Object System.Collections.Generic.List[string]
+    $stream = [System.IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite, Delete')
+    try {
+        $reader = New-Object System.IO.StreamReader($stream, $Utf8)
+        $buffer = New-Object char[] 1048576
+        $rest = ''
+        while (($read = $reader.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $text = $rest + [string]::new($buffer, 0, $read)
+            # Up to the last line break; the line after it waits for the next block, unless it is
+            # longer than 4 MB.
+            $end = $text.LastIndexOf([char]10)
+            if ($end -lt 0) {
+                if ($text.Length -lt 4MB) { $rest = $text; continue }
+                $end = $text.Length - 1
+            }
+            foreach ($match in $regex.Matches($text.Substring(0, $end + 1))) { $found.Add($match.Value) }
+            $rest = $text.Substring($end + 1)
+        }
+        foreach ($match in $regex.Matches($rest)) { $found.Add($match.Value) }
+    } finally { $stream.Dispose() }
+    return $found.ToArray()
+}
+
+# What the emulator wrote about its caches during the boot: its own lines (they say what it loaded:
+# a new build loads none of the shaders an older one stored), the lines that show a rejected compute
+# pipeline, the stores WarmUp opened, and whether WarmUp finished. From session.log, or without it
+# from emulator-boot.log, which has the same lines among the rest of stdout.
+function Read-CacheLines {
+    $stores = New-Object System.Collections.Generic.List[string]
+    $log = Join-Path $RunDir 'session.log'
+    if (-not (Test-Path -LiteralPath $log -PathType Leaf)) { $log = Join-Path $RunDir 'emulator-boot.log' }
+    if (-not (Test-Path -LiteralPath $log -PathType Leaf)) { return @() }
+    $shown = New-Object System.Collections.Generic.List[string]
+    $failures = New-Object System.Collections.Generic.List[string]
+    $warm = $null
+    foreach ($line in @(Find-Lines $log "$CacheLinePattern|$ComputeFailurePattern")) {
+        $text = $line.Trim()
+        if ($text.Length -gt 300) { $text = $text.Substring(0, 300) + '...' }
+        if ($text -match $ComputeFailurePattern) {
+            if ($failures.Count -lt 5) { $failures.Add($text) }
+            continue
+        }
+        # WarmUp names the store at its start and counts what it loaded at its end. A LoadExec
+        # successor appends a WarmUp of its own: the last one counts.
+        if ($text -match 'Shader cache: compiling shaders and pipelines from (?:.*[\\/])?([A-Za-z0-9_-]+\.shaders) \(') {
+            $warm = 'unfinished'
+            if (-not $stores.Contains($Matches[1])) { $stores.Add($Matches[1]) }
+        } elseif ($text -match 'Shader cache: loaded ' -and $null -ne $warm) {
+            $warm = 'finished'
+        }
+        # Written once a minute; the size after the boot says the same.
+        if ($text -match 'Vulkan pipeline cache: saved ') { continue }
+        if ($shown.Count -lt 12 -and -not $shown.Contains($text)) { $shown.Add($text) }
+    }
+    # A boot that ended by itself with an error before WarmUp's last line crashed in WarmUp; one
+    # that preflight or Ctrl+C stopped there was still compiling.
+    $boot = @($Steps | Where-Object { $_.kind -eq 'boot' })
+    if ($warm -eq 'unfinished' -and $boot.Count -gt 0 -and $boot[0].status -eq 'FAIL') { $warm = 'crashed' }
+    $Cache.emulator = $shown.ToArray()
+    $Cache.failures = $failures.ToArray()
+    $Cache.warm_up = $warm
+    return $stores.ToArray()
+}
+
+# Renames the stores in $Names to <name>.unusable (replacing an older one), so that the next boot
+# does not compile them again in WarmUp. The driver's pipeline cache stays: it holds only pipelines
+# that the driver created.
+function Set-StoreAside([string[]]$Names, [string]$Why) {
+    foreach ($name in @($Names)) {
+        $path = Join-Path $Cache.path $name
+        if (-not [System.IO.File]::Exists($path)) { continue }
+        try {
+            $aside = "$path.unusable"
+            if ([System.IO.File]::Exists($aside)) { [System.IO.File]::Delete($aside) }
+            [System.IO.File]::Move($path, $aside)
+            $Cache.set_aside += "$name.unusable"
+            Add-Problem "$Why. preflight set the stored shaders aside ($name is now $name.unusable), so the next boot compiles them again"
+        } catch {
+            Add-Problem "$Why, and preflight could not set $path aside ($($_.Exception.Message)). Delete it before the next boot"
+        }
+    }
+}
+
+# Removes emulator\_PipelineCache after the boot, only the link (Directory.Delete without recursion
+# leaves its target alone), so that nothing that goes through links in an old results folder
+# (Windows PowerShell 5.1's Remove-Item -Recurse, an archiver) reaches the cache.
+function Remove-CacheLink {
+    $link = $Cache.link
+    if ($null -eq $link -or $link.removed) { return }
+    try {
+        if (Test-Link $link.path $link.type) { [System.IO.Directory]::Delete($link.path, $false) }
+        $link.removed = -not (Test-Path -LiteralPath $link.path)
+        if ($link.removed) {
+            Write-Text "$($link.path).txt" "During the boot, _PipelineCache here was a link to the shader cache in $($Cache.path). preflight removed the link after the boot; the cache is still there.$NewLine"
+        }
+    } catch {
+        Add-Problem "could not remove $($link.path), the link to the shader cache ($($_.Exception.Message)). Delete this results folder in Explorer, not with Remove-Item -Recurse, which would empty the cache"
+    }
+}
+
+# After the boot, once: here after the boot step, or in the finally block when Ctrl+C or an error
+# ended the boot. The cache's size, the emulator's lines about it, the store set aside when the
+# next boot would crash on it, and the link removed.
+function Complete-Cache {
+    if ($null -eq $Cache -or $null -eq $Cache.before -or $null -ne $Cache.after) { return }
+    $Cache.after = Measure-Folder $Cache.path
+    $stores = @()
+    try {
+        $stores = @(Read-CacheLines)
+    } catch {
+        $Problems.Add((Hide "could not read the emulator's shader cache lines: $($_.Exception.Message)"))
+    }
+    if ($Cache.mode -eq 'persistent') {
+        if (@($Cache.failures).Count -gt 0) {
+            Set-StoreAside $stores 'The driver rejected a compute pipeline, which the next boot would otherwise create again before the game starts'
+        } elseif ($Cache.warm_up -eq 'crashed') {
+            Set-StoreAside $stores 'The emulator crashed while it compiled the stored shaders, before the game started'
+        }
+        Remove-CacheLink
+    }
+    Close-CacheLock
+}
+
+# The cache in summary.txt: whether the boot started warm or cold, then the emulator's own lines,
+# which tell what it loaded.
+function Format-Cache {
+    $label = "cold, fallback ($($Cache.reason))"
+    if ($Cache.mode -eq 'persistent') { $label = "persistent, $($Cache.path)" }
+    if ($Cache.mode -eq 'cold') { $label = 'cold by request (-ColdCache)' }
+    if ($Cache.shader_cache_reason) { $label += ", without --shader-cache ($($Cache.shader_cache_reason))" }
+    $before = Format-FolderSize $Cache.before
+    if ($Cache.mode -eq 'persistent' -and $before -eq 'no files') { $before += ' (it compiled cold)' }
+    $lines = @("shader cache: $($label): $before before the boot, $(Format-FolderSize $Cache.after) after")
+    foreach ($line in @($Cache.emulator) + @($Cache.failures)) { $lines += "              | $line" }
+    return $lines
+}
+
 # --- Steps ----------------------------------------------------------------------------------------
 
 function Get-PackagePath([string]$PackageDir, [string]$Relative) {
@@ -1216,10 +1550,11 @@ function Invoke-Emulator($Step, [string]$Emulator, [string[]]$Arguments, [string
     return [pscustomobject]@{ Exited = $exited; Code = $code; Seconds = $elapsed; Stopped = $stopped }
 }
 
-function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [int]$BootSeconds,
+function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [int]$BootSeconds, [bool]$ColdCache,
                      [string]$Collect, $Manifest, [object[]]$Tests, [string]$PackageDir) {
     # The emulator's working folder: its _SaveData, _TempData and _kyty.txt go here, not next to
-    # the emulator. The zip leaves it out (collect_logs.ps1 takes _kyty.txt from it).
+    # the emulator, and for the boot its _PipelineCache links to the shader cache. The zip leaves
+    # it out (collect_logs.ps1 takes _kyty.txt from it).
     $cwd = Join-Path $RunDir 'emulator'
     New-Item -ItemType Directory -Force -Path $cwd | Out-Null
     $emulatorDir = Split-Path -Parent $Emulator
@@ -1258,13 +1593,17 @@ function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [in
     $boot = New-Step 'boot' 'boot'
     $boot.boot_seconds = $BootSeconds
     $sessionLog = Join-Path $RunDir 'session.log'
+    $cacheArgs = @(Initialize-Cache $cwd $ColdCache $ExtraArgs)
     if ($BootSeconds -gt 0) {
         Say "Booting the game for $BootSeconds s. Leave this window open; close the game window to stop early."
     } else {
         Say 'Booting the game. Play as long as you like, then close the game window (not this one).'
     }
     Say 'Boot ... ' -NoNewline
-    $arguments = @('--game', $Game, '--preset', 'rtx3050', '--session-log', $sessionLog) + $ExtraArgs
+    # A PC that restarts during the boot leaves the summary with the cache the boot started with.
+    Save-Progress
+    # --shader-cache before -ExtraArgs, so that a --no-shader-cache there wins.
+    $arguments = @('--game', $Game, '--preset', 'rtx3050', '--session-log', $sessionLog) + $cacheArgs + $ExtraArgs
     $r = Invoke-Emulator $boot $Emulator $arguments $cwd 'emulator-boot.log' $BootSeconds 15 -FollowRestarts
     # A boot that did not crash is RAN, not PASS: a game frozen on a black screen runs too, and
     # closing the game window ends the emulator with 0. Only session.log tells how far it got.
@@ -1286,6 +1625,8 @@ function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [in
         Say "FAIL ($($boot.detail))" 'Red'
         foreach ($line in @(Get-LastLines (Join-Path $RunDir 'emulator-boot.log') 2)) { Say "      $line" 'DarkGray' }
     }
+    # After the status: a boot that failed during WarmUp sets the store aside.
+    Complete-Cache
     Save-Progress
 
     $logs = New-Step 'collect' 'logs'
@@ -1348,38 +1689,72 @@ function Remove-ZipIdentifiers([string]$ZipPath) {
     } finally { $zip.Dispose() }
 }
 
-# Zips $Folder into $ZipPath under the folder's name, with forward slashes, leaving out the
-# top-level folders named in $Skip. Reads files that another process still has open.
-function Write-Zip([string]$Folder, [string]$ZipPath, [string[]]$Skip) {
+# Whether a folder is a junction or a symbolic link. Windows PowerShell 5.1's Get-ChildItem -Recurse
+# and Remove-Item -Recurse go through both into the target, and a game boot's
+# emulator\_PipelineCache is a junction to the shader cache. Other reparse points, such as
+# OneDrive's folders, count as plain folders.
+function Test-FolderLink($Item) {
+    if (-not $Item.PSIsContainer -or -not ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return $false }
+    try { $type = [string]$Item.LinkType } catch { return $true }
+    return $type -eq 'Junction' -or $type -eq 'SymbolicLink'
+}
+
+# Adds the files in $Folder and its subfolders to $Files, and the folder links it meets to $Links
+# without going into them. Leaves out the top-level folders named in $Skip.
+function Find-Files([string]$Folder, $Files, $Links, [string[]]$Skip = @()) {
+    foreach ($item in @(Get-ChildItem -LiteralPath $Folder -Force)) {
+        if (-not $item.PSIsContainer) {
+            $Files.Add($item)
+        } elseif ($Skip -notcontains $item.Name) {
+            if (Test-FolderLink $item) { $Links.Add($item) } else { Find-Files $item.FullName $Files $Links }
+        }
+    }
+}
+
+# Adds $File, which is in $Folder, to $Zip as $Base/<its path in $Folder>, with forward slashes.
+# Reads files that another process still has open.
+function Add-ZipFile($Zip, [string]$Base, [string]$Folder, $File) {
+    $relative = $File.FullName.Substring($Folder.Length).TrimStart('\', '/') -replace '\\', '/'
+    try {
+        $source = [System.IO.File]::Open($File.FullName, 'Open', 'Read', 'ReadWrite, Delete')
+    } catch {
+        Add-Problem "left out of the zip, could not read $($relative): $($_.Exception.Message)"
+        return
+    }
+    try {
+        $entry = $Zip.CreateEntry("$Base/$relative", [System.IO.Compression.CompressionLevel]::Optimal)
+        try { $entry.LastWriteTime = New-Object System.DateTimeOffset($File.LastWriteTime) } catch { }
+        $target = $entry.Open()
+        try { $source.CopyTo($target) } finally { $target.Dispose() }
+    } finally { $source.Dispose() }
+}
+
+# Zips $Folder into $ZipPath under the folder's name, leaving out the top-level folders named in
+# $Skip, and junctions and symbolic links anywhere. What it leaves out goes into $Problems. The
+# top-level files named in $Last go in last, after $Finish (which writes them) has run again when
+# that list grew, so that the summary in the zip names everything missing from it.
+function Write-Zip([string]$Folder, [string]$ZipPath, [string[]]$Skip, [string[]]$Last, [scriptblock]$Finish) {
     Initialize-Zip
     $base = Split-Path -Leaf $Folder
+    $known = $Problems.Count
     $files = New-Object System.Collections.Generic.List[object]
-    foreach ($item in @(Get-ChildItem -LiteralPath $Folder -Force)) {
-        if ($item.PSIsContainer) {
-            if ($Skip -contains $item.Name) { continue }
-            foreach ($file in @(Get-ChildItem -LiteralPath $item.FullName -Recurse -File -Force)) { $files.Add($file) }
-        } else {
-            $files.Add($item)
-        }
+    $links = New-Object System.Collections.Generic.List[object]
+    Find-Files $Folder $files $links $Skip
+    foreach ($link in $links) {
+        Add-Problem "left out of the zip, a junction or symbolic link: $($link.FullName.Substring($Folder.Length).TrimStart('\', '/'))"
     }
     $stream = [System.IO.File]::Open($ZipPath, 'CreateNew', 'ReadWrite', 'None')
     try {
         $zip = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Create, $true)
         try {
             foreach ($file in $files) {
-                $relative = $file.FullName.Substring($Folder.Length).TrimStart('\', '/') -replace '\\', '/'
-                try {
-                    $source = [System.IO.File]::Open($file.FullName, 'Open', 'Read', 'ReadWrite, Delete')
-                } catch {
-                    $Problems.Add((Hide "left out of the zip, could not read $($relative): $($_.Exception.Message)"))
-                    continue
-                }
-                try {
-                    $entry = $zip.CreateEntry("$base/$relative", [System.IO.Compression.CompressionLevel]::Optimal)
-                    try { $entry.LastWriteTime = New-Object System.DateTimeOffset($file.LastWriteTime) } catch { }
-                    $target = $entry.Open()
-                    try { $source.CopyTo($target) } finally { $target.Dispose() }
-                } finally { $source.Dispose() }
+                if ($Last -contains $file.FullName.Substring($Folder.Length).TrimStart('\', '/')) { continue }
+                Add-ZipFile $zip $base $Folder $file
+            }
+            if ($Problems.Count -ne $known -and $null -ne $Finish) { & $Finish }
+            foreach ($name in @($Last)) {
+                $path = Join-Path $Folder $name
+                if (Test-Path -LiteralPath $path -PathType Leaf) { Add-ZipFile $zip $base $Folder (Get-Item -LiteralPath $path -Force) }
             }
         } finally { $zip.Dispose() }
     } finally { $stream.Dispose() }
@@ -1405,6 +1780,7 @@ function Write-Summary([string]$Result) {
         $optionData.quick = $Options.Quick
         $optionData.only = @($Options.Only)
         $optionData.with_tests = $Options.WithTests
+        $optionData.cold_cache = $Options.ColdCache
         $optionData.emulator = $Options.Emulator
         $optionData.out_dir = $Options.OutDir
     }
@@ -1420,6 +1796,7 @@ function Write-Summary([string]$Result) {
         options = $optionData
         package = $Package
         system = $SystemData
+        cache = $Cache
         counts = $counts
         steps = $Steps.ToArray()
         problems = $Problems.ToArray()
@@ -1444,6 +1821,7 @@ function Write-Summary([string]$Result) {
             $lines.Add("gpu: $($gpu.name), driver $($gpu.driver)$vram")
         }
     }
+    if ($null -ne $Cache) { foreach ($line in @(Format-Cache)) { $lines.Add($line) } }
     if ($counts.Count -gt 0) { $lines.Add("steps: $((@($counts.Keys) | ForEach-Object { "$($counts[$_]) $_" }) -join ', ')") }
     $lines.Add('')
     foreach ($step in $Steps) {
@@ -1575,8 +1953,8 @@ function Invoke-Preflight([object[]]$Arguments) {
     Say $title 'Cyan'
     Say "Results: $script:RunDir"
     if ($CtrlCAsInput) { Say 'Ctrl+C stops early; what ran so far is still zipped.' }
-    if (-not $opts.Game -and ($null -ne $opts.BootSeconds -or $opts.ExtraArgs.Count -gt 0 -or $opts.Emulator -or $opts.WithTests)) {
-        Add-Problem '-BootSeconds, -ExtraArgs, -Emulator and -WithTests only work with -Game; running the GPU tests'
+    if (-not $opts.Game -and ($null -ne $opts.BootSeconds -or $opts.ExtraArgs.Count -gt 0 -or $opts.Emulator -or $opts.WithTests -or $opts.ColdCache)) {
+        Add-Problem '-BootSeconds, -ExtraArgs, -Emulator, -WithTests and -ColdCache only work with -Game; running the GPU tests'
     }
     if ($opts.Game -and -not $opts.WithTests -and ($opts.Quick -or $opts.Only.Count -gt 0)) {
         Add-Problem '-Quick and -Only pick GPU tests, which -Game runs only with -WithTests'
@@ -1606,7 +1984,7 @@ function Invoke-Preflight([object[]]$Arguments) {
     if ($opts.Game) {
         $tests = @()
         if ($runTests) { $tests = $selected }
-        Invoke-Game $emulator $game $opts.ExtraArgs.ToArray() $bootSeconds $collect $manifest $tests $packageDir
+        Invoke-Game $emulator $game $opts.ExtraArgs.ToArray() $bootSeconds $opts.ColdCache $collect $manifest $tests $packageDir
     } else {
         Invoke-Tests $manifest $selected $packageDir
     }
@@ -1655,6 +2033,7 @@ try {
             }
         } catch { }
     }
+    try { Complete-Cache } catch { }
     if ($null -ne $RunDir -and (Test-Path -LiteralPath $RunDir)) {
         $result = 'ERROR'
         $ran = @($Steps | Where-Object { $_.status -eq 'RAN' }).Count
@@ -1685,15 +2064,22 @@ try {
                 Say ''
                 Say $text $color
             }
-            Write-Summary $result
-            Write-Text (Join-Path $RunDir 'console.txt') $ConsoleText.ToString()
-            Write-Zip $RunDir $zipPath @('emulator')
+            $finish = {
+                Write-Summary $result
+                Write-Text (Join-Path $RunDir 'console.txt') $ConsoleText.ToString()
+            }
+            & $finish
+            Write-Zip $RunDir $zipPath @('emulator') @('summary.json', 'summary.txt', 'console.txt') $finish
             Say ''
             Say "Results: $zipPath" 'Cyan'
             Say 'Send this file to Claude' 'Cyan'
         } catch {
             Say "could not write the zip: $($_.Exception.Message)" 'Red'
-            Say "Send the folder $RunDir instead (zip it yourself)." 'Yellow'
+            # Not the emulator folder: save data, and in a run that ended during the boot the link to
+            # a shader cache of gigabytes.
+            $without = ''
+            if (Test-Path -LiteralPath (Join-Path $RunDir 'emulator')) { $without = ', without its emulator folder' }
+            Say "Send the folder $RunDir instead (zip it yourself$without)." 'Yellow'
             $ExitCode = 2
         }
     }

@@ -81,13 +81,55 @@ Preflight then does three things:
 1. **Import report.** The emulator loads `eboot.bin` and the `sce_module` PRX files, without the GPU
    and without running game code, and writes `imports.txt`: which functions the game needs that the
    emulator lacks. Seconds to a minute.
-2. **Boot.** It starts the game with `--preset rtx3050` and a session log, lets it run for 5 minutes,
-   then closes it. Leave the preflight window open. To play longer, add `-BootSeconds 0`: the game
-   then runs until you close the game window. A boot that didn't crash shows as `RAN`, not `PASS`:
-   a game stuck on a black screen also keeps running, so only the logs tell how far it got.
+2. **Boot.** It starts the game with `--preset rtx3050`, the shader cache and a session log, lets it
+   run for 5 minutes, then closes it. Leave the preflight window open. To play longer, add
+   `-BootSeconds 0`: the game then runs until you close the game window. A boot that didn't crash
+   shows as `RAN`, not `PASS`: a game stuck on a black screen also keeps running, so only the logs
+   tell how far it got.
 3. **Logs.** It collects the emulator's logs and zips everything.
 
 Send the zip it prints, especially if the game crashed: the zip is how the crash gets fixed.
+
+If the window got closed or the PC restarted during a boot, no zip gets written. Zip the results
+folder yourself, without its `emulator` folder. Open the results folder, select everything except
+`emulator`, right-click, and choose **Send to**, **Compressed (zipped) folder**.
+
+## The shader cache
+
+The first boot of a game compiles every shader, which can take minutes. Preflight keeps what a boot
+compiled in `%LOCALAPPDATA%\KytyPS5\preflight-cache\_PipelineCache`, and the next boot of the same
+build loads it from there. During the boot, `emulator\_PipelineCache` in the results folder links to
+that folder. Windows calls this kind of link a junction. Preflight removes the link when the boot
+ends.
+
+- You can delete the cache whenever no game boot is running. The next boot compiles everything
+  again.
+- A new emulator build ignores the shaders an older build stored. The emulator checks this itself,
+  so there is nothing to clear after you download a new build. The driver's pipeline cache in the
+  same folder is kept across builds and can still help. A GPU driver update starts it over.
+- A pipeline manifest recorded with `--record-pipeline-manifest` lands in the same folder, and every
+  later boot loads it, whatever the build. A boot that records doesn't use the stored shaders.
+- The cache grows with every build. Delete the `preflight-cache` folder once it passes a few GB, or
+  when the drive runs low. Preflight warns when that drive has less than 10 GB free.
+- Run one game boot at a time. A boot started while another one runs gets a cache folder of its
+  own, and compiles everything.
+- If a boot crashes while the emulator compiles the stored shaders, or the GPU driver rejects one of
+  them, preflight renames the stored shaders to `<title>.shaders.unusable`. Otherwise every later
+  boot of that build would crash on them before the game starts. The next boot compiles everything
+  again, so just run the same command.
+- `--shader-validation`, or a `--shader-log-direction` other than `Silent`, in `-ExtraArgs` makes the
+  boot leave out the stored shaders. Both options only work on shaders the boot compiles itself.
+- `-ColdCache` boots without the cache, the way a first boot does, so you can compare the two. It
+  leaves the cache as it is. The NVIDIA driver keeps a shader cache of its own as well, so a
+  `-ColdCache` boot can still be faster than the very first one.
+- If preflight cannot use the cache, it prints one yellow line and the boot compiles everything.
+  That happens when the results folder is on a drive that isn't NTFS, such as a USB stick formatted
+  exFAT.
+
+The `shader cache:` line of `summary.txt` says how many files the cache held before and after the
+boot, or why the boot ran without it. The file count doesn't tell a warm boot from a cold one: a new
+build ignores the files an older one left. The emulator's own lines under it do. `Shader cache:
+loaded 0 programs` means the boot compiled every shader itself.
 
 ## Options
 
@@ -99,6 +141,7 @@ Send the zip it prints, especially if the game crashed: the zip is how the crash
 | `-BootSeconds <n>` | how long the boot runs, default 300; 0 runs until you close the game |
 | `-ExtraArgs "<options>"` | more emulator options for the import report and the boot; paths in full |
 | `-WithTests` | with `-Game`: run the GPU tests too, before the boot (`-Quick` and `-Only` apply) |
+| `-ColdCache` | with `-Game`: boot without the shader cache, to compare with a first boot; the cache stays as it is |
 | `-Emulator <path>` | another `kyty_emulator.exe`; the default is the one in the folder above `preflight` |
 | `-OutDir <folder>` | where the results go; the default is the `preflight` folder |
 
@@ -117,8 +160,10 @@ missing file.
   `kyty-logs-<date>.zip` that `collect_logs.ps1` makes.
 - `console.txt`: what the window showed.
 
-The emulator's working folder, `emulator` in the results folder, holds the game's save data and
-temp files from the boot. It stays out of the zip. Once the zip is sent, the results folder can go.
+The emulator's working folder, `emulator` in the results folder, holds the game's save data and temp
+files from the boot, and during the boot the link to the shader cache. It stays out of the zip, and
+so does the cache. Once the zip is sent, the results folder can go. A run cut short during the boot
+still has its link. Deleting the folder in Explorer removes the link and leaves the cache alone.
 
 Preflight writes your profile path as `%USERPROFILE%` in the files it writes itself, and drops the
 GPU's UUIDs from vulkaninfo's output. The tests' and the emulator's own logs are copied as they are,
@@ -143,3 +188,19 @@ calls `gpu`) and the DLLs they import from the build folder into `preflight/gpu-
 `tests.json` with each test's arguments, time limit and quick flag. The same job smoke-tests
 `preflight.ps1` under Windows PowerShell 5.1. `tests/test_preflight.py` runs it under pwsh against a
 fake package.
+
+During a game boot, `emulator\_PipelineCache` is a junction to the shader cache, and the boot gets
+`--shader-cache`. Windows PowerShell 5.1's `Get-ChildItem -Recurse` and `Remove-Item -Recurse` go
+through junctions. So preflight removes the junction after the boot, and walks folders itself for
+the zip, never entering a junction or a symbolic link. A run killed during the boot leaves its
+junction behind. Don't remove such a results folder with `Remove-Item -Recurse` in 5.1, because that
+empties the cache through the link. pwsh on Linux makes no junction. There, the tests set
+`KYTY_PREFLIGHT_TEST_LINK=SymbolicLink`, which preflight honors only off Windows, to run the
+persistent cache through a symbolic link. The Windows smoke test checks a real junction.
+
+The emulator's `PipelineCache::WarmUp` creates a pipeline for every stored compute shader before
+the game starts, and a pipeline the driver rejects there ends the emulator. A compute shader is
+stored once it compiles, before its pipeline exists. That is why preflight sets the store aside
+after a boot that logged a rejected compute pipeline or crashed during WarmUp. Catching that failure
+in WarmUp (a `SoftExitScope`, as the manifest replay has) and dropping the record would make this
+unnecessary.
