@@ -251,20 +251,25 @@ jobs:
           if-no-files-found: ignore
 
       - name: Install
+        id: install
         shell: cmd
         run: cmake --install _Build/windows --prefix _Build/windows/install
 
       # The GPU tests cannot run here (no GPU). They go into the artifact with tools/preflight, so
-      # that one download runs them on a PC that has one (tools/preflight/README.md).
+      # that one download runs them on a PC that has one (tools/preflight/README.md). Assembled
+      # outside the install tree and moved in last: when this step fails, the job is red, but the
+      # emulator is still uploaded, without a half-written preflight folder.
       - name: Package the GPU tests and preflight
         id: preflight_package
         shell: bash
         run: |
-          python .github/scripts/package_gpu_tests.py _Build/windows _Build/windows/install/preflight/gpu-tests
+          python .github/scripts/package_gpu_tests.py _Build/windows _Build/windows/preflight-staging/gpu-tests
           cp tools/preflight/preflight.ps1 tools/preflight/preflight.cmd tools/preflight/README.md \
-            tools/triage/collect_logs.ps1 _Build/windows/install/preflight/
+            tools/triage/collect_logs.ps1 _Build/windows/preflight-staging/
+          mv _Build/windows/preflight-staging _Build/windows/install/preflight
 
       - name: Upload Windows build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: KytyPS5-gta6-prep-Windows-x64
@@ -273,7 +278,8 @@ jobs:
 
       # The packaged preflight under Windows PowerShell 5.1, as on a PC without pwsh. Each check
       # fails on exit code 2 (preflight could not run), a missing summary.json or a missing zip.
-      - name: Smoke-test preflight, one GPU test (Windows PowerShell 5.1)
+      - name: Smoke-test preflight, packaged GPU tests (Windows PowerShell 5.1)
+        if: ${{ !cancelled() && steps.preflight_package.outcome == 'success' }}
         timeout-minutes: 12
         shell: powershell
         env:
@@ -283,8 +289,11 @@ jobs:
           $preflight = Join-Path $env:GITHUB_WORKSPACE '_Build\windows\install\preflight'
           $out = Join-Path $env:RUNNER_TEMP 'preflight-smoke\tests'
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          # Through preflight.cmd, as on the PC. Without a GPU, device_creation fails (exit code 1).
-          & cmd.exe /d /c "$preflight\preflight.cmd" -Only device_creation -OutDir $out
+          # Only Windows' own folders on PATH, as on the PC: a DLL missing from gpu-tests must not
+          # come from the runner's MinGW, Strawberry or Git folders.
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+          # Through preflight.cmd, as on the PC, with a test of each packaged executable.
+          & cmd.exe /d /c "$preflight\preflight.cmd" -Only 'device_creation,kernel_file_system' -OutDir $out
           $rc = $LASTEXITCODE
           Write-Host "preflight.cmd exit code: $rc"
           if ($rc -ne 0 -and $rc -ne 1) { throw "preflight exited with $rc" }
@@ -294,11 +303,22 @@ jobs:
           Get-Content -LiteralPath (Join-Path $run 'summary.txt')
           if (-not (Test-Path -LiteralPath "$run.zip")) { throw "no zip next to $run" }
           $summary = [System.IO.File]::ReadAllText((Join-Path $run 'summary.json')) | ConvertFrom-Json
-          $expected = 'FAIL'
-          if ($rc -eq 0) { $expected = 'PASS' }
-          $step = @($summary.steps | Where-Object { $_.name -eq 'device_creation' })
-          if ($step.Count -ne 1 -or $step[0].status -ne $expected) {
-            throw "summary.json should list device_creation as $expected (exit code $rc)"
+          # Without a GPU the tests fail, but they must have run: not ERROR (not started), and not
+          # the exit code of a program Windows could not load (0xC0000135: a DLL was not found).
+          $unloadable = @('0xC0000135', '0xC0000139', '0xC000007B', '0xC0000142')
+          foreach ($name in @('device_creation', 'kernel_file_system')) {
+            $step = @($summary.steps | Where-Object { $_.name -eq $name })
+            if ($step.Count -ne 1) { throw "summary.json has no step $name" }
+            $step = $step[0]
+            if (@('PASS', 'FAIL', 'TIMEOUT') -notcontains $step.status -or $unloadable -contains $step.exit_code_hex) {
+              throw "${name}: $($step.status) $($step.exit_code_hex) $($step.detail): the packaged test did not run"
+            }
+          }
+          # The harness's own failure message: the packaged exe ran main() with --device-creation-only.
+          $device = @($summary.steps | Where-Object { $_.name -eq 'device_creation' })[0]
+          $log = [System.IO.File]::ReadAllText((Join-Path $run 'tests\device_creation.log'))
+          if ($device.status -eq 'FAIL' -and $log -notmatch 'ShaderRecompilerComputeTests: DeviceCreation failed') {
+            throw "device_creation failed without the harness's DeviceCreation message: see tests\device_creation.log"
           }
           exit 0
 
