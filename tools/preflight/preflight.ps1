@@ -954,6 +954,7 @@ function Invoke-Tests($Manifest, [object[]]$Selected, [string]$PackageDir) {
     Say "Running $count GPU test$plural, one at a time. Close games and other programs that use the GPU."
     $colors = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Yellow'; ERROR = 'Red' }
     for ($i = 0; $i -lt $count; $i++) {
+        Save-Progress
         $test = $Selected[$i]
         $step = $records[$i]
         $name = [string]$test.name
@@ -1042,6 +1043,7 @@ function Invoke-Tests($Manifest, [object[]]$Selected, [string]$PackageDir) {
             foreach ($line in @(Get-LastLines $log 1)) { Say "      $line" 'DarkGray' }
         }
     }
+    Save-Progress
 }
 
 # Runs the emulator for one step, with its output in $LogName. Returns what happened ($null when it
@@ -1160,6 +1162,7 @@ function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [in
         Say "FAIL ($(Format-Seconds $r.Seconds) s, $($imports.detail))" 'Red'
         foreach ($line in @(Get-LastLines (Join-Path $RunDir 'emulator-imports.log') 2)) { Say "      $line" 'DarkGray' }
     }
+    Save-Progress
 
     if (@($Tests).Count -gt 0) { Invoke-Tests $Manifest $Tests $PackageDir }
 
@@ -1194,6 +1197,7 @@ function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [in
         Say "FAIL ($($boot.detail))" 'Red'
         foreach ($line in @(Get-LastLines (Join-Path $RunDir 'emulator-boot.log') 2)) { Say "      $line" 'DarkGray' }
     }
+    Save-Progress
 
     $logs = New-Step 'collect' 'logs'
     Say 'Collecting the logs ... ' -NoNewline
@@ -1294,7 +1298,10 @@ function Write-Zip([string]$Folder, [string]$ZipPath, [string[]]$Skip) {
 
 # --- Summary --------------------------------------------------------------------------------------
 
+# $Result RUNNING: a summary written along the way (Save-Progress), with no exit code yet.
 function Write-Summary([string]$Result) {
+    $code = $ExitCode
+    if ($Result -eq 'RUNNING') { $code = $null }
     $counts = [ordered]@{}
     foreach ($status in @('PASS', 'RAN', 'FAIL', 'TIMEOUT', 'ERROR', 'INTERRUPTED', 'NOT RUN')) {
         $n = @($Steps | Where-Object { $_.status -eq $status }).Count
@@ -1315,7 +1322,7 @@ function Write-Summary([string]$Result) {
     $summary = [ordered]@{
         format = 1
         result = $Result
-        exit_code = $ExitCode
+        exit_code = $code
         mode = $Mode
         computer = $ComputerName
         started = Format-Time $StartedAt
@@ -1332,7 +1339,11 @@ function Write-Summary([string]$Result) {
 
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("KytyPS5 preflight on $ComputerName, $(Format-Time $StartedAt), $(Format-Seconds ($finished - $StartedAt).TotalSeconds) s")
-    $lines.Add("result: $Result (exit code $ExitCode)")
+    if ($null -eq $code) {
+        $lines.Add("result: $Result (preflight had not finished when it wrote this)")
+    } else {
+        $lines.Add("result: $Result (exit code $code)")
+    }
     $source = @()
     foreach ($key in @('repository', 'ref', 'commit', 'run_id')) { if ($Package.Contains($key)) { $source += "$key $($Package[$key])" } }
     if ($source.Count -gt 0) { $lines.Add("package: $($source -join ', ')") }
@@ -1364,6 +1375,15 @@ function Write-Summary([string]$Result) {
     $lines.Add('')
     $lines.Add('Details: system.txt, tests\<name>.log, emulator-*.log, imports.txt, session.log, console.txt.')
     Write-Text (Join-Path $RunDir 'summary.txt') (($lines -join $NewLine) + $NewLine)
+}
+
+# The summary and console.txt so far, written after every step: a results folder left behind (the
+# window closed, the PC restarted) still has them. The finally block writes the final ones.
+function Save-Progress {
+    try {
+        Write-Summary 'RUNNING'
+        Write-Text (Join-Path $RunDir 'console.txt') $ConsoleText.ToString()
+    } catch { }
 }
 
 # --- Main -----------------------------------------------------------------------------------------

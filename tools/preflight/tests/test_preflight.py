@@ -402,6 +402,45 @@ class PreflightTests(unittest.TestCase):
             time.sleep(0.2)
         self.assertFalse([p for p in pids if alive(p)], "the running test's processes were killed")
 
+    def test_killed_midway(self):
+        """Ended without its finally block (the window closed, the PC restarted): the results folder
+        still has the summary of the steps that finished."""
+        self.manifest["tests"][2]["timeout"] = 120
+        self.write_manifest()
+        environment = dict(os.environ, HOME=self.home, TMPDIR=self.scratch, COMPUTERNAME="FAKE-PC",
+                           PATH=self.bin + os.pathsep + os.environ.get("PATH", ""))
+        process = subprocess.Popen([PWSH, "-NoProfile", "-NonInteractive", "-File",
+                                    os.path.join(self.preflight, "preflight.ps1"), "-OutDir", self.out,
+                                    "-Only", "pass,fail,hang"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)
+        pids = []
+        try:
+            deadline = time.monotonic() + 90
+            while len(pids) < 2 and time.monotonic() < deadline and process.poll() is None:
+                time.sleep(0.2)
+                if os.path.exists(self.pids):
+                    pids = [int(p) for p in self.read(self.pids).split()]
+            self.assertEqual(len(pids), 2, "the hang test did not start")
+        finally:
+            process.kill()
+            process.wait(timeout=30)
+            # Nothing ends the hung test's processes on Linux once pwsh is gone.
+            for pid in pids:
+                try:
+                    os.kill(pid, 9)
+                except ProcessLookupError:
+                    pass
+        folders = [p for p in glob.glob(os.path.join(self.out, "kyty-preflight-FAKE-PC-*")) if os.path.isdir(p)]
+        self.assertEqual(len(folders), 1)
+        self.assertFalse(os.path.exists(folders[0] + ".zip"))
+        with open(os.path.join(folders[0], "summary.json"), encoding="utf-8") as f:
+            summary = json.load(f)
+        self.assertEqual((summary["result"], summary["exit_code"]), ("RUNNING", None))
+        self.assertEqual([(s["name"], s["status"]) for s in summary["steps"]],
+                         [("pass", "PASS"), ("fail", "FAIL"), ("hang", "NOT RUN")])
+        self.assertIn("result: RUNNING (preflight had not finished", self.read(folders[0], "summary.txt"))
+        self.assertIn("[2/3] fail ... FAIL (", self.read(folders[0], "console.txt"))
+
     def test_runs_what_package_gpu_tests_writes(self):
         """The packager's tests.json, from a fake build whose test executables are shell scripts."""
         build = os.path.join(self.tmp, "build")
