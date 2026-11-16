@@ -2,9 +2,10 @@
 
 This branch prepares Karim's fork of KytyPS5 for GTA 6 (out 2026-11-19) on a budget PC with an
 RTX 3050. The work was sized for the 8 GB model; Karim's card is the 6 GB one, which the settings
-and estimate sections cover separately. Nobody has the game yet, so nothing here has run it. Everything is preparation:
-the TheCruZ GTA V fork brought onto current upstream, hardening for a newer-SDK title, an 8 GB
-mode, more shader coverage, and tools for reading the first crash logs.
+and estimate sections cover separately. Nobody has the game yet, so nothing here has run it.
+Everything is preparation: the TheCruZ GTA V fork brought onto current upstream, hardening for a
+newer-SDK title, an 8 GB mode, more shader coverage, tools for reading the first crash logs, a
+preflight package that runs the GPU tests and a first boot on Karim's PC, and offline NID naming.
 
 Read the "Verification status" section before trusting any of it. The branch builds on Linux and
 Windows and its host tests pass in CI, but nothing on it has run on a real GPU or with a real game.
@@ -191,7 +192,61 @@ the job; `run_tests.py` reports host tests that fail upstream on a platform (Win
 warnings. `workflow_dispatch` with `bisect_shas` builds only the given targets at each listed
 commit, one job after another, to find which commit broke a test. Tests that open a Vulkan device run in a separate step that only reports, because GitHub
 runners have no GPU and lavapipe lacks fragment barycentrics and 64-bit image atomics. Upstream's
-own CI never runs those tests either.
+own CI never runs those tests either. The Windows job also packages the GPU tests with preflight
+and smoke-tests that package under Windows PowerShell 5.1 (section 9). The tools job runs the
+triage, NID, CI-script and preflight tests, the last under pwsh.
+
+### 9. Preflight package
+
+`tools/preflight` lets Karim run the GPU tests and a first boot from the Windows CI artifact,
+without building anything. The Windows job runs `.github/scripts/package_gpu_tests.py`, which
+copies the GPU test group out of the build tree with only the DLLs each test imports and writes
+`gpu-tests/tests.json`. The job puts that in `install/preflight` with `preflight.cmd`,
+`preflight.ps1`, the README and `collect_logs.ps1`.
+
+- `preflight.cmd` runs the 42 GPU tests and zips their logs with the PC's GPU, driver, VRAM, CPU,
+  Windows build and VC++ runtime versions. Each test gets a time limit (5 minutes, 30 for
+  `shader_recompiler_compute`) and runs in a job object, so nothing outlives preflight. After a
+  test that lost the GPU device, it waits 60 s before the next one. In the files it writes itself,
+  preflight replaces the profile path with `%USERPROFILE%` and drops vulkaninfo's device UUIDs.
+  Raw test and emulator logs go into the zip unchanged.
+- `preflight.cmd -Game "<dump folder>" -ExtraArgs "--title-profile gta6"` writes the
+  `--dump-imports` report, boots the game for 5 minutes with `--preset rtx3050` and a session log,
+  then collects the logs. `-BootSeconds 0` keeps the game running until its window closes. A boot
+  that didn't crash is `RAN`, never `PASS`, because a game stuck on a black screen keeps running
+  too. Paths inside `-ExtraArgs` must be full paths, since the emulator runs in the results folder.
+- The Windows build uses the DLL version of the MSVC runtime. Before it runs anything, preflight
+  checks every packaged executable's imports. It names the VC++ redistributable when a DLL is
+  missing or when `msvcp140.dll` is older than the toolset that built the package (14.51 in CI).
+- CI smoke-tests the package under Windows PowerShell 5.1 in three ways. The packaged tests must
+  load outside the build tree, `-Game` on an empty folder must still write its zip, and a hung
+  test with a child process must get stopped.
+
+### 10. NID names
+
+The emulator logs an unresolved import by its NID, a hash of the symbol name. `tools/nid` turns
+NIDs back into names, offline once the names file exists.
+
+- `build_names.py` downloads seven public NID lists at run time and writes a `--nid-names` file
+  to `%LOCALAPPDATA%\kyty-nid` on Windows or `~/.cache/kyty-nid` on Linux. None of the lists is
+  committed, since most have no license. Each download is checked against a pinned size and
+  SHA-256.
+- `name_imports.py` names the imports in a `--dump-imports` report, or in logs made without
+  names. It follows `Rebind:` lines and the PRXs a game loads later, so imports that the game's
+  own modules provide drop out. `kyty_triage.py --nid-names <file>` adds the names to a triage
+  report.
+- `nid.py` converts names to NIDs and back. Its Python port of `SymbolToNid` agrees with three
+  other projects' tables on all 227,101 of their pairs. The names file names 1,759 of the
+  emulator's 1,776 HLE NIDs.
+
+The GTA V check over the 19 triage fixtures lists 112 imports. 20 are NpCppWebApi methods that bind
+to GTA V's own `sce_module/libSceNpCppWebApi.prx` once it loads, so they are not gaps. Of the other
+92, this branch has an HLE function for 28 and lacks 64. GTA V called 5 of the 64: four
+`sceNpBandwidthTest*` functions and `sceVideoRecordingSetInfo`, which the triage rules mark
+harmless. The other 59 only appear at load: 16 in Agc, 16 in AgcDriver, 5 in ContentExport, 4 in
+WebBrowserDialog, 3 in Ampr and 15 across ten other libraries. That is GTA V's list. GTA 6's comes
+from its own `--dump-imports` report, which loads `eboot.bin` and every `sce_module` PRX before it
+resolves anything.
 
 ## Verification status
 
@@ -205,6 +260,8 @@ Read this before relying on anything above.
 | GPU test group | 3 of 42 pass on lavapipe; the rest stop because the runner has no device with fragment barycentrics and 64-bit LDS/image atomics, as upstream's do. That includes this branch's own GPU tests (`shader_recompiler_gta6_alu`, `shader_recompiler_shader_mem`, `vram_heap_limit`): they compile but have never run. |
 | Test fixes from the first CI run | `shader_alu_decode`: the VOPC program overwrote its own buffer descriptor (test bug). `resource_tracking`: its "unsupported format" was `k8SScaled`, which shader-mem made supported (bisected to the shader-mem merge). `shader_cfg`: one check (material selection must reject an `s_cmp_le_u32` loop bound) fails in TheCruZ's fork at its own tip; it now prints a "known fork deviation" line instead of aborting, and the ~110 tests after it, which the fork never ran, pass. The recompiler keeps the fork's behaviour. |
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
+| Preflight package | Locally, 13 CI-script tests and 13 preflight tests pass, the preflight ones under pwsh 7.6.9 on Linux. PSScriptAnalyzer's Windows PowerShell 5.1 compatibility rules find nothing. It has not run on Windows yet. The next CI run's smoke steps are the first check, and Karim's PC is the real one. |
+| NID tools | Locally, 68 tests pass, and the triage tool's output without `--nid-names` is byte-identical to before on all 99 fixture outputs. Not yet run in CI or on Windows. |
 | GPU behaviour, NVIDIA behaviour, VRAM use | Unverified on hardware. The machine that did this work has no usable GPU, and CI runners have none either. |
 
 Commits whose correctness no test can show say `Speculative:` in their message body. Commits
@@ -228,9 +285,16 @@ cmake --install _Build/windows --prefix _Build/windows/install
 
 On Linux, follow "Building on Linux" in README.md.
 
-The easier route on Windows is no build at all: every green gta6-ci run on this branch uploads
-`KytyPS5-gta6-prep-Windows-x64` (the installed emulator, about 29 MB zipped). Open the run's page
-on GitHub, scroll to Artifacts and download it while signed in. GitHub keeps artifacts for 90 days.
+The easier route on Windows is no build at all. Every gta6-ci push run on this branch uploads
+`KytyPS5-gta6-prep-Windows-x64`, which holds the installed emulator and the `preflight` folder
+(section 9). It was about 29 MB zipped before the preflight package went in. Pick the newest run
+whose Artifacts list shows it, not the newest green check, because a bisect run can be green with
+no artifacts. If that run has a red X, ask before using it. Open the run's page on GitHub, scroll
+to Artifacts and download it while signed in. GitHub keeps artifacts for 90 days.
+
+The emulator needs the Microsoft Visual C++ 2015-2022 x64 redistributable, 14.51 or newer, from
+https://aka.ms/vc14/vc_redist.x64.exe. The older aka.ms/vs/17/release/vc_redist.x64.exe link
+installs 14.44, which is older than the toolset CI builds with.
 
 ## Recommended settings for an RTX 3050 (8 GB or 6 GB)
 
@@ -270,16 +334,21 @@ Then, depending on what happens:
 
 ## Day-one triage playbook
 
-1. **Before the first boot, dump the imports.** With a decrypted dump:
-   `kyty_emulator --game <path> --dump-imports imports.txt`. This needs no GPU. The unresolved
-   list per library is the HLE work queue. Add `--nid-names <names.txt>` if a names list is
-   available. Diff it against a GTA V dump made the same way: whatever is new in GTA 6 is where
-   to start.
-2. **Boot with logs on.** Use `--preset rtx3050 --session-log auto`. Testers run
-   `tools/triage/collect_logs.ps1` and attach the zip.
-3. **Triage.**
-   `python3 -I tools/triage/kyty_triage.py <zip or log>`. Read the primary failure and the top
-   fix area. `--agent-prompt` turns it into a brief for a coding agent.
+1. **Before the 18th, run the GPU tests.** Extract the artifact, open `preflight`, double-click
+   `preflight.cmd` and send the zip it names. That is the first time any of the branch's GPU code
+   runs on a GPU.
+2. **Import report and first boot.** With the decrypted dump, from a command prompt in
+   `preflight`, run `preflight.cmd -Game "D:\PS5\GTA6" -ExtraArgs "--title-profile gta6"`. It
+   writes the `--dump-imports` report, which needs no GPU, boots the game for 5 minutes with
+   `--preset rtx3050` and a session log, and zips everything. Without preflight, run
+   `kyty_emulator --game <path> --dump-imports imports.txt`, boot with
+   `--preset rtx3050 --session-log auto`, and zip the logs with `tools/triage/collect_logs.ps1`.
+3. **Name and triage.** On the machine doing the fixes, build the names file once with
+   `python3 -I tools/nid/build_names.py`. `python3 -I tools/nid/name_imports.py --hle imports.txt`
+   then lists the HLE work queue by library. Compare it with GTA V's list in `tools/nid/README.md`;
+   whatever is new in GTA 6 is where to start. Then run
+   `python3 -I tools/triage/kyty_triage.py --nid-names <names file> <zip or log>`, and read the
+   primary failure and the top fix area. `--agent-prompt` turns it into a brief for a coding agent.
 4. **Fix by category:**
    - Unresolved imports. Implement the function in the `src/libs/<lib>` file the report names, or
      give it a plausible return. If the game misbehaves after an unresolved call returns 0, try
@@ -406,5 +475,7 @@ an RX 7900 XT, like TheCruZ's GTA V reporter, would be in a different league.
 | Shader skip and opcodes | `src/graphics/shader/recompiler/frontend/decode/*`, `.../translate/*`, `pipelineCache.cpp` |
 | Diagnostics | `src/graphics/presentation/window/vulkanWindow.cpp`, `src/loader/runtimeLinker.cpp` (fault report), `src/common/logging/log.cpp` |
 | Triage | `tools/triage/` |
+| Preflight | `tools/preflight/`, `.github/scripts/package_gpu_tests.py`, `.github/scripts/ctest_groups.py` |
+| NID names | `tools/nid/` |
 | CI | `.github/workflows/gta6-ci.yml`, `.github/scripts/run_tests.py` |
 | Tests | `tests/TitleProfileTests.cpp`, `HleSoftFailTests.cpp`, `VramPolicyTests.cpp`, `DiagTests.cpp`, `ShaderRecompilerComputeTests.cpp` |
