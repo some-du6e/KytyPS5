@@ -357,6 +357,7 @@ function Read-Arguments([object[]]$List) {
 
 # Compiled once by Add-Type (C# 5, for Windows PowerShell 5.1); $NativeReady says whether it worked.
 $NativeReady = $false
+$InputMode = -1         # the console input mode from before QuickEditOff; the finally block restores it
 $NativeCode = @'
 using System;
 using System.Runtime.InteropServices;
@@ -367,6 +368,43 @@ namespace KytyPreflight
     {
         [DllImport("kernel32.dll")]
         public static extern uint SetErrorMode(uint mode);
+
+        [DllImport("kernel32.dll")]
+        static extern uint SetThreadExecutionState(uint flags);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr GetStdHandle(int which);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetConsoleMode(IntPtr handle, out uint mode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetConsoleMode(IntPtr handle, uint mode);
+
+        // ES_CONTINUOUS | ES_SYSTEM_REQUIRED: no sleep while preflight runs unattended, until
+        // KeepAwake(false) or the end of this process.
+        public static void KeepAwake(bool on)
+        {
+            SetThreadExecutionState(on ? 0x80000001u : 0x80000000u);
+        }
+
+        // Turns QuickEdit off in this console window, where a click starts a selection that holds
+        // up every write to the console, and so preflight and its time limits, until Esc. Returns
+        // the mode for RestoreInputMode, or -1 when there is nothing to restore.
+        public static long QuickEditOff()
+        {
+            IntPtr input = GetStdHandle(-10); // STD_INPUT_HANDLE
+            uint mode;
+            if (!GetConsoleMode(input, out mode) || (mode & 0x40u) == 0) return -1;
+            // The console takes the QuickEdit bit (0x40) only with ENABLE_EXTENDED_FLAGS (0x80).
+            if (!SetConsoleMode(input, (mode | 0x80u) & ~0x40u)) return -1;
+            return mode;
+        }
+
+        public static void RestoreInputMode(long mode)
+        {
+            if (mode >= 0) SetConsoleMode(GetStdHandle(-10), (uint)mode | 0x80u);
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         struct BasicLimitInformation
@@ -1530,6 +1568,10 @@ function Invoke-Preflight([object[]]$Arguments) {
         # inherit it: a missing DLL or a crash then ends the process with its status code, instead
         # of opening a dialog box that waits for a click until the time limit.
         [void][KytyPreflight.Native]::SetErrorMode(0x8003)
+        # A PC that goes to sleep during a test fails that test for nothing (a lost device, or the
+        # time limit). The finally block undoes both of these.
+        [KytyPreflight.Native]::KeepAwake($true)
+        $script:InputMode = [KytyPreflight.Native]::QuickEditOff()
     }
     Say 'Collecting system information ...'
     $system = @(Get-SystemInfo)
@@ -1632,6 +1674,11 @@ try {
             Say "Send the folder $RunDir instead (zip it yourself)." 'Yellow'
             $ExitCode = 2
         }
+    }
+    if ($NativeReady) {
+        try { [KytyPreflight.Native]::KeepAwake($false) } catch { }
+        # Before TreatControlCAsInput goes back below: the saved mode is from after it was set.
+        try { [KytyPreflight.Native]::RestoreInputMode($InputMode) } catch { }
     }
     # Last, so that a second Ctrl+C cannot cut the zip short. Keys pressed meanwhile would end
     # preflight.cmd's pause before the zip's name can be read.
