@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+# build_names.py output and cache, should -o or --cache point here: not for git (SOURCES.md).
+nid-names*.txt
+cache/
