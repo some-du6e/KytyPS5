@@ -1,7 +1,8 @@
 # GTA 6 launch prep (gta6-prep)
 
 This branch prepares Karim's fork of KytyPS5 for GTA 6 (out 2026-11-19) on a budget PC with an
-RTX 3050 8 GB. Nobody has the game yet, so nothing here has run it. Everything is preparation:
+RTX 3050. The work was sized for the 8 GB model; Karim's card is the 6 GB one, which the settings
+and estimate sections cover separately. Nobody has the game yet, so nothing here has run it. Everything is preparation:
 the TheCruZ GTA V fork brought onto current upstream, hardening for a newer-SDK title, an 8 GB
 mode, more shader coverage, and tools for reading the first crash logs.
 
@@ -231,7 +232,7 @@ The easier route on Windows is no build at all: every green gta6-ci run on this 
 `KytyPS5-gta6-prep-Windows-x64` (the installed emulator, about 29 MB zipped). Open the run's page
 on GitHub, scroll to Artifacts and download it while signed in. GitHub keeps artifacts for 90 days.
 
-## Recommended settings for an RTX 3050 8 GB
+## Recommended settings for an RTX 3050 (8 GB or 6 GB)
 
 Start here:
 
@@ -249,6 +250,13 @@ Then, depending on what happens:
   today, but it puts the profile in the logs and gives later quirks a place to go.
 - If VRAM spill lines show up early, try `--video-out-resolution 1080p` and watch whether the
   `VRAM:` and spill numbers change. If they don't, the game ignores it, so turn it back off.
+- On the 6 GB model, use the same preset. Its GC thresholds are fractions of the budget the
+  driver reports, so they shrink with the card, and the recycled-image pool is budget/32. What
+  does not shrink is the roughly 1 GiB the emulator holds before the game allocates anything
+  (mostly the 768 MiB BDA page table, whose layout is baked into compiled shaders). That is a
+  sixth of a 6 GB card, so expect about 4.5 GB for the game once Windows has its share. Try
+  `--video-out-resolution 1080p` as soon as the game renders in-game instead of waiting for spill
+  lines, and compare the `VRAM:` and `VRAM spill:` lines with and without it.
 - If the first boot freezes on a loading screen, it is probably compiling pipelines. Keep
   `--pipeline-precompile ask` (the default) and wait. There is no GTA 6 pipeline manifest, so
   the first boot compiles everything cold. Record one with `--record-pipeline-manifest` and copy
@@ -317,8 +325,9 @@ Then, depending on what happens:
 - **Silent wrong results.** Returning 0 or an error instead of crashing can push a failure later
   and make it harder to read. The once-per-site `Soft-fail:` and first-call import lines exist to
   keep that visible.
-- **8 GB.** No eviction policy makes a 12 GB working set fit in 8 GB. Spill to system RAM is the
-  likely steady state in dense areas.
+- **8 GB, and worse, 6 GB.** No eviction policy makes a 12 GB working set fit in 8 GB, let alone
+  in the 4.5 GB or so a 6 GB card has left. Spill to system RAM over PCIe 4.0 x8 is the likely
+  steady state in dense areas, and on the 6 GB card probably everywhere in the open world.
 - **The estimates below.**
 
 ## How likely is "kinda playable" on an RTX 3050?
@@ -348,6 +357,14 @@ itself down. Neither is known.
 **Memory.** 8 GB minus about 1 GB of fixed emulator overhead leaves around 7 GB for a game
 designed around up to 12.5 GB shared. Expect system-RAM spill in dense areas, with stutter.
 
+**The 6 GB model.** The RTX 3050 6 GB is a cut-down card, not the 8 GB one with less memory:
+2304 shader cores at up to 1.47 GHz instead of 2560 at 1.78 GHz, a 96-bit bus with 168 GB/s
+instead of 224 GB/s, and 70 W. That is about 25% less compute and bandwidth, and in games it
+runs roughly a quarter slower than the 8 GB card. Against a PS5 that is around 40 to 50% in
+rasterization, so about 12 to 15 fps for a native port of a 30 fps frame and around 4 to 10 fps
+with the emulation cost. After the emulator's fixed 1 GiB and Windows, about 4.5 GB is left for
+the game.
+
 **Compatibility.** This comes before any of the above. GTA V needed about two months and 188
 commits on top of upstream to get where it is. Some of that carries over, since it is the same
 engine family, the same sce::Psr library, the same bindless descriptor style and the same
@@ -360,6 +377,19 @@ My estimates, for a stock RTX 3050 8 GB with a reasonable 6-core CPU:
 | Boots to an intro or menu | 35% | 65% | 80% |
 | Gets in-game | 15% | 45% | 65% |
 | "Kinda playable" (in-game, 15+ fps most of the time, game-breaking glitches rare) | under 5% | 10% | 20 to 25% |
+
+For a stock RTX 3050 6 GB, booting depends on compatibility more than on the card, so the first
+row barely moves; the others drop:
+
+| milestone | at launch week | after ~1 month of log-driven fixes | after ~3 months |
+|---|---|---|---|
+| Boots to an intro or menu | 35% | 60% | 75% |
+| Gets in-game | 15% | 40% | 60% |
+| "Kinda playable" (same definition) | about 1% | 5% | about 10% |
+
+On the 6 GB card, 15 fps needs GTA 6 to lower its own resolution (through
+`--video-out-resolution 1080p` or its own dynamic resolution) and the emulation cost to land at
+the low end of its range.
 
 The 3 month row is capped by the hardware math above, not by bugs. On this card, 15 fps in the
 open world is the realistic ceiling unless GTA 6 lowers its own resolution. A Ryzen 5 5600 with
