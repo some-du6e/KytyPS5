@@ -10,15 +10,21 @@ first boot of the GTA 6 dump.
 ## Get the build
 
 1. Open the [gta6-prep CI runs](https://github.com/some-du6e/KytyPS5/actions/workflows/gta6-ci.yml?query=branch%3Agta6-prep)
-   while signed in to GitHub, and click the newest run with a green check.
-2. Scroll down to **Artifacts** and click **KytyPS5-gta6-prep-Windows-x64**. You don't need the
-   others: `ctest-linux`, `ctest-windows` and `preflight-smoke-windows` are CI logs, and
-   `KytyPS5-gta6-prep-Linux-x86_64` is the Linux build.
+   while signed in to GitHub. Pick the newest run whose page lists
+   **KytyPS5-gta6-prep-Windows-x64** under **Artifacts** at the bottom. Go by that list, not by the
+   check mark: a bisect run can be green with no artifacts, and a run can be red only because a
+   preflight smoke test after the upload failed. If the run you picked has a red X, ask Claude
+   whether to use it.
+2. Click **KytyPS5-gta6-prep-Windows-x64**. You don't need the others: `ctest-linux`,
+   `ctest-windows` and `preflight-smoke-windows` are CI logs, and `KytyPS5-gta6-prep-Linux-x86_64`
+   is the Linux build.
 3. Optional, and it saves a warning later: right-click the downloaded zip, choose Properties, tick
    **Unblock** at the bottom, click OK.
 4. Right-click the zip, choose **Extract All**, click Extract. Run nothing from inside the zip itself.
 
-The extracted folder has `kyty_emulator.exe` and a `preflight` folder next to it.
+The extracted folder has `kyty_emulator.exe` and a `preflight` folder next to it, with
+`gpu-tests\tests.json` inside. No `preflight` folder means packaging failed in that run. Tell
+Claude, and take an older run whose download has the folder.
 
 ## Before the 18th: the GPU tests
 
