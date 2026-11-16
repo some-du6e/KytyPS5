@@ -261,7 +261,11 @@ class PackageTests(Fixture):
 class RunTestsSelection(Fixture):
     """run_tests.py, with a stand-in ctest first on PATH, runs the groups the shared module computes."""
 
-    def run_tests(self, group):
+    # What the stand-in ctest prints, and its exit code, when it runs only the GPU probe. The default
+    # is a probe that passes.
+    probe_output, probe_rc = "", 0
+
+    def run_tests(self, group, **env_overrides):
         bin_dir = os.path.join(self.tmp, "bin")
         os.makedirs(bin_dir, exist_ok=True)
         info = os.path.join(self.tmp, "ctest.json")
@@ -275,9 +279,14 @@ class RunTestsSelection(Fixture):
                     "if '--show-only=json-v1' in sys.argv:\n"
                     "    sys.stdout.write(open(%r).read())\n"
                     "else:\n"
-                    "    open(%r, 'a').write(' '.join(sys.argv[1:]) + '\\n')\n" % (info, log))
+                    "    open(%r, 'a').write(' '.join(sys.argv[1:]) + '\\n')\n"
+                    "    if '^(shader_recompiler_compute)$' in sys.argv:\n"
+                    "        sys.stdout.write(%r)\n"
+                    "        sys.exit(%d)\n" % (info, log, self.probe_output, self.probe_rc))
         os.chmod(fake, 0o755)
         env = dict(os.environ, PATH=bin_dir + os.pathsep + os.environ.get("PATH", ""))
+        env.pop("KYTY_GPU_TESTS_ALL", None)
+        env.update(env_overrides)
         r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "run_tests.py"), self.build, group],
                            capture_output=True, text=True, env=env, timeout=60)
         with open(log, encoding="utf-8") as f:
@@ -292,8 +301,50 @@ class RunTestsSelection(Fixture):
         os.remove(os.path.join(self.tmp, "ctest-calls.txt"))
         r, calls = self.run_tests("gpu")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        # The probe first, alone; it passed, so the rest of the group follows.
+        self.assertEqual(calls.count(" -R "), 2, calls)
+        self.assertLess(calls.index("-R ^(shader_recompiler_compute)$"),
+                        calls.index("-R ^(kernel_file_system|device_creation|shader_recompiler_gta6_alu|"
+                                    "vram_heap_limit|shader_recompiler_shader_mem|pssr)$"))
+        self.assertTrue(os.path.exists(os.path.join(self.build, "ctest-gpu-probe.log")))
+        os.remove(os.path.join(self.tmp, "ctest-calls.txt"))
+        r, calls = self.run_tests("gpu", KYTY_GPU_TESTS_ALL="1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(calls.count(" -R "), 1, calls)
         self.assertIn("-R ^(kernel_file_system|shader_recompiler_compute|device_creation|shader_recompiler_gta6_alu|"
                       "vram_heap_limit|shader_recompiler_shader_mem|pssr)$", calls)
+
+    @unittest.skipIf(os.name == "nt", "the stand-in ctest is a script with a shebang")
+    def test_gpu_group_stops_when_the_probe_finds_no_device(self):
+        for reason in ("vkCreateInstance returned ErrorIncompatibleDriver",
+                       "no Vulkan graphics+compute device with fragment barycentrics and 64-bit LDS/image atomics"):
+            with self.subTest(reason=reason):
+                self.probe_output = ("[host]    LeastRecentlyUsedCache           ok\n"
+                                     "ShaderRecompilerComputeTests: VulkanHarness failed at dispatch: %s\n" % reason)
+                self.probe_rc = 8
+                r, calls = self.run_tests("gpu")
+                os.remove(os.path.join(self.tmp, "ctest-calls.txt"))
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                probe, rest = calls.strip().split("\n")
+                self.assertIn("--timeout 900 -R ^(shader_recompiler_compute)$", probe)
+                # The rest still runs, so the tests that open no device keep their result, but each
+                # gets 10 s instead of 900.
+                self.assertIn("--timeout 10 -R ^(kernel_file_system|device_creation|shader_recompiler_gta6_alu|"
+                              "vram_heap_limit|shader_recompiler_shader_mem|pssr)$", rest)
+                self.assertIn("::notice::shader_recompiler_compute found no usable Vulkan device, so the other 6 "
+                              "GPU tests run with a 10 s limit.", r.stdout)
+                self.assertIn("::warning::gpu tests failed (rc=8)", r.stdout)
+
+    @unittest.skipIf(os.name == "nt", "the stand-in ctest is a script with a shebang")
+    def test_gpu_group_continues_after_a_probe_failure_with_a_device(self):
+        # A device that exists but fails a check, or a failing vkCreateDevice, is a result to see.
+        self.probe_output = "ShaderRecompilerComputeTests: VulkanHarness failed at dispatch: vkCreateDevice returned ErrorInitializationFailed\n"
+        self.probe_rc = 8
+        r, calls = self.run_tests("gpu")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(calls.count("--timeout 900 -R "), 2, calls)
+        self.assertNotIn("::notice::", r.stdout)
+        self.assertIn("::warning::gpu tests failed (rc=8)", r.stdout)
 
 
 if __name__ == "__main__":
