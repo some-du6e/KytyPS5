@@ -60,6 +60,10 @@ preflight.cmd -Game "D:\PS5\GTA6" -ExtraArgs "--title-profile gta6"
 
 Don't end the folder path with a backslash: `"D:\PS5\GTA6\"` confuses the command prompt.
 
+More emulator options go inside the `-ExtraArgs` quotes. Give a file with its full path, for
+example `-ExtraArgs "--title-profile gta6 --nid-names D:\PS5\names.txt"`. The emulator runs in the
+results folder, so a bare `names.txt` is not found.
+
 Preflight then does three things:
 
 1. **Import report.** The emulator loads `eboot.bin` and the `sce_module` PRX files, without the GPU
@@ -80,7 +84,7 @@ Send the zip it prints, especially if the game crashed: the zip is how the crash
 | `-Only a,b` | only the tests named `a` and `b` |
 | `-Game <folder>` | the import report and a boot of the game, instead of the tests |
 | `-BootSeconds <n>` | how long the boot runs, default 300; 0 runs until you close the game |
-| `-ExtraArgs "<options>"` | more emulator options for the import report and the boot |
+| `-ExtraArgs "<options>"` | more emulator options for the import report and the boot; paths in full |
 | `-WithTests` | with `-Game`: run the GPU tests too, before the boot (`-Quick` and `-Only` apply) |
 | `-Emulator <path>` | another `kyty_emulator.exe`; the default is the one in the folder above `preflight` |
 | `-OutDir <folder>` | where the results go; the default is the `preflight` folder |

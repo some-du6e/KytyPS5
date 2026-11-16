@@ -313,7 +313,9 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'preflight-smoke\game'
           New-Item -ItemType Directory -Force -Path $game, $out | Out-Null
           # The emulator cannot load an empty folder: preflight must record that and still zip.
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$preflight\preflight.ps1" -Game $game -BootSeconds 20 -OutDir $out
+          # The -ExtraArgs value starts with '-' and holds a drive letter's colon, which -File splits.
+          $extra = "--nid-names $env:RUNNER_TEMP\preflight-smoke\names.txt"
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$preflight\preflight.ps1" -Game $game -BootSeconds 20 -OutDir $out -ExtraArgs $extra
           $rc = $LASTEXITCODE
           Write-Host "preflight.ps1 exit code: $rc"
           if ($rc -ne 0 -and $rc -ne 1) { throw "preflight exited with $rc" }
@@ -325,6 +327,7 @@ jobs:
           $summary = [System.IO.File]::ReadAllText((Join-Path $run 'summary.json')) | ConvertFrom-Json
           $names = @($summary.steps | ForEach-Object { $_.name })
           if (($names -join ',') -ne 'imports,boot,logs') { throw "summary.json steps: $($names -join ', ')" }
+          if ((@($summary.options.extra_args) -join ' ') -ne $extra) { throw "-ExtraArgs arrived as: $(@($summary.options.extra_args) -join ' | ')" }
           $imports = @($summary.steps)[0]
           if ($imports.status -ne 'FAIL') { Write-Host "::warning::the import report of an empty folder is $($imports.status), not FAIL" }
           exit 0

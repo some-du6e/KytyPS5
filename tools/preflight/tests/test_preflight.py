@@ -42,7 +42,7 @@ SCRIPTS = {
 
 FAKE_EMULATOR = r"""#!/bin/sh
 # Stand-in kyty_emulator: --dump-imports writes the report, anything else "boots".
-echo "$*" >> argv.txt
+printf '%s\n' "$*" >> argv.txt
 imports=""
 session=""
 prev=""
@@ -258,6 +258,19 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(summary["result"], "PASS")
         self.assertIn("[2/2] pass ... PASS (", r.stdout)
 
+    def test_run_from_a_prompt(self):
+        """Not the -File of its process: the arguments come from $args."""
+        environment = dict(os.environ, HOME=self.home, TMPDIR=self.scratch, COMPUTERNAME="FAKE-PC",
+                           PATH=self.bin + os.pathsep + os.environ.get("PATH", ""))
+        script = os.path.join(self.preflight, "preflight.ps1").replace("'", "''")
+        out = self.out.replace("'", "''")
+        r = subprocess.run([PWSH, "-NoProfile", "-NonInteractive", "-Command",
+                            f"& '{script}' -OutDir '{out}' -Only 'args,pass'; exit $LASTEXITCODE"],
+                           capture_output=True, text=True, env=environment, timeout=240)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        _, summary, _ = self.results()
+        self.assertEqual([s["name"] for s in summary["steps"]], ["args", "pass"])
+
     def test_bad_arguments(self):
         cases = [
             (["-Bogus"], "unknown option: -Bogus"),
@@ -288,7 +301,9 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("the emulator is not at", r.stdout)
 
     def test_game(self):
-        r = self.run_preflight("-Game", self.game, "-BootSeconds", "3", "-ExtraArgs", "--title-profile gta6")
+        # A value that starts with '-' and holds a colon: -File would cut it in two at the colon.
+        extra = r"--title-profile gta6 --nid-names C:\PS5\names.txt"
+        r = self.run_preflight("-Game", self.game, "-BootSeconds", "3", "-ExtraArgs", extra)
         output = r.stdout + r.stderr
         self.assertEqual(r.returncode, 0, output)
         folder, summary, names = self.results()
@@ -301,9 +316,10 @@ class PreflightTests(unittest.TestCase):
         self.assertLess(boot["seconds"], 20)
         calls = self.read(folder, "emulator", "argv.txt").splitlines()
         self.assertEqual(calls, [
-            f"--game {self.game} --dump-imports {folder}/imports.txt --title-profile gta6",
-            f"--game {self.game} --preset rtx3050 --session-log {folder}/session.log --title-profile gta6",
+            f"--game {self.game} --dump-imports {folder}/imports.txt {extra}",
+            f"--game {self.game} --preset rtx3050 --session-log {folder}/session.log {extra}",
         ])
+        self.assertEqual(summary["options"]["extra_args"], extra.split(" "))
         self.assertIn("libSceFake: 3 imported, 1 unresolved", self.read(folder, "imports.txt"))
         self.assertIn("booting", self.read(folder, "emulator-boot.log"))
         for name in ("imports.txt", "session.log", "emulator-imports.log", "emulator-boot.log", "summary.json"):

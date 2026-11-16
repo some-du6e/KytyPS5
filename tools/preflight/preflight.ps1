@@ -15,7 +15,8 @@
   -BootSeconds <n>     how long the boot runs before preflight closes the emulator (default 300;
                        0: until you close the emulator yourself)
   -ExtraArgs "<opts>"  more emulator options for the import report and the boot, for example
-                       -ExtraArgs "--title-profile gta6"
+                       -ExtraArgs "--title-profile gta6 --nid-names D:\PS5\names.txt". Give paths
+                       in full: the emulator runs in the results folder
   -WithTests           with -Game, run the GPU tests too (before the boot; -Quick and -Only apply)
   -Emulator <path>     the kyty_emulator.exe to use (default: the one in the folder above this one)
   -OutDir <folder>     where the results go (default: this script's folder)
@@ -243,6 +244,23 @@ function Split-Words([string]$Text) {
     if ($quote -ne [char]0) { throw (New-UsageError "a quote is not closed in: $Text") }
     if ($any) { $words.Add($word.ToString()) }
     return $words.ToArray()
+}
+
+# The script's arguments as typed. powershell.exe -File and pwsh -File cut one that starts with '-'
+# and holds a colon in two at the colon, so -ExtraArgs "--nid-names D:\names.txt" would reach $args
+# as "--nid-names D" and "\names.txt". When this script is the -File of its process, the arguments
+# come from the process command line instead; run from a PowerShell prompt, from $args.
+function Get-ScriptArguments([object[]]$Fallback) {
+    try {
+        $all = @([System.Environment]::GetCommandLineArgs())
+        for ($i = 1; $i -lt $all.Count - 1; $i++) {
+            if ($all[$i] -notmatch '^(-|/|--)(f|fi|fil|file)$') { continue }
+            if ([System.IO.Path]::GetFileName($all[$i + 1]) -ine [System.IO.Path]::GetFileName($PSCommandPath)) { break }
+            if ($i + 2 -ge $all.Count) { return ,@() }
+            return ,@($all[($i + 2)..($all.Count - 1)])
+        }
+    } catch { }
+    return ,@($Fallback)
 }
 
 function Read-Arguments([object[]]$List) {
@@ -1274,7 +1292,7 @@ try {
         }
     } catch { }
     try {
-        $null = Invoke-Preflight $args
+        $null = Invoke-Preflight (Get-ScriptArguments $args)
     } catch {
         $Failure = $_.Exception.Message
         $ExitCode = 2
