@@ -1,0 +1,19 @@
+# Kyty import report, format 1
+# programs: eboot.bin libSceNpToolkit2.prx
+# totals: imported=8 hle=2 lle=1 unresolved=5
+
+library NpToolkit2: imported=1 hle=0 lle=1 unresolved=0
+  lle 0aR2aWmQal4 Func eboot.bin libSceNpToolkit2.prx
+
+library NpUtility: imported=3 hle=0 lle=0 unresolved=3
+  unresolved BYIZGKm6bO4 Func eboot.bin ?
+  unresolved hqzi1IHdQQQ Func eboot.bin ?
+  unresolved kvdMF48mB3Y Func eboot.bin sceNpBandwidthTestAbort
+
+library VideoRecordingP: imported=1 hle=0 lle=0 unresolved=1
+  unresolved Fc8qxlKINYQ Func eboot.bin ?
+
+library libkernel: imported=3 hle=2 lle=0 unresolved=1
+  hle -2IRUCO--PM Func eboot.bin LibKernel::KernelReadTsc
+  hle 1jfXLRVzisc Func eboot.bin LibKernel::KernelUsleep
+  unresolved AAAAAAAAAAA Object libSceNpToolkit2.prx ?

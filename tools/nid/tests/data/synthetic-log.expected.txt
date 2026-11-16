@@ -1,0 +1,20 @@
+# Kyty unresolved imports from logs, named by tools/nid/name_imports.py
+# inputs: synthetic-log.txt
+# names: names.txt (26 names)
+# totals: unresolved=7 named=6 called=5 object=1 load=1
+# log: Unresolved imports: 4 functions, 1 objects; by library: NpUtility=3, VideoRecordingP=1, NpUniversalDataSystem=1
+
+library Agc: unresolved=1 named=1
+  called 3ZWa3AoyWZQ Func eboot.bin sceAgcAsyncCondExecPatchSetCommandAddress
+
+library NpUniversalDataSystem: unresolved=1 named=0
+  object AAAAAAAAAAA Object eboot.bin ?
+
+library NpUtility: unresolved=4 named=4
+  called BYIZGKm6bO4 Func eboot.bin sceNpBandwidthTestGetStatus
+  called hqzi1IHdQQQ Func eboot.bin sceNpBandwidthTestInitStartDownload
+  called kvdMF48mB3Y Func ? sceNpBandwidthTestAbort
+  load pLr1fEQS1z8 Func eboot.bin sceNpBandwidthTestShutdown
+
+library VideoRecordingP: unresolved=1 named=1
+  called Fc8qxlKINYQ Func eboot.bin sceVideoRecordingSetInfo
