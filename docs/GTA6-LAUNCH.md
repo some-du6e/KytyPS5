@@ -200,10 +200,10 @@ Read this before relying on anything above.
 |---|---|
 | Upstream main `bc934ef0` under gta6-ci | Built on Linux. 46 of 81 tests pass; the 35 failures all need a real GPU (the harness asks for fragment barycentrics and 64-bit LDS/image atomics). `vdecsw_tests` does not compile with clang-cl, and upstream never builds it on Windows. |
 | TheCruZ fork, own CI | Green on Linux and Windows at `c00f2f27` (run 43081193192 in TheCruZ/KytyPS5-GTA), for the tests its CI runs. It does not run `shader_cfg`, which fails at `c00f2f27` (see below). |
-| gta6-prep, full CI (run 43290526330 plus the fixes after it) | Builds on Linux (clang) and Windows (clang-cl): emulator, launcher and every test target. Linux: 69 of 69 host tests pass. Windows: every gated host test passes except `vdecsw`, which run_tests.py tried to run although clang-cl does not build it (fixed after that run). Upstream's `common` fails on the Windows runner as it does upstream and is reported, not gated. |
+| gta6-prep, full CI (run 43304032901, `30032c06`) | Green. Builds on Linux (clang) and Windows (clang-cl): emulator, launcher and every test target. Linux: 69 of 69 host tests pass. Windows: 67 of 67 gated host tests pass; `vdecsw` is skipped because clang-cl does not build it (as upstream), and upstream's `common` fails on the Windows runner as it does upstream, so it is reported, not gated. |
 | GPU test group | 3 of 42 pass on lavapipe; the rest stop because the runner has no device with fragment barycentrics and 64-bit LDS/image atomics, as upstream's do. That includes this branch's own GPU tests (`shader_recompiler_gta6_alu`, `shader_recompiler_shader_mem`, `vram_heap_limit`): they compile but have never run. |
 | Test fixes from the first CI run | `shader_alu_decode`: the VOPC program overwrote its own buffer descriptor (test bug). `resource_tracking`: its "unsupported format" was `k8SScaled`, which shader-mem made supported (bisected to the shader-mem merge). `shader_cfg`: one check (material selection must reject an `s_cmp_le_u32` loop bound) fails in TheCruZ's fork at its own tip; it now prints a "known fork deviation" line instead of aborting, and the ~110 tests after it, which the fork never ran, pass. The recompiler keeps the fork's behaviour. |
-| Python triage tool | 56 tests pass locally and in CI, 2 skipped without pwsh. |
+| Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
 | GPU behaviour, NVIDIA behaviour, VRAM use | Unverified on hardware. The machine that did this work has no usable GPU, and CI runners have none either. |
 
 Commits whose correctness no test can show say `Speculative:` in their message body. Commits
@@ -225,8 +225,11 @@ cmake --build _Build/windows --target launcher
 cmake --install _Build/windows --prefix _Build/windows/install
 ```
 
-On Linux, follow "Building on Linux" in README.md. The CI artifact `KytyPS5-gta6-prep-Windows-x64`
-(from a gta6-ci run on this branch) is the easier route.
+On Linux, follow "Building on Linux" in README.md.
+
+The easier route on Windows is no build at all: every green gta6-ci run on this branch uploads
+`KytyPS5-gta6-prep-Windows-x64` (the installed emulator, about 29 MB zipped). Open the run's page
+on GitHub, scroll to Artifacts and download it while signed in. GitHub keeps artifacts for 90 days.
 
 ## Recommended settings for an RTX 3050 8 GB
 
