@@ -338,13 +338,18 @@ def named_imports(scan, table):
 
 
 def hle_entries(imp, hle):
-    """The LIB_FUNC/LIB_OBJECT registrations that resolve this import now. The linker falls back to
-    any HLE symbol with the NID and the import's type, whatever its library; a NoType import binds
-    to either only with --notype-import-fallback."""
+    """(The LIB_FUNC/LIB_OBJECT registrations that resolve this import now, the ones that would with
+    --notype-import-fallback.) The linker falls back to any HLE symbol with the NID and the import's
+    type, whatever its library. HLE symbols are all Func or Object, so a NoType import that has its
+    library and module (every import a log names in the generated form) binds to one only with
+    --notype-import-fallback, which is off by default (RuntimeLinker::Resolve)."""
     if hle is None:
-        return []
-    want = {"Func": ("FUNC",), "Object": ("OBJECT",)}.get(imp.type, ("FUNC", "OBJECT"))
-    return [e for e in hle.get(imp.nid, []) if e[0] in want]
+        return [], []
+    regs = hle.get(imp.nid, [])
+    if imp.type == "NoType":
+        return [], [e for e in regs if e[0] in ("FUNC", "OBJECT")]
+    want = {"Func": "FUNC", "Object": "OBJECT"}.get(imp.type)
+    return [e for e in regs if e[0] == want], []
 
 
 def _counts(rows):
@@ -364,8 +369,16 @@ def render_list(rows, inputs, names_path, table, summaries, hle=None):
         "# totals: %s called=%d object=%d load=%d%s" % (counts, kinds["called"], kinds["object"], kinds["load"], bound),
     ]
     if hle is not None:
-        out.append("# hle: %d of them registered by a LIB_FUNC/LIB_OBJECT in this checkout now" % (
-            sum(1 for imp, _n, _f in rows if imp.kind in UNRESOLVED_KINDS and hle_entries(imp, hle))))
+        now = with_fallback = 0
+        for imp, _n, _f in rows:
+            if imp.kind in UNRESOLVED_KINDS:
+                regs, fallback = hle_entries(imp, hle)
+                now += bool(regs)
+                with_fallback += bool(fallback)
+        line = "# hle: %d of them registered by a LIB_FUNC/LIB_OBJECT in this checkout now" % now
+        if with_fallback:
+            line += ", %d more with --notype-import-fallback" % with_fallback
+        out.append(line)
     for s in summaries[:4]:
         out.append("# log: %s" % s)
     by_lib = collections.OrderedDict()
@@ -380,11 +393,17 @@ def render_list(rows, inputs, names_path, table, summaries, hle=None):
             if imp.kind == "prx":
                 line += " (%s loaded later)" % imp.prx
             elif imp.kind in UNRESOLVED_KINDS:
-                regs = hle_entries(imp, hle)
+                regs, fallback = hle_entries(imp, hle)
                 if regs:
-                    line += " (hle now: %s:%d %s)" % (regs[0][1], regs[0][2], regs[0][3])
+                    line += " (hle now: %s:%d %s)" % regs[0][1:]
+                elif fallback:
+                    line += " (hle with --notype-import-fallback: %s:%d %s)" % fallback[0][1:]
             out.append(line)
     return "\n".join(out) + "\n"
+
+
+def _hle_json(entries):
+    return [{"kind": k, "file": f, "line": ln, "function": fn} for k, f, ln, fn in entries]
 
 
 def render_json(rows, inputs, names_path, table, summaries, hle=None):
@@ -394,12 +413,18 @@ def render_json(rows, inputs, names_path, table, summaries, hle=None):
     data["names_file"] = names_path
     data["names"] = len(table)
     data["summaries"] = summaries
-    data["imports"] = [collections.OrderedDict([
-        ("symbol", imp.symbol), ("nid", imp.nid), ("library", imp.library), ("type", imp.type),
-        ("kind", imp.kind), ("kinds", sorted(imp.kinds, key=KIND_ORDER.get)), ("prx", imp.prx), ("calls", imp.calls),
-        ("programs", imp.programs), ("name", name), ("name_from", name_from), ("sources", imp.sources),
-    ] + ([("hle", [{"kind": k, "file": f, "line": ln, "function": fn} for k, f, ln, fn in hle_entries(imp, hle)])]
-         if hle is not None else [])) for imp, name, name_from in rows]
+    data["imports"] = []
+    for imp, name, name_from in rows:
+        entry = collections.OrderedDict([
+            ("symbol", imp.symbol), ("nid", imp.nid), ("library", imp.library), ("type", imp.type),
+            ("kind", imp.kind), ("kinds", sorted(imp.kinds, key=KIND_ORDER.get)), ("prx", imp.prx),
+            ("calls", imp.calls), ("programs", imp.programs), ("name", name), ("name_from", name_from),
+            ("sources", imp.sources)])
+        if hle is not None:
+            regs, fallback = hle_entries(imp, hle)
+            entry["hle"] = _hle_json(regs)
+            entry["hle_notype_fallback"] = _hle_json(fallback)
+        data["imports"].append(entry)
     return json.dumps(data, indent=1) + "\n"
 
 

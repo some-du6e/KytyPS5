@@ -189,6 +189,25 @@ class LogTests(unittest.TestCase):
         self.assertIn("  called hqzi1IHdQQQ Func eboot.bin sceNpBandwidthTestInitStartDownload"
                       " (hle now: src/libs/lib.cpp:1 NpBandwidthTestInitStartDownload)\n", text)
 
+    def test_hle_notype_needs_the_fallback(self):
+        # A NoType import binds to an HLE Func or Object only with --notype-import-fallback.
+        repo = os.path.join(self.tmp, "repo")
+        os.makedirs(os.path.join(repo, "src", "libs"))
+        with open(os.path.join(repo, "src", "libs", "lib.cpp"), "w") as f:
+            f.write('LIB_FUNC("1jfXLRVzisc", LibKernel::KernelUsleep);\n')
+        log = self.write("notype.txt", [
+            "Relocate: unresolved non-PLT import patched to stub [3] [0000000900001000] <- 0000000200000000, "
+            "1jfXLRVzisc[libkernel_v1][libkernel_v1.1][NoType], NoType, Global, <game>/eboot.bin"])
+        imp = self.imports(log, "--hle", "--repo", repo)["1jfXLRVzisc"]
+        self.assertEqual(imp["hle"], [])
+        self.assertEqual(imp["hle_notype_fallback"], [{"kind": "FUNC", "file": "src/libs/lib.cpp", "line": 1,
+                                                        "function": "LibKernel::KernelUsleep"}])
+        text = self.output(log, "--hle", "--repo", repo).decode("ascii")
+        self.assertIn("# hle: 0 of them registered by a LIB_FUNC/LIB_OBJECT in this checkout now, "
+                      "1 more with --notype-import-fallback\n", text)
+        self.assertIn("  load 1jfXLRVzisc NoType eboot.bin sceKernelUsleep"
+                      " (hle with --notype-import-fallback: src/libs/lib.cpp:1 LibKernel::KernelUsleep)\n", text)
+
     @unittest.skipUnless(os.path.isdir(u.TRIAGE_FIXTURES), "no triage fixtures")
     def test_gta5_fixture(self):
         imps = self.imports(os.path.join(u.TRIAGE_FIXTURES, "gta5-729-guest-write-rtx3060.txt"))

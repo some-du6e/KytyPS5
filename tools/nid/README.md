@@ -112,7 +112,9 @@ own modules nor the HLE provide.
 
 `--hle` marks the unresolved imports that a LIB_FUNC or LIB_OBJECT in this checkout registers
 now, which helps with a log from an older build: `(hle now: src/libs/libNet.cpp:1684 NpCommerceDialogInitialize)`.
-`--json` prints the same list as JSON.
+A `NoType` import binds to one only with the emulator's `--notype-import-fallback`, which is off
+by default, so it gets `(hle with --notype-import-fallback: ...)` and is not counted as
+registered. `--json` prints the same list as JSON.
 
 The triage tool takes the names file too. `python3 -I tools/triage/kyty_triage.py --nid-names <file> <logs>`
 puts the names on the called and object imports in its report, JSON and agent brief. Without
