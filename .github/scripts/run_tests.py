@@ -9,12 +9,12 @@ gpu:  tests run by executables that open a Vulkan device (the shader recompiler
 
 Usage: run_tests.py <build-dir> host|gpu [--gpu-required]
 """
-import json
 import os
 import subprocess
 import sys
 
-GPU_EXECUTABLES = ("shader_recompiler_compute_tests", "kernel_file_system_tests")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ctest_groups import load_tests, split_tests  # noqa: E402  (shared with package_gpu_tests.py)
 
 # Host tests that fail on a platform without any gta6-prep change, and that upstream's CI does not
 # run there. They still run, after the gated ones, but only warn.
@@ -43,20 +43,9 @@ def run_ctest(build: str, log: str, names: list) -> int:
 def main() -> int:
     build, group = sys.argv[1], sys.argv[2]
     required = "--gpu-required" in sys.argv[3:]
-    info = json.loads(subprocess.run(["ctest", "--test-dir", build, "--show-only=json-v1"],
-                                     check=True, capture_output=True, text=True).stdout)
-    names = {"host": [], "gpu": []}
-    skipped = []
-    for test in info.get("tests", []):
-        # A target not built on this platform (vdecsw on clang-cl): ctest leaves out "command" when
-        # it cannot find the executable, or names a path that does not exist.
-        command = test.get("command") or []
-        if not command or not command[0] or not os.path.exists(command[0]):
-            skipped.append(test["name"])
-            continue
-        exe = os.path.basename(command[0])
-        exe = exe[:-4] if exe.endswith(".exe") else exe
-        names["gpu" if exe in GPU_EXECUTABLES else "host"].append(test["name"])
+    groups, not_built = split_tests(load_tests(build))
+    names = {key: [test["name"] for test in tests] for key, tests in groups.items()}
+    skipped = [test["name"] for test in not_built]
     known = KNOWN_FAILING.get(sys.platform, {})
     selected = [name for name in names[group] if name not in known]
     informational = [name for name in names[group] if name in known]
