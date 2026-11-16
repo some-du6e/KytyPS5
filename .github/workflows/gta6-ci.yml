@@ -49,6 +49,10 @@ jobs:
           else
             echo "tools/triage not present yet"
           fi
+      # Offline: the tests never download the name lists (tools/nid/SOURCES.md).
+      - name: Run NID tool tests
+        shell: bash
+        run: python -m unittest discover -s tools/nid/tests -t tools/nid -v
 
   linux:
     name: Build and test (Linux)
