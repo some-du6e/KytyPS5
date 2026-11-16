@@ -632,6 +632,24 @@ function Get-TreeIds([int[]]$Known, [datetime]$Since) {
     return $ids.ToArray()
 }
 
+# The ids among $Ids, in their order, of processes that run the emulator itself: $Emulator's file
+# name, without the --pipeline-helper of its helper processes. Windows only.
+function Select-Emulators([int[]]$Ids, [string]$Emulator) {
+    if (@($Ids).Count -eq 0) { return @() }
+    $name = [System.IO.Path]::GetFileName($Emulator)
+    $filter = (@($Ids) | ForEach-Object { "ProcessId = $_" }) -join ' OR '
+    try {
+        $all = @(Get-CimInstance -ClassName Win32_Process -Filter $filter -Property ProcessId, Name, CommandLine -ErrorAction Stop)
+    } catch {
+        return @()
+    }
+    $match = @{}
+    foreach ($p in $all) {
+        if ([string]$p.Name -ieq $name -and [string]$p.CommandLine -notmatch '(^|\s)--pipeline-helper(\s|$)') { $match[[int]$p.ProcessId] = $true }
+    }
+    return @(@($Ids) | Where-Object { $match.ContainsKey($_) })
+}
+
 # Stops a child and everything it started: the processes in its job, or without one, taskkill /T /F
 # (.NET Framework has no Kill(true)). With $GraceSeconds it first asks the windows to close, so that
 # the emulator shuts down and writes out its logs. Returns 'closed' or 'killed'.
@@ -1050,22 +1068,36 @@ function Invoke-Emulator($Step, [string]$Emulator, [string[]]$Arguments, [string
     }
     $dotState = @{ printed = $false }
     $known = New-Object System.Collections.Generic.List[int]
+    # The processes followed below, kept open until the step ends: their ids cannot go to another
+    # process meanwhile.
+    $held = New-Object System.Collections.Generic.List[object]
     $exited = Wait-Child $child $Seconds { Say '.' -NoNewline; $dotState.printed = $true }
     $code = $null
     $restarted = 0
-    # An emulator LoadExec starts its successor and exits: the game goes on in that process.
+    # An emulator LoadExec starts its successor and exits: the game goes on in that process, another
+    # kyty_emulator.exe. Its pipeline helpers, its conhost.exe or a WerFault.exe do not count: the
+    # exit code that judges the boot is the last emulator's.
     while ($exited -and $FollowRestarts -and $OnWindows) {
-        $next = @(Get-TreeIds (@($child.Id) + $known.ToArray()) $child.Started | Where-Object {
-            $_ -ne $child.Id -and -not $known.Contains($_) -and (Test-Ours $_ $child.Started) })
+        if ($null -ne $child.Job) {
+            $candidates = @([KytyPreflight.Native]::JobProcessIds($child.Job))
+        } else {
+            $candidates = @(Get-TreeIds (@($child.Id) + $known.ToArray()) $child.Started | Where-Object { Test-Ours $_ $child.Started })
+        }
+        $next = @(Select-Emulators @($candidates | Where-Object { $_ -ne $child.Id -and -not $known.Contains($_) }) $Emulator)
         if ($next.Count -eq 0) { break }
         $followed = @()
         foreach ($id in $next) {
             $known.Add($id)
-            try { $p = [System.Diagnostics.Process]::GetProcessById($id); $null = $p.Handle; $followed += $p } catch { }
+            try {
+                $p = [System.Diagnostics.Process]::GetProcessById($id)
+                $null = $p.Handle
+                $held.Add($p)
+                if ($null -eq $child.Job -or [KytyPreflight.Native]::InJob($p.Handle, $child.Job)) { $followed += $p }
+            } catch { }
         }
         if ($followed.Count -eq 0) { continue }
         $restarted++
-        Say "(the emulator restarted itself as process $($next -join ', ')) " -NoNewline
+        Say "(the emulator restarted itself as process $(@($followed | ForEach-Object { $_.Id }) -join ', ')) " -NoNewline
         foreach ($p in $followed) {
             while (-not $p.WaitForExit(250)) {
                 Stop-OnKey
@@ -1079,6 +1111,7 @@ function Invoke-Emulator($Step, [string]$Emulator, [string[]]$Arguments, [string
     $stopped = $null
     if (-not $exited) { $stopped = Stop-Child $child $GraceSeconds $known.ToArray() }
     $rootCode = Complete-Child $child
+    foreach ($p in $held) { try { $p.Dispose() } catch { } }
     $script:RunningStep = $null
     if ($restarted -eq 0) { $code = $rootCode }
     Set-Exit $Step $code
