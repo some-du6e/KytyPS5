@@ -15,6 +15,7 @@ next to this file. See README.md.
 import argparse
 import collections
 import gzip
+import importlib.util
 import io
 import json
 import math
@@ -2186,6 +2187,32 @@ def triage(paths, rules=None, quick=False, repo=None, exit_code=None, stdin=None
     return rep
 
 
+def load_nid_names(path):
+    """A NameTable (tools/nid/nid.py, the emulator's --nid-names rules) filled from a names file."""
+    nid_py = os.path.join(TOOL_DIR, "..", "nid", "nid.py")
+    spec = importlib.util.spec_from_file_location("kyty_nid", nid_py)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    table = module.NameTable()
+    table.load_file(path)
+    return table
+
+
+def apply_nid_names(rep, table, path):
+    """--nid-names: names the called and object imports the log did not name. Only with the option,
+    so the report without it stays as it was."""
+    imp = rep["imports"]
+    named = 0
+    for entry in imp["called"] + imp["objects"]:
+        if entry.get("nid") and not entry.get("name"):
+            name = table.find(entry["nid"])
+            if name is not None:
+                entry["name"] = name
+                named += 1
+    imp["nid_names"] = {"file": os.path.basename(path), "names": len(table), "named": named}
+    return rep
+
+
 def load_report(path, rules=None, quick=False, repo=None):
     """A saved --json report or a log to triage."""
     if path.endswith(".json"):
@@ -2389,7 +2416,12 @@ def render_markdown(rep, top=10):
             lt["total"], ", ".join("%s=%d" % kv for kv in list(lt["by_library"].items())[:12])))
         out.append("")
     if imp["objects"]:
-        out.append("Unresolved object imports: %s" % ", ".join("`%s`" % o["symbol"] for o in imp["objects"][:10]))
+        out.append("Unresolved object imports: %s" % ", ".join(
+            "`%s`%s" % (o["symbol"], " (%s)" % o["name"] if o.get("name") else "") for o in imp["objects"][:10]))
+        out.append("")
+    if imp.get("nid_names"):
+        n = imp["nid_names"]
+        out.append("Names from %s (--nid-names, %d names): %d imports named here." % (n["file"], n["names"], n["named"]))
         out.append("")
     if imp.get("strict_exit"):
         out.append("`--strict-imports` stopped at `%s` from %s" % (imp["strict_exit"]["symbol"],
@@ -2682,8 +2714,17 @@ def main(argv=None):
     ap.add_argument("--repo", default=None, help="KytyPS5 checkout used to map libraries to files (default: auto)")
     ap.add_argument("--exit-code", type=lambda s: int(s, 0), default=None, help="exit code of the emulator, if known")
     ap.add_argument("--top", type=int, default=10, help="fix areas to show (default 10)")
+    ap.add_argument("--nid-names", default=None, metavar="FILE",
+                    help="names file (tools/nid/build_names.py): name the unresolved imports the log does not "
+                         "name (not used by --compare)")
     ap.add_argument("-o", "--output", default=None, help="write to this file instead of stdout")
     args = ap.parse_args(argv)
+    names = None
+    if args.nid_names:
+        try:
+            names = load_nid_names(args.nid_names)
+        except OSError as e:
+            ap.error("--nid-names: %s" % e)
 
     rules = RuleSet(args.rules)
     if args.compare:
@@ -2701,6 +2742,8 @@ def main(argv=None):
                 ap.error("give a log file, a directory, or - for stdin")
             logs = ["-"]
         rep = triage(logs, rules=rules, quick=args.quick, repo=args.repo, exit_code=args.exit_code)
+        if names is not None:
+            apply_nid_names(rep, names, args.nid_names)
         roots = set(rep.get("_game_roots", []))
         if args.redact:
             rep = redact_obj(rep, roots)

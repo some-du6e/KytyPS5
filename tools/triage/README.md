@@ -31,6 +31,7 @@ Options:
 | `--exit-code N` | the emulator's exit code if the tester knows it (`0xC0000409` works) |
 | `--repo DIR` | checkout used to map library names to `src/libs` files (default: the tree the tool sits in) |
 | `--rules FILE` | another rules file |
+| `--nid-names FILE` | a names file from `tools/nid/build_names.py`: puts symbol names on the called and object imports the log did not name (`tools/nid/README.md`). Without it the output is unchanged |
 | `--top N`, `-o FILE` | fix areas shown, output file |
 
 ## What it reads
