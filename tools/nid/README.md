@@ -61,11 +61,13 @@ the lists that could be fetched, and `--cache DIR` or `$KYTY_NID_CACHE` moves th
 ## Use it with the emulator
 
 ```
-kyty_emulator --game D:\GTA6 --dump-imports gta6-imports.txt --nid-names %LOCALAPPDATA%\kyty-nid\nid-names.txt
-kyty_emulator --game D:\GTA6 --session-log auto --nid-names %LOCALAPPDATA%\kyty-nid\nid-names.txt
+kyty_emulator --game D:\GTA6 --dump-imports gta6-imports.txt --nid-names "%LOCALAPPDATA%\kyty-nid\nid-names.txt"
+kyty_emulator --game D:\GTA6 --session-log auto --nid-names "%LOCALAPPDATA%\kyty-nid\nid-names.txt"
 ```
 
-In PowerShell write `"$env:LOCALAPPDATA\kyty-nid\nid-names.txt"`. The emulator logs
+Keep the quotes: cmd.exe expands `%LOCALAPPDATA%` before it splits the arguments, so a profile
+path with a space would end the value early. In PowerShell write
+`"$env:LOCALAPPDATA\kyty-nid\nid-names.txt"`. The emulator logs
 `NID names: 176487 names from ...` at start. In the `--dump-imports` report each
 `unresolved` line then ends in the symbol name instead of `?`. In the session log, each
 `Unresolved import stub called:` and `Unresolved object import:` line is followed by
