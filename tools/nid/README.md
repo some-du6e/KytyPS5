@@ -80,7 +80,7 @@ python3 -I tools/nid/name_imports.py gta6-imports.txt -o gta6-imports-named.txt
 A `--dump-imports` report comes back in its own format with the `?` replaced: the report the
 emulator writes with `--nid-names` and the same names file. Logs give a list instead. Session
 logs, printf logs, console captures and pasted text all work, plain, `.gz` or `.zip`, or `-` for
-stdin:
+stdin, in UTF-8 or in the UTF-16 that Windows PowerShell 5.1's `>` writes:
 
 ```
 python3 -I tools/nid/name_imports.py --hle _Logs/PPSA01234_2026-11-19_20-05-11.log _kyty.txt.gz

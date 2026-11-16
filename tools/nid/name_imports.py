@@ -114,27 +114,58 @@ def prx_key(path):
 # Inputs
 
 
+class _Utf16AsUtf8(io.RawIOBase):
+    """A UTF-16 text with a byte order mark, read as UTF-8 bytes. Windows PowerShell 5.1's '>' and
+    Tee-Object write console captures that way."""
+
+    def __init__(self, f):
+        self._text = io.TextIOWrapper(f, encoding="utf-16", errors="replace", newline="")
+        self._pending = b""
+
+    def readable(self):
+        return True
+
+    def readinto(self, buf):
+        while not self._pending:
+            text = self._text.read(1 << 16)
+            if not text:
+                return 0
+            self._pending = text.encode("utf-8")
+        n = min(len(buf), len(self._pending))
+        buf[:n] = self._pending[:n]
+        self._pending = self._pending[n:]
+        return n
+
+
+def _as_utf8(f):
+    """f, or f read through _Utf16AsUtf8 when it starts with a UTF-16 byte order mark."""
+    if f.peek(2)[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return io.BufferedReader(_Utf16AsUtf8(f))
+    return f
+
+
 def open_inputs(path, stdin=None):
     """(display name, binary file with peek()) for each text in the input: a plain file, a .gz,
-    every member of a .zip (read in memory, never extracted), or '-' for stdin."""
+    every member of a .zip (read in memory, never extracted), or '-' for stdin. UTF-16 texts come
+    back as UTF-8."""
     if path == "-":
         data = (stdin or sys.stdin.buffer).read()
-        yield "<stdin>", io.BufferedReader(io.BytesIO(data))
+        yield "<stdin>", _as_utf8(io.BufferedReader(io.BytesIO(data)))
         return
     with open(path, "rb") as f:
         magic = f.read(4)
     if magic[:2] == b"\x1f\x8b":
         with gzip.open(path, "rb") as f:
-            yield os.path.basename(path), f
+            yield os.path.basename(path), _as_utf8(f)
     elif magic == b"PK\x03\x04":
         with zipfile.ZipFile(path) as z:
             for info in z.infolist():
                 if not info.is_dir():
                     with z.open(info) as f:
-                        yield "%s:%s" % (os.path.basename(path), info.filename), f
+                        yield "%s:%s" % (os.path.basename(path), info.filename), _as_utf8(f)
     else:
         with open(path, "rb") as f:
-            yield os.path.basename(path), f
+            yield os.path.basename(path), _as_utf8(f)
 
 
 def is_report(head):

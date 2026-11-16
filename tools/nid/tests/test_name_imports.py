@@ -1,5 +1,6 @@
 """name_imports.py: report naming, log lists, input forms and --hle, offline."""
 
+import codecs
 import contextlib
 import gzip
 import io
@@ -172,6 +173,26 @@ class LogTests(unittest.TestCase):
         self.assertEqual(strip(self.imports(zp)), want)
         self.assertEqual(strip(self.imports("-", stdin=io.BytesIO(raw))), want)
         self.assertEqual(self.imports(zp)["BYIZGKm6bO4"]["sources"], ["logs.zip:_Logs/session.log"])
+
+    def test_utf16_console_capture(self):
+        # Windows PowerShell 5.1's '>' writes UTF-16LE with a byte order mark and CRLF.
+        text = u.read_bytes(u.data("synthetic-log.txt")).decode("ascii").replace("\n", "\r\n")
+        want = self.output(u.data("synthetic-log.txt"))
+        path = os.path.join(self.tmp, "synthetic-log.txt")
+        for data in (codecs.BOM_UTF16_LE + text.encode("utf-16-le"), codecs.BOM_UTF16_BE + text.encode("utf-16-be")):
+            with open(path, "wb") as f:
+                f.write(data)
+            self.assertEqual(self.output(path), want)
+        gz = os.path.join(self.tmp, "console.txt.gz")
+        with gzip.open(gz, "wb") as f:
+            f.write(codecs.BOM_UTF16_LE + text.encode("utf-16-le"))
+        self.assertEqual(sorted(self.imports(gz)), sorted(self.imports(u.data("synthetic-log.txt"))))
+        report = os.path.join(self.tmp, "report.txt")
+        with open(report, "wb") as f:
+            f.write(codecs.BOM_UTF16_LE + u.read_bytes(u.data("synthetic-report-unnamed.txt")).decode("ascii").encode("utf-16-le"))
+        out = os.path.join(self.tmp, "named.txt")
+        self.assertEqual(run(report, "-o", out)[0], 0)
+        self.assertEqual(u.read_bytes(out), u.read_bytes(u.data("synthetic-report-named.txt")))
 
     def test_hle(self):
         repo = os.path.join(self.tmp, "repo")
