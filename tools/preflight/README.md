@@ -73,7 +73,8 @@ Preflight then does three things:
    emulator lacks. Seconds to a minute.
 2. **Boot.** It starts the game with `--preset rtx3050` and a session log, lets it run for 5 minutes,
    then closes it. Leave the preflight window open. To play longer, add `-BootSeconds 0`: the game
-   then runs until you close the game window.
+   then runs until you close the game window. A boot that didn't crash shows as `RAN`, not `PASS`:
+   a game stuck on a black screen also keeps running, so only the logs tell how far it got.
 3. **Logs.** It collects the emulator's logs and zips everything.
 
 Send the zip it prints, especially if the game crashed: the zip is how the crash gets fixed.
@@ -91,8 +92,9 @@ Send the zip it prints, especially if the game crashed: the zip is how the crash
 | `-Emulator <path>` | another `kyty_emulator.exe`; the default is the one in the folder above `preflight` |
 | `-OutDir <folder>` | where the results go; the default is the `preflight` folder |
 
-Exit codes, for scripts: 0 when every step passed, 1 when a test or emulator step failed, 2 when
-preflight could not run because of a bad argument or a missing file.
+Exit codes, for scripts: 0 when no step failed (every step `PASS`, or `RAN` for a boot), 1 when a
+test or emulator step failed, 2 when preflight could not run because of a bad argument or a
+missing file.
 
 ## What the zip holds
 

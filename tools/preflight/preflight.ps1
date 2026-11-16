@@ -22,7 +22,8 @@
   -OutDir <folder>     where the results go (default: this script's folder)
 
   Results: <OutDir>\kyty-preflight-<computer>-<yyyyMMdd-HHmmss>\ and a .zip of it next to it.
-  Exit code: 0 every step passed, 1 a test or emulator step failed, 2 the script could not run.
+  Exit code: 0 no step failed, 1 a test or emulator step failed, 2 the script could not run. A
+  boot that did not crash is RAN, not PASS: preflight cannot tell whether the game works.
   Nothing needs administrator rights. Nothing is written outside -OutDir except the temp folder.
 #>
 
@@ -1173,18 +1174,20 @@ function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [in
     Say 'Boot ... ' -NoNewline
     $arguments = @('--game', $Game, '--preset', 'rtx3050', '--session-log', $sessionLog) + $ExtraArgs
     $r = Invoke-Emulator $boot $Emulator $arguments $cwd 'emulator-boot.log' $BootSeconds 15 -FollowRestarts
+    # A boot that did not crash is RAN, not PASS: a game frozen on a black screen runs too, and
+    # closing the game window ends the emulator with 0. Only session.log tells how far it got.
     if ($null -eq $r) {
         Say "ERROR ($($boot.detail))" 'Red'
     } elseif (-not $r.Exited) {
         $how = 'stopped it'
         if ($r.Stopped -eq 'closed') { $how = 'closed its window' }
-        $boot.status = 'PASS'
-        $boot.detail = "still running after $BootSeconds s; preflight $how"
-        Say "PASS ($($boot.detail))" 'Green'
+        $boot.status = 'RAN'
+        $boot.detail = "still running after $BootSeconds s; preflight $how. session.log shows how far the game got"
+        Say "RAN ($($boot.detail))" 'Cyan'
     } elseif ($r.Code -eq 0) {
-        $boot.status = 'PASS'
-        $boot.detail = "the emulator exited with 0 after $(Format-Seconds $r.Seconds) s"
-        Say "PASS ($($boot.detail))" 'Green'
+        $boot.status = 'RAN'
+        $boot.detail = "the emulator exited with 0 after $(Format-Seconds $r.Seconds) s. session.log shows how far the game got"
+        Say "RAN ($($boot.detail))" 'Cyan'
     } else {
         $boot.status = 'FAIL'
         $boot.detail = "the emulator exited after $(Format-Seconds $r.Seconds) s, $(Describe-ExitCode $r.Code)"
@@ -1293,7 +1296,7 @@ function Write-Zip([string]$Folder, [string]$ZipPath, [string[]]$Skip) {
 
 function Write-Summary([string]$Result) {
     $counts = [ordered]@{}
-    foreach ($status in @('PASS', 'FAIL', 'TIMEOUT', 'ERROR', 'INTERRUPTED', 'NOT RUN')) {
+    foreach ($status in @('PASS', 'RAN', 'FAIL', 'TIMEOUT', 'ERROR', 'INTERRUPTED', 'NOT RUN')) {
         $n = @($Steps | Where-Object { $_.status -eq $status }).Count
         if ($n -gt 0) { $counts[$status] = $n }
     }
@@ -1496,7 +1499,7 @@ function Invoke-Preflight([object[]]$Arguments) {
     }
     $script:Completed = $true
     $script:ExitCode = 0
-    if (@($Steps | Where-Object { $_.status -ne 'PASS' }).Count -gt 0) { $script:ExitCode = 1 }
+    if (@($Steps | Where-Object { $_.status -ne 'PASS' -and $_.status -ne 'RAN' }).Count -gt 0) { $script:ExitCode = 1 }
 }
 
 try {
@@ -1541,8 +1544,10 @@ try {
     }
     if ($null -ne $RunDir -and (Test-Path -LiteralPath $RunDir)) {
         $result = 'ERROR'
+        $ran = @($Steps | Where-Object { $_.status -eq 'RAN' }).Count
         if ($Completed) {
             $result = 'PASS'
+            if ($ran -gt 0) { $result = 'RAN' }
             if ($ExitCode -ne 0) { $result = 'FAIL' }
         } elseif ($null -eq $Failure) {
             $result = 'INTERRUPTED'
@@ -1556,10 +1561,16 @@ try {
         try {
             if ($Completed) {
                 $passed = @($Steps | Where-Object { $_.status -eq 'PASS' }).Count
+                $text = "$passed of $($Steps.Count) steps passed."
                 $color = 'Yellow'
                 if ($ExitCode -eq 0) { $color = 'Green' }
+                if ($ran -gt 0) {
+                    # Not "it works": the boot ran, and nothing here can tell whether the game did.
+                    $text += ' The boot ran without crashing; whether the game works shows only in its logs.'
+                    if ($ExitCode -eq 0) { $color = 'Cyan' }
+                }
                 Say ''
-                Say "$passed of $($Steps.Count) steps passed." $color
+                Say $text $color
             }
             Write-Summary $result
             Write-Text (Join-Path $RunDir 'console.txt') $ConsoleText.ToString()

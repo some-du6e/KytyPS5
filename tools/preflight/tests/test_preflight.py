@@ -309,8 +309,12 @@ class PreflightTests(unittest.TestCase):
         folder, summary, names = self.results()
         base = os.path.basename(folder)
         self.assertEqual(summary["mode"], "game")
+        # A boot that did not crash has no verdict: RAN, not PASS, and no "every step passed".
         self.assertEqual([(s["name"], s["status"]) for s in summary["steps"]],
-                         [("imports", "PASS"), ("boot", "PASS"), ("logs", "PASS")], output)
+                         [("imports", "PASS"), ("boot", "RAN"), ("logs", "PASS")], output)
+        self.assertEqual((summary["result"], summary["exit_code"], summary["counts"]), ("RAN", 0, {"PASS": 2, "RAN": 1}))
+        self.assertIn("2 of 3 steps passed. The boot ran without crashing", output)
+        self.assertIn("result: RAN (exit code 0)", self.read(folder, "summary.txt"))
         boot = summary["steps"][1]
         self.assertIn("still running after 3 s", boot["detail"])
         self.assertLess(boot["seconds"], 20)
