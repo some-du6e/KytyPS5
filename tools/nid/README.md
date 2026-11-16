@@ -52,7 +52,8 @@ The file has one name per line, sorted, without duplicates, after `#` lines that
 list and its revision. Only names of printable ASCII without spaces are kept: the emulator
 trims blanks and takes a line starting with `#` for a comment.
 
-Options: `-o FILE` writes elsewhere, but keep the file out of git (`SOURCES.md` says why).
+Options: `-o FILE` writes elsewhere. The script refuses a names file or cache inside the
+checkout (or inside `--repo`), so neither can be committed by accident (`SOURCES.md` says why).
 `--offline` never downloads, `--refresh` downloads again, `--sources a,b` picks lists
 (`--list-sources`), `--extra FILE` merges a names file of your own, `--skip-failed` builds from
 the lists that could be fetched, and `--cache DIR` or `$KYTY_NID_CACHE` moves the cache.

@@ -9,7 +9,8 @@ GPL-2.0, GPL-2.0-or-later, LGPL-2.1, or a permissive one. A file without a licen
 nothing, and GPL-3.0 does not combine with GPL-2.0-only. So `build_names.py` downloads every
 list at run time into a cache outside the repository and writes the names file there too:
 `%LOCALAPPDATA%\kyty-nid` on Windows, `~/.cache/kyty-nid` on Linux, or `--cache DIR` /
-`$KYTY_NID_CACHE`. Neither the lists nor the names file belong in git.
+`$KYTY_NID_CACHE`. Neither the lists nor the names file belong in git, and `build_names.py`
+refuses a cache or names file inside the checkout.
 
 ## Lists the build uses
 

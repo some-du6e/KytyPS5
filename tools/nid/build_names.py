@@ -369,6 +369,15 @@ def default_repo():
     return cand if os.path.isdir(os.path.join(cand, "src", "libs")) else None
 
 
+def inside(path, root):
+    """True when path is root or below it, links resolved and, on Windows, case folded."""
+    path, root = (os.path.normcase(os.path.realpath(p)) for p in (path, root))
+    try:
+        return os.path.commonpath([path, root]) == root
+    except ValueError:  # another drive
+        return False
+
+
 def hle_share(table, hle):
     """(named, total) over the LIB_FUNC NIDs, and the unnamed ones."""
     funcs = [n for n, regs in hle.items() if any(kind == "FUNC" for kind, _f, _l, _fn in regs)]
@@ -435,6 +444,13 @@ def main(argv=None, opener=None):
         return 0
 
     cache = args.cache or default_cache()
+    output = args.output or os.path.join(cache, OUTPUT_NAME)
+    # A path in a checkout is one `git add -A` away from a commit (SOURCES.md says why it must not).
+    for checkout in {c for c in (default_repo(), args.repo) if c and os.path.isdir(os.path.join(c, "src", "libs"))}:
+        for what, path in (("the cache", cache), ("the names file", output)):
+            if inside(path, checkout):
+                ap.error("%s (%s) is inside the KytyPS5 checkout %s; put it outside (SOURCES.md)" % (
+                    what, path, checkout))
     selected = SOURCES
     if args.sources:
         ids = [x.strip() for x in args.sources.split(",") if x.strip()]
@@ -484,7 +500,6 @@ def main(argv=None, opener=None):
         print("error: no names", file=sys.stderr)
         return 1
     ordered = sorted(union)
-    output = args.output or os.path.join(cache, OUTPUT_NAME)
     write_names(output, header_lines(results, extras, len(ordered)), ordered)
 
     # Per source: names, the ones no other source has, pairs that hash to the NID listed with them.

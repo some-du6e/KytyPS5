@@ -362,6 +362,32 @@ class MainTests(unittest.TestCase):
         code, _out, err = self.run_main("-o", os.path.join(self.tmp, "n.txt"), "--skip-failed")
         self.assertNotIn("warning", err)
 
+    def test_refuses_to_write_inside_a_checkout(self):
+        checkout = os.path.join(self.tmp, "checkout")
+        os.makedirs(os.path.join(checkout, "src", "libs"))
+        saved = bn.default_repo
+        bn.default_repo = lambda: checkout  # the checkout holding the script
+        try:
+            for args in (["-o", os.path.join(checkout, "nid-names.txt")], ["--cache", os.path.join(checkout, "cache")],
+                         ["--cache", os.path.join(checkout, "tools", "nid", "cache")],
+                         ["-o", os.path.join(self.repo, "n.txt")]):  # inside --repo
+                with self.subTest(args=args), self.assertRaises(SystemExit):
+                    self.run_main(*args)
+        finally:
+            bn.default_repo = saved
+        self.assertEqual(os.listdir(checkout), ["src"])
+        self.assertEqual(sorted(os.listdir(self.repo)), ["src"])
+        self.assertEqual(self.opener.requests, [])
+        self.assertTrue(bn.inside(os.path.join(checkout, "a", ".."), checkout))
+        self.assertFalse(bn.inside(checkout + "-other", checkout))
+        # A --repo that is not a checkout (no src/libs) does not count: the cache below it is fine.
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = bn.main(["--cache", os.path.join(self.tmp, "cache"), "--repo", self.tmp, "-o",
+                            os.path.join(self.tmp, "n.txt")], opener=self.opener)
+        self.assertEqual(code, 0)
+        self.assertIn("HLE check: skipped", out.getvalue())
+
     def test_extra_names(self):
         extra = os.path.join(self.tmp, "extra.txt")
         with open(extra, "w") as f:
