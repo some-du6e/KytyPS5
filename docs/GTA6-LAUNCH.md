@@ -192,7 +192,10 @@ the job; `run_tests.py` reports host tests that fail upstream on a platform (Win
 warnings. `workflow_dispatch` with `bisect_shas` builds only the given targets at each listed
 commit, one job after another, to find which commit broke a test. Tests that open a Vulkan device run in a separate step that only reports, because GitHub
 runners have no GPU and lavapipe lacks fragment barycentrics and 64-bit image atomics. Upstream's
-own CI never runs those tests either. The Windows job also packages the GPU tests with preflight
+own CI never runs those tests either. On lavapipe each of those tests took about 85 s to fail, 54
+minutes for the group. So `shader_recompiler_compute` now runs first, and when it finds no usable
+device, the rest of the group gets 10 s per test. The three tests that open no device still pass
+within that limit. The Windows job also packages the GPU tests with preflight
 and smoke-tests that package under Windows PowerShell 5.1 (section 9). The tools job runs the
 triage, NID, CI-script and preflight tests, the last under pwsh.
 
@@ -260,8 +263,9 @@ Read this before relying on anything above.
 | GPU test group | 3 of 42 pass on lavapipe; the rest stop because the runner has no device with fragment barycentrics and 64-bit LDS/image atomics, as upstream's do. That includes this branch's own GPU tests (`shader_recompiler_gta6_alu`, `shader_recompiler_shader_mem`, `vram_heap_limit`): they compile but have never run. |
 | Test fixes from the first CI run | `shader_alu_decode`: the VOPC program overwrote its own buffer descriptor (test bug). `resource_tracking`: its "unsupported format" was `k8SScaled`, which shader-mem made supported (bisected to the shader-mem merge). `shader_cfg`: one check (material selection must reject an `s_cmp_le_u32` loop bound) fails in TheCruZ's fork at its own tip; it now prints a "known fork deviation" line instead of aborting, and the ~110 tests after it, which the fork never ran, pass. The recompiler keeps the fork's behaviour. |
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
-| Preflight package | Locally, 13 CI-script tests and 13 preflight tests pass, the preflight ones under pwsh 7.6.9 on Linux. PSScriptAnalyzer's Windows PowerShell 5.1 compatibility rules find nothing. It has not run on Windows yet. The next CI run's smoke steps are the first check, and Karim's PC is the real one. |
-| NID tools | Locally, 68 tests pass, and the triage tool's output without `--nid-names` is byte-identical to before on all 99 fixture outputs. Not yet run in CI or on Windows. |
+| gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
+| Preflight package | In CI, 13 CI-script tests and 13 preflight tests pass, the preflight ones under pwsh 7.6.10. All three Windows PowerShell 5.1 smoke steps pass. The packaged tests load outside the build tree: `device_creation` fails at the hidden Vulkan window, as it does under ctest on a runner with no GPU. `-Game` on an empty folder reports FAIL for imports and boot and still writes its zip. A hung test gets stopped at 5 s with its child. On that runner `kernel_file_system` ends with 0xC0000028 (bad stack while unwinding an exception) where Linux fails cleanly, so watch for it on Karim's PC. Nothing has run on a PC with a GPU yet. |
+| NID tools | 68 tests pass in CI and locally. The triage tool's output without `--nid-names` is byte-identical to before on all 99 fixture outputs. Not yet run on Windows. |
 | GPU behaviour, NVIDIA behaviour, VRAM use | Unverified on hardware. The machine that did this work has no usable GPU, and CI runners have none either. |
 
 Commits whose correctness no test can show say `Speculative:` in their message body. Commits
@@ -287,7 +291,7 @@ On Linux, follow "Building on Linux" in README.md.
 
 The easier route on Windows is no build at all. Every gta6-ci push run on this branch uploads
 `KytyPS5-gta6-prep-Windows-x64`, which holds the installed emulator and the `preflight` folder
-(section 9). It was about 29 MB zipped before the preflight package went in. Pick the newest run
+(section 9), about 47 MB zipped. Pick the newest run
 whose Artifacts list shows it, not the newest green check, because a bisect run can be green with
 no artifacts. If that run has a red X, ask before using it. Open the run's page on GitHub, scroll
 to Artifacts and download it while signed in. GitHub keeps artifacts for 90 days.
