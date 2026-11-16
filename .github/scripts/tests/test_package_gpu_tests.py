@@ -231,15 +231,31 @@ class PackageTests(Fixture):
         self.assertEqual(rc, 1)
         self.assertIn("no GPU tests", err)
 
+    def test_unreadable_import_table(self):
+        # Copied without its DLLs, the test would fail on the PC with 0xC0000135: stop instead.
+        image = bytearray(fake_pe(["libwinpthread-1.dll", "KERNEL32.dll"]))
+        struct.pack_into("<I", image, 0x80 + 24 + 112 + 8, 0x9000)  # the import directory, outside .idata
+        self.write("kernel_file_system_tests.exe", bytes(image))
+        rc, _, err = self.run_package()
+        self.assertEqual(rc, 1)
+        self.assertIn("cannot read the imports of", err)
+        self.assertIn("kernel_file_system_tests.exe: RVA 0x9000 is in no section", err)
+        self.assertFalse(os.path.exists(self.out), "nothing is written")
+
     def test_pe_imports(self):
         def imports(data):
             self.write("probe.bin", data)
             return pkg.pe_imports(os.path.join(self.build, "probe.bin"))
         self.assertEqual(imports(fake_pe(["a.dll"], ["b.dll", "c.dll"])), ["a.dll", "b.dll", "c.dll"])
         self.assertEqual(imports(fake_pe([])), [])
-        self.assertIsNone(imports(b"MZ" + bytes(10)))  # cut short
-        self.assertIsNone(imports(fake_pe(["a.dll"])[:0x210]))  # the names are cut off
         self.assertIsNone(imports(b"#!/bin/sh\n"))
+        self.assertIsNone(imports(b"\x7fELF\x02\x01\x01"))
+        # Starts like a Windows image, but the rest cannot be read.
+        for data in (b"MZ" + bytes(10),  # cut short
+                     fake_pe(["a.dll"])[:0x210],  # the names are cut off
+                     b"MZ" + bytes(0x3A) + struct.pack("<I", 0x40) + b"NE\0\0"):  # no PE header
+            with self.assertRaises(pkg.PackageError):
+                imports(data)
 
 
 class RunTestsSelection(Fixture):

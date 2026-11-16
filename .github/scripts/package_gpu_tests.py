@@ -46,13 +46,21 @@ class PackageError(Exception):
 
 def pe_imports(path):
     """The DLL names that the PE image at `path` imports (at load time, then delay-loaded), or None
-    when it is not a PE image."""
+    when it is no Windows image at all (an ELF or Mach-O build). PackageError for a file that starts
+    like one ("MZ") but whose imports cannot be read: copied without its DLLs, every test would fail
+    on the PC with "a DLL was not found"."""
     with open(path, "rb") as f:
         data = f.read()
-    try:
-        return _pe_imports(data)
-    except (struct.error, ValueError, IndexError, UnicodeDecodeError):
+    if data[:2] != b"MZ":
         return None
+    try:
+        names = _pe_imports(data)
+        reason = "no PE header this script reads"
+    except (struct.error, ValueError, IndexError, UnicodeDecodeError) as error:
+        names, reason = None, str(error) or type(error).__name__
+    if names is None:
+        raise PackageError(f"cannot read the imports of {path}: {reason}")
+    return names
 
 
 def _pe_imports(data):
@@ -117,7 +125,7 @@ def _pe_imports(data):
 def folder_dlls(exe):
     """(dlls, elsewhere) for the executable `exe`: the DLLs in its folder that it loads, directly or
     through another of them, and the imported names that are not in that folder (the system's, or
-    the GPU driver's). None when `exe` is not a PE image (a Linux or macOS build)."""
+    the GPU driver's). None when `exe` is no Windows image (a Linux or macOS build)."""
     folder = os.path.dirname(exe)
     present = {name.lower(): name for name in os.listdir(folder) if name.lower().endswith(".dll")}
     dlls, elsewhere = {}, {}
@@ -215,6 +223,8 @@ def package(build, out, info):
     entries, executables, disabled = describe(groups["gpu"], build)
     if os.path.exists(out) and os.listdir(out):
         raise PackageError(f"{out} is not empty")
+    # Every import table is read before anything is written: an error leaves no half package.
+    imports = {rel: folder_dlls(exe) for rel, exe in executables.items()}
     os.makedirs(out, exist_ok=True)
     files = {}
     total = 0.0
@@ -223,7 +233,7 @@ def package(build, out, info):
         os.makedirs(os.path.dirname(target), exist_ok=True)
         shutil.copy2(exe, target)
         total += megabytes(target)
-        found = folder_dlls(exe)
+        found = imports[rel]
         record = {}
         line = f"  {rel}  {megabytes(target):.1f} MB"
         if found is not None:
