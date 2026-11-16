@@ -51,7 +51,8 @@ class FakeOpener:
 
 def fake_source(sid, fmt, data, **kw):
     s = bn.Source(sid, "example/%s" % sid, "0123456789abcdef0123456789abcdef01234567", "list.txt", fmt,
-                  kw.pop("license", "GPL-2.0-or-later"), "PS5", hashlib.sha256(data).hexdigest(), len(data), **kw)
+                  kw.pop("license", "GPL-2.0-or-later"), kw.pop("platform", "PS5"), hashlib.sha256(data).hexdigest(),
+                  len(data), **kw)
     return s
 
 
@@ -229,6 +230,7 @@ class RegistryTests(unittest.TestCase):
                 self.assertRegex(s.rev, r"^[0-9a-f]{40}$")
                 self.assertRegex(s.sha256 or "", r"^[0-9a-f]{64}$")
                 self.assertIsInstance(s.size, int)
+                self.assertIsInstance(s.names, int)
                 self.assertIn(s.fmt, bn.PARSERS)
                 self.assertIn(s.license, ("none", "GPL-2.0-or-later", "LGPL-2.1", "GPL-3.0"))
                 self.assertEqual(s.url, "https://raw.githubusercontent.com/%s/%s/%s" % (s.repo, s.rev, s.path))
@@ -325,6 +327,40 @@ class MainTests(unittest.TestCase):
         code, _out, _err = self.run_main("-o", output + ".2", "--offline")
         self.assertEqual(code, 0)
         self.assertEqual(u.read_bytes(output), u.read_bytes(output + ".2"))
+
+    def test_source_without_names_fails(self):
+        # A newer revision with the attributes the other way round: the parser finds no entry.
+        swapped = b'<Entry sym="sceVideoRecordingSetInfo" obf="Fc8qxlKINYQ"/>\n'
+        b = fake_source("b", "xml", swapped)
+        bn.SOURCES[1] = bn.SOURCES_BY_ID["b"] = b
+        self.opener.files[b.url] = swapped
+        output = os.path.join(self.tmp, "n.txt")
+        code, _out, err = self.run_main("-o", output)
+        self.assertEqual(code, 1)
+        self.assertIn("error: b: no names in list.txt; has its format changed?", err)
+        self.assertIn("could not use b; nothing written", err)
+        self.assertFalse(os.path.exists(output))
+        code, out, _err = self.run_main("-o", output, "--skip-failed")
+        self.assertEqual(code, 0)
+        self.assertIn("skipped: b", out)
+
+    def test_source_with_far_fewer_names_fails(self):
+        self.sources[0].names = 3  # it gives 2
+        code, _out, err = self.run_main("-o", os.path.join(self.tmp, "n.txt"))
+        self.assertEqual(code, 1)
+        self.assertIn("error: a: 2 names, expected about 3; has its format changed?", err)
+        self.sources[0].names = 2
+        self.assertEqual(self.run_main("-o", os.path.join(self.tmp, "n.txt"))[0], 0)
+
+    def test_skip_failed_says_when_no_ps5_list_is_left(self):
+        self.sources[0].platform = "PS4"
+        self.opener.files.pop(self.sources[1].url)
+        code, _out, err = self.run_main("-o", os.path.join(self.tmp, "n.txt"), "--skip-failed")
+        self.assertEqual(code, 0)
+        self.assertIn("warning: no PS5 list left (b skipped)", err)
+        self.sources[0].platform = "PS5"
+        code, _out, err = self.run_main("-o", os.path.join(self.tmp, "n.txt"), "--skip-failed")
+        self.assertNotIn("warning", err)
 
     def test_extra_names(self):
         extra = os.path.join(self.tmp, "extra.txt")

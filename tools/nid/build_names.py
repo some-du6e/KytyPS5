@@ -45,9 +45,9 @@ OUTPUT_NAME = "nid-names.txt"
 
 class Source:
     """One public list. `fmt` picks the parser; `license` is the SPDX id of the license the file
-    is under in its repository, or "none"."""
+    is under in its repository, or "none"; `names` is how many names it gave (see source_problem)."""
 
-    def __init__(self, sid, repo, rev, path, fmt, license, platform, sha256, size):
+    def __init__(self, sid, repo, rev, path, fmt, license, platform, sha256, size, names=None):
         self.id = sid
         self.repo = repo
         self.rev = rev
@@ -57,6 +57,7 @@ class Source:
         self.platform = platform
         self.sha256 = sha256
         self.size = size
+        self.names = names
 
     @property
     def url(self):
@@ -70,30 +71,31 @@ class Source:
         return os.path.join(cache, self.id, self.rev[:12], os.path.basename(self.path))
 
 
-# Revisions and hashes as of 2026-11-16. To move a source to a newer revision, change rev and set
-# sha256/size to None; the next run prints the new values to paste here.
+# Revisions, hashes and name counts as of 2026-11-16. To move a source to a newer revision, change
+# rev and set sha256/size to None; the next run prints the new values to paste here. Keep names
+# until that run has shown the new count (SOURCES.md).
 SOURCES = [
     Source("sce_symbols-ps4", "zecoxao/sce_symbols", "6fd62a1ecd9574ee3394343fff84e3b4568217c1",
            "ps4_names.txt", "lines", "none", "PS4",
-           "cb1854e8ab2b9adf3190ed320f0918ad06ef95e68da2170f96b785c45b33ce32", 7136255),
+           "cb1854e8ab2b9adf3190ed320f0918ad06ef95e68da2170f96b785c45b33ce32", 7136255, 96374),
     Source("sce_symbols-ps5", "zecoxao/sce_symbols", "6fd62a1ecd9574ee3394343fff84e3b4568217c1",
            "ps5_names.txt", "lines", "none", "PS5",
-           "0d2489fd3f106b1407294e2de33e3ce6b370e26fe4940fa24bb0cc5f43ecaf17", 10868348),
+           "0d2489fd3f106b1407294e2de33e3ce6b370e26fe4940fa24bb0cc5f43ecaf17", 10868348, 157900),
     Source("ps4libdoc", "idc/ps4libdoc", "8bff4863ac2f788149bbbf13a7eddc1222aec08b",
            "known_names.txt", "lines", "none", "PS4",
-           "72eccf3755765be12048b1f9a1ae875687a0ec035c0764df96b24e382b2e8ff0", 1745061),
+           "72eccf3755765be12048b1f9a1ae875687a0ec035c0764df96b24e382b2e8ff0", 1745061, 42010),
     Source("shadps4", "shadps4-emu/shadPS4", "72f70b7eca5890f387546082c113e7baa2e5965a",
            "scripts/ps4_names.txt", "lines", "GPL-2.0-or-later", "PS4",
-           "1647f6b1c53cf18e5eaadf7f0ce073bd7d9b9aa7bf60adfa620c4123a693a0ce", 7044700),
+           "1647f6b1c53cf18e5eaadf7f0ce073bd7d9b9aa7bf60adfa620c4123a693a0ce", 7044700, 94276),
     Source("fpps4", "red-prig/fpPS4", "04cefd43e6fddd1ab033e7980cd356d14c964905",
            "ps4libdoc.pas", "pascal", "LGPL-2.1", "PS4",
-           "fa82ece4f424f19d44e3b8abf83e7a16a2e695658e66ea9ca48be707c981b0d5", 6080243),
+           "fa82ece4f424f19d44e3b8abf83e7a16a2e695658e66ea9ca48be707c981b0d5", 6080243, 78372),
     Source("ghidraorbis", "astrelsky/GhidraOrbis", "cca221c87b94a64c98edc72a3ba5ef3f7752e435",
            "data/nid_db.xml", "xml", "GPL-3.0", "PS4",
-           "b0d22861c4e8db5b6aadca3d93fabd071b2074e2e92299112dce991b889dd7a4", 3898437),
+           "b0d22861c4e8db5b6aadca3d93fabd071b2074e2e92299112dce991b889dd7a4", 3898437, 51105),
     Source("ps4_module_loader", "SocraticBliss/ps4_module_loader", "657f9d380abfec9097bc4bddbc63551b3cd5e47b",
            "aerolib.csv", "pairs", "GPL-3.0", "PS4",
-           "b80fd57038f66a222548f07fbf78124237e5f3b3abb8645218fd88895e817a95", 8925192),
+           "b80fd57038f66a222548f07fbf78124237e5f3b3abb8645218fd88895e817a95", 8925192, 97623),
 ]
 SOURCES_BY_ID = {s.id: s for s in SOURCES}
 
@@ -308,6 +310,18 @@ def read_source(source, path):
     return res
 
 
+def source_problem(source, result):
+    """Why the names a list gave cannot be used, or None: none at all, or more than 1% fewer than
+    the count recorded with the source. Either means the parser no longer reads the file, as when
+    a newer revision changed its format; the HLE check would not notice one list going missing."""
+    got = len(result.names)
+    if got == 0:
+        return "%s: no names in %s; has its format changed?" % (source.id, source.path)
+    if source.names is not None and got * 100 < source.names * 99:
+        return "%s: %d names, expected about %d; has its format changed?" % (source.id, got, source.names)
+    return None
+
+
 def read_extra(path):
     """A local names file in the --nid-names format; its names pass the same filter."""
     names = set()
@@ -436,14 +450,19 @@ def main(argv=None, opener=None):
             path, digest = fetch(s, cache, offline=args.offline, refresh=args.refresh, opener=opener)
         except FetchError as e:
             print("error: %s" % e, file=sys.stderr)
-            failed.append(s.id)
+            failed.append(s)
             continue
         r = read_source(s, path)
         r.sha256 = digest
+        problem = source_problem(s, r)
+        if problem:
+            print("error: %s" % problem, file=sys.stderr)
+            failed.append(s)
+            continue
         results.append(r)
     if failed and not args.skip_failed:
-        print("error: could not get %s; nothing written (--skip-failed builds without them)" % ", ".join(failed),
-              file=sys.stderr)
+        print("error: could not use %s; nothing written (--skip-failed builds without them)" % (
+            ", ".join(s.id for s in failed)), file=sys.stderr)
         return 1
 
     extras = []
@@ -489,7 +508,11 @@ def main(argv=None, opener=None):
             for listed, name in r.mismatches:
                 print("    e.g. %s listed for %s, which hashes to %s" % (listed, name, nid.symbol_to_nid(name)))
     if failed:
-        print("skipped: %s" % ", ".join(failed))
+        print("skipped: %s" % ", ".join(s.id for s in failed))
+        lost = [s.id for s in failed if s.platform == "PS5"]
+        if lost and not any(r.source.platform == "PS5" for r in results):
+            print("warning: no PS5 list left (%s skipped): names that only PS5 libraries have are missing" % (
+                ", ".join(lost)), file=sys.stderr)
 
     # Read the file back the way the emulator does.
     table = nid.NameTable()

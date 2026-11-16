@@ -72,7 +72,9 @@ and shadPS4's `aerolib.inl`, which is GPL-2.0-or-later.
 
 ## Moving a list to a newer revision
 
-1. Change `rev` in `SOURCES` and set `sha256` and `size` to `None`.
+1. Change `rev` in `SOURCES` and set `sha256` and `size` to `None`. Leave `names` as it is.
 2. Run `python3 -I tools/nid/build_names.py`. It downloads the file and prints the new hash and
-   size; paste them into `SOURCES`.
-3. Check the pair checks and the HLE share in the output, then update the counts above.
+   size; paste them into `SOURCES`. A list that gives no names, or more than 1% fewer than
+   `names`, stops the build: its format has probably changed, and the parser needs a look first.
+3. Check the pair checks and the HLE share in the output, then set `names` to the new count and
+   update the counts above.

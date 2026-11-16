@@ -44,7 +44,9 @@ The last line is the sanity check. KytyPS5's own HLE tables hold 1,776 LIB_FUNC 
 working hash with good lists names nearly all of them. Below 50% the script exits
 with status 3. `-v` lists the ones without a name. On 2026-11-16 those were 14 Psml and Mfsr2
 functions, one libc, one libkernel and one pad function that no list knows. The pair checks
-hash every name that a list gives with its NID and compare.
+hash every name that a list gives with its NID and compare. A list that gives no names, or more
+than 1% fewer than its count in `SOURCES`, stops the build like a failed download, because losing
+one list would hardly move the HLE share.
 
 The file has one name per line, sorted, without duplicates, after `#` lines that name each
 list and its revision. Only names of printable ASCII without spaces are kept: the emulator
