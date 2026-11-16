@@ -1,0 +1,26 @@
+# SYNTHETIC log excerpt for tools/nid/tests (hand-written, not from a real run): every
+# unresolved-import line form name_imports.py reads, with NIDs from confirmed_pairs.tsv.
+--- Session 2026-11-19 20:05:11 ---
+Relocate: unresolved PLT import patched to stub [45] [000000090392a430] <- 0000000200000000, pLr1fEQS1z8[NpUtility_v1][NpUtility_v1.1][Func], Func, Global, <game>/eboot.bin
+Relocate: unresolved PLT import patched to stub [432] [0000000903cdd458] <- 00000002000003fc, RolXukwAUco[NpCppWebApi_v1][NpCppWebApi_v1.1][Func], Func, Global, <game>/eboot.bin
+Stubbed: [00000009036c0b78] <- 0000000000000000, kvdMF48mB3Y[NpUtility_v1][NpUtility_v1.1][Func], Func, Global
+Unresolved imports: 4 functions, 1 objects; by library: NpUtility=3, VideoRecordingP=1, NpUniversalDataSystem=1
+--- Execute: Main
+Unresolved import stub called: BYIZGKm6bO4[NpUtility_v1][NpUtility_v1.1][Func] (program=eboot.bin, first call, returns=0x80550006, policy=np-offline)
+Unresolved import name: BYIZGKm6bO4[NpUtility_v1][NpUtility_v1.1][Func] = sceNpBandwidthTestGetStatus
+Unresolved import stub called: hqzi1IHdQQQ[NpUtility_v1][NpUtility_v1.1][Func] (program=eboot.bin, first call, returns=0x80550006, policy=np-offline)
+Unresolved import stub called [0]: patch_vaddr=0x0000000903cb1898 jmprela_index=921 symbol=Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func] type=Func bind=Global program=C:\Games\<game>\eboot.bin
+Unresolved import stub called: Fc8qxlKINYQ[VideoRecordingP_v1][VideoRecording_v1.1][Func]
+> Unresolved import stub called: kvdMF48mB3Y[NpUtility_v1][NpUtility_v1.1][Func]
+Unresolved object import: AAAAAAAAAAA[NpUniversalDataSystem_v1][NpUniversalDataSystem_v1.1][Object] (program=eboot.bin) -> invalid page 0x0000000ffff00000
+Unresolved object import: djxxOmW6-aw[libkernel_v1][libkernel_v1.1][Object] (program=eboot.bin) -> invalid page 0x0000000ffff00000
+Loading: <game>/sce_module/libSceNpCppWebApi.prx
+Rebind: RolXukwAUco[NpCppWebApi_v1][NpCppWebApi_v1.1][Func] -> RolXukwAUco[NpCppWebApi_v1][NpCppWebApi_v1.1][Func] (program=eboot.bin)
+Rebind: djxxOmW6-aw[libkernel_v1][libkernel_v1.1][Object] -> djxxOmW6-aw[libkernel_v1][libkernel_v1.1][Object] (program=eboot.bin)
+Rebind: 1jfXLRVzisc[libkernel_v1][libkernel_v1.1][Func] -> 1jfXLRVzisc[libkernel_v1][libkernel_v1.1][Func] (program=eboot.bin)
+PS5 NID fallback: 2WE3BTYVwKM -> 2WE3BTYVwKM[libc_v1][libc_v1.1][Func] (type)
+--- Build ---
+Source build 0badc0de
+--- Error ---
+Unresolved import called: 3ZWa3AoyWZQ[Agc_v1][Agc_v1.1][Func] from eboot.bin
+ in /home/runner/work/KytyPS5/KytyPS5/src/loader/runtimeLinker.cpp:285

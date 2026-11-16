@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+# build_names.py output and cache: not for git (SOURCES.md). The script refuses paths inside the
+# checkout; these rules are a second guard.
+nid-names*.txt
+cache/

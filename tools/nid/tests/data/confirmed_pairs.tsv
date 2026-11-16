@@ -1,0 +1,33 @@
+# NID/name pairs confirmed without this hash code. The NID half comes from KytyPS5's HLE tables
+# (a LIB_FUNC or LIB_OBJECT for it in the named src/libs file) or from a GTA V log fixture in
+# tools/triage/tests/fixtures. The name half comes from a comment next to the LIB_FUNC and from
+# shadPS4's NID table, which lists the name under that NID: shadps4-emu/shadPS4
+# src/core/aerolib/aerolib.inl at rev 72f70b7eca58 (GPL-2.0-or-later), STUB("<nid>", <name>).
+# No NID below came from running nid.py; tests/test_nid.py checks that the hash reproduces each.
+# Columns: nid, name, where the NID is, where the name is.
+1jfXLRVzisc	sceKernelUsleep	src/libs/libKernel.cpp	aerolib.inl
+9T2pDF2Ryqg	sceNetHtonl	src/libs/libNet.cpp	aerolib.inl
+9vA2aW+CHuA	sceNetInetNtop	src/libs/libNet.cpp	aerolib.inl
+8Kcp5d-q1Uo	sceNetInetPton	src/libs/libNet.cpp	aerolib.inl
+-2IRUCO--PM	sceKernelReadTsc	src/libs/libKernel.cpp	aerolib.inl
+++YZ7P9e87U	sceNgs2RackUnlock	src/libs/libAudio.cpp	aerolib.inl
+2WE3BTYVwKM	cos	src/libs/libC.cpp	aerolib.inl
+3RQ5aQfnstU	sceSystemServiceGetNoticeScreenSkipFlag	src/libs/libSystemService.cpp	aerolib.inl
+7nXGDGMXSqo	sceAmprMeasureCommandSizeReadFileScatter	src/libs/libAmpr.cpp	aerolib.inl
+3QYCmMlOlCY	sceSystemGestureFinalizePrimitiveTouchRecognizer	src/libs/libSystemService.cpp	aerolib.inl
+DiGVep5yB5w	_ZSt13_Execute_onceRSt9once_flagPFiPvS1_PS1_ES1_	src/libs/libC.cpp	aerolib.inl
+Yq0zOH7YNOM	scePadSetVibrationTriggerEffectWeakWhileEmbeddedMicInUse	src/libs/libPad.cpp	aerolib.inl
+djxxOmW6-aw	__progname	src/libs/libKernel.cpp	aerolib.inl
+k-JpyR2dYAM	sceAgcAsyncCondExecPatchSetEnd	src/libs/libAgcDriver.cpp	comment aerolib.inl
+3ZWa3AoyWZQ	sceAgcAsyncCondExecPatchSetCommandAddress	src/libs/libAgcDriver.cpp	comment aerolib.inl
+eWaWyFegzgQ	sceAgcAsyncRewindPatchSetRewindState	src/libs/libAgcDriver.cpp	comment aerolib.inl
+AhGvpITrf4M	sceAgcDriverAgrSubmitDcb	src/libs/libAgcDriver.cpp	comment aerolib.inl
++T8Xo6LtFJI	sceAgcDriverAgrSubmitMultiDcbs	src/libs/libAgcDriver.cpp	comment aerolib.inl
+crb5j7mkk1c	_is_signal_return	src/libs/libKernel.cpp	comment aerolib.inl
+Fc8qxlKINYQ	sceVideoRecordingSetInfo	gta5-229-resource-tracking-stdout.txt	aerolib.inl
+hqzi1IHdQQQ	sceNpBandwidthTestInitStartDownload	gta5-229-resource-tracking-stdout.txt	aerolib.inl
+BYIZGKm6bO4	sceNpBandwidthTestGetStatus	gta5-229-resource-tracking-stdout.txt	aerolib.inl
+kvdMF48mB3Y	sceNpBandwidthTestAbort	gta5-229-resource-tracking-stdout.txt	aerolib.inl
+pLr1fEQS1z8	sceNpBandwidthTestShutdown	gta5-229-resource-tracking-stdout.txt	aerolib.inl
+RolXukwAUco	_ZN3sce2Np9CppWebApi7Matches2V125RequestMatchPlayerFactory6createEPNS1_6Common10LibContextEPKcNS3_10PlayerTypeEPNS5_12IntrusivePtrINS3_18RequestMatchPlayerEEE	gta5-829-v22-printf-rx9070.txt	aerolib.inl
+Oe1W+jARzBQ	_ZN3sce2Np9CppWebApi7Matches2V119RequestInGameRoster10setPlayersERKNS1_6Common6VectorINS5_12IntrusivePtrINS3_18RequestMatchPlayerEEEEE	gta5-829-v22-printf-rx9070.txt	aerolib.inl
