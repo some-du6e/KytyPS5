@@ -265,6 +265,7 @@ Read this before relying on anything above.
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
 | gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
 | Preflight package | In CI, 13 CI-script tests and 13 preflight tests pass, the preflight ones under pwsh 7.6.10. All three Windows PowerShell 5.1 smoke steps pass. The packaged tests load outside the build tree: `device_creation` fails at the hidden Vulkan window, as it does under ctest on a runner with no GPU. `-Game` on an empty folder reports FAIL for imports and boot and still writes its zip. A hung test gets stopped at 5 s with its child. On that runner `kernel_file_system` ends with 0xC0000028 (bad stack while unwinding an exception) where Linux fails cleanly, so watch for it on Karim's PC. Nothing has run on a PC with a GPU yet. |
+| GPU group time limit (run 43939026905, `00f3b3b0`) | Green. Once the probe finds no device, the Linux GPU step takes 8.4 minutes instead of 54, and the Linux job 27 minutes instead of 70. The 3 device-free tests still pass on both runners. |
 | NID tools | 68 tests pass in CI and locally. The triage tool's output without `--nid-names` is byte-identical to before on all 99 fixture outputs. Not yet run on Windows. |
 | GPU behaviour, NVIDIA behaviour, VRAM use | Unverified on hardware. The machine that did this work has no usable GPU, and CI runners have none either. |
 
@@ -317,7 +318,10 @@ Then, depending on what happens:
 - If the title profile line says `none` for GTA 6, add `--title-profile gta6`. It changes nothing
   today, but it puts the profile in the logs and gives later quirks a place to go.
 - If VRAM spill lines show up early, try `--video-out-resolution 1080p` and watch whether the
-  `VRAM:` and spill numbers change. If they don't, the game ignores it, so turn it back off.
+  `VRAM:` and spill numbers change. If they don't, the game ignores it, so turn it back off. Don't
+  expect much: GTA V kept rendering 3840x2160 targets when AnyPS5 reported a 1080p display
+  ([AnyPS5 #6754](https://github.com/boykopovar/AnyPS5/issues/6754#issuecomment-6612522503)), and
+  Digital Foundry saw no dynamic resolution in GTA 6 footage (via secondary summaries).
 - On the 6 GB model, use the same preset. Its GC thresholds are fractions of the budget the
   driver reports, so they shrink with the card, and the recycled-image pool is budget/32. What
   does not shrink is the roughly 1 GiB the emulator holds before the game allocates anything
@@ -329,8 +333,18 @@ Then, depending on what happens:
   `--pipeline-precompile ask` (the default) and wait. There is no GTA 6 pipeline manifest, so
   the first boot compiles everything cold. Record one with `--record-pipeline-manifest` and copy
   `_PipelineCache/<ID>_<VER>.kpm` into `assets/pipelines/` for later runs.
-- Leave `--native-raytracing` off on a 3050. It was built for GTA V's sce::Psr shaders and adds a
-  BLAS arena on top of an already full card.
+- Start with `--native-raytracing` off, as the preset has it, then compare once the game is
+  in-game: add `--native-raytracing` after the preset and compare fps and the `VRAM:` lines. On
+  GTA V it took Fidelity on an RTX 3090 from about 13 fps to 20-30 (capped at 30). GTA 6 has
+  ray-traced GI and reflections on the base PS5 (Digital Foundry, via secondary summaries), so
+  ray traversal will be a large share of the frame. The catch is that native RT only engages on
+  traversal shaders it recognizes, which so far means GTA V's sce::Psr shapes, and its BLAS arena
+  takes about 768 MiB of a 6 GB card.
+- Once the game gets in-game and you want to play rather than test, run the emulator yourself
+  from one fixed folder, for example the extracted artifact:
+  `kyty_emulator --game "D:\PS5\GTA6" --preset rtx3050 --title-profile gta6 --shader-cache --session-log auto`.
+  Saves (`_SaveData`) and caches (`_PipelineCache`) live in the working folder, so the same
+  folder keeps your progress and the compiled shaders. Each preflight run uses a new folder.
 - Use the NVIDIA Studio or Game Ready driver from 2026, and turn Resizable BAR on in the BIOS if
   the board supports it.
 - If the game ran on an earlier build and broke on this one, rerun with `--preset safe`. If that
@@ -401,6 +415,17 @@ Then, depending on what happens:
 - **8 GB, and worse, 6 GB.** No eviction policy makes a 12 GB working set fit in 8 GB, let alone
   in the 4.5 GB or so a 6 GB card has left. Spill to system RAM over PCIe 4.0 x8 is the likely
   steady state in dense areas, and on the 6 GB card probably everywhere in the open world.
+- **Look-alike downloads.** In October 2026, fake AnyPS5 and KytyPS5 repositories shipped an
+  infostealer that adds itself to Windows Defender's exclusions. Only use this fork's CI artifact
+  or the official projects' release pages, never builds posted in comments, Discord DMs or videos,
+  and never add a broad Defender exclusion for an emulator.
+- **This branch is behind both of its sources.** Upstream main is about 50 commits past
+  `bc934ef0`. Those include nmzik's generic native ray tracing (2026-11-12 to 11-15), which mirrors
+  guest BVHs into host acceleration structures and traces recognized traversals with ray queries.
+  TheCruZ has since rebased his fork and added CPU-side work such as resolving draws on a second
+  thread and draw templates. None of it is on gta6-prep yet.
+- **Firmware.** One unverified report says GTA 6 needs PS5 firmware 14.22, which could delay
+  usable dumps.
 - **The estimates below.**
 
 ## How likely is "kinda playable" on an RTX 3050?
@@ -411,8 +436,13 @@ then. Here is the reasoning, so it can be argued with.
 **The hardware gap.** The PS5 GPU is a 36-CU RDNA2 part around 10 TFLOPS with 448 GB/s and 16 GB
 shared by CPU and GPU, about 12.5 GB of it for the game. The desktop RTX 3050 8 GB has 224 GB/s,
 half the bandwidth. In games it lands around 55 to 65% of a PS5 in rasterization at equal
-settings. Reportedly GTA 6 targets 30 fps on the base PS5. Natively ported, the same frame would
-run around 17 to 20 fps on a 3050, before any emulation cost.
+settings. Rockstar says GTA 6 targets 30 fps on every console, and only the PS5 Pro adds PSSR and
+ray-traced shadows ([Game Informer, 2026-11-10](https://gameinformer.com/2026/11/10/grand-theft-auto-vi-will-run-at-30-fps-on-all-consoles-but-ps5-pro-will-feature-improved)).
+Digital Foundry's analysis of base-PS5 footage found a fixed internal resolution of about 1440p
+with no dynamic resolution, and ray-traced global illumination and reflections. I only have that
+through secondary summaries such as
+[GameRant](https://gamerant.com/gta-6-ps5-pro-upgrade-30-fps/). Natively ported, the same frame
+would run around 17 to 20 fps on a 3050 8 GB, before any emulation cost.
 
 **The emulation cost.** KytyPS5 translates every shader, emulates wave64 on NVIDIA's 32-wide
 hardware by running both halves in one invocation, syncs guest memory with the GPU through the
@@ -422,10 +452,22 @@ XT, a card around 3 times a PS5. GTA 6 is a current-gen-only title built for tha
 so the margin GTA V has is not there. Expect the emulator to cost somewhere between 1.5x and 3x
 on top of the hardware gap. That puts a 3050 around 6 to 13 fps at the game's own resolution.
 
-**The resolution lever.** The emulator cannot lower GTA 6's internal resolution. If the game picks
-its resolution from the output mode, `--video-out-resolution 1080p` could make a real
-difference, maybe 1.5 to 2x. If it uses dynamic resolution keyed to frame time, it might scale
-itself down. Neither is known.
+That range assumes ray tracing costs no more under emulation than anything else, and GTA V's
+Fidelity mode says otherwise. On an RTX 3090 that mode runs at about 13 fps with its ray
+traversal emulated in shaders, and 20 to 30 with native RT. Against a native port of that mode,
+that is an overhead of roughly 4.6 to 6x without native RT, and 2.4 to 3.1x with it. GTA 6
+traces rays on the base PS5, so carried over to the 6 GB card, that gives about 1.5 to 5 fps on
+day one with the traversal emulated. If native RT learns GTA 6's traversal shaders, it rises to
+about 3 to 9. The inputs are weak (a 30 fps-capped range, one AMD profile, no GTA 6 data), so
+treat these as an order of magnitude.
+
+**The resolution lever.** Neither this emulator nor AnyPS5 can lower a game's internal
+resolution. `--video-out-resolution` only changes the display class the game is told about. GTA V
+ignored that class under AnyPS5, and Digital Foundry saw no dynamic resolution in GTA 6. So the
+lever probably does nothing. Both projects can load per-title binary patches (`--game-patch`
+here), so a community resolution patch could plug in later, but none exists. And if about 30% of
+the frame does not scale with resolution, then below about 6 fps no resolution cut reaches 20
+fps, because that part alone fills the 50 ms budget.
 
 **Memory.** 8 GB minus about 1 GB of fixed emulator overhead leaves around 7 GB for a game
 designed around up to 12.5 GB shared. Expect system-RAM spill in dense areas, with stutter.
@@ -467,6 +509,63 @@ the low end of its range.
 The 3 month row is capped by the hardware math above, not by bugs. On this card, 15 fps in the
 open world is the realistic ceiling unless GTA 6 lowers its own resolution. A Ryzen 5 5600 with
 an RX 7900 XT, like TheCruZ's GTA V reporter, would be in a different league.
+
+20 fps in the open world on the 6 GB card is not in the tables, because nothing I found supports
+it through any emulator. A native PC port at lowered settings could get there. A PC version is
+rumored for Q1 2027 by anonymous sources
+([GamesBeat](https://gamesbeat.com/grand-theft-auto-vis-pc-release-is-slated-for-q1-2027/)), and
+Rockstar has not confirmed it.
+
+## AnyPS5 instead?
+
+[AnyPS5](https://github.com/boykopovar/AnyPS5) converts a decrypted PS5 executable into a native
+Windows or Linux one and links it against its own versions of the system libraries. The game's
+CPU code runs natively, as it does here. The GPU side is still translated to Vulkan. I checked
+it on 2026-11-16, as a candidate for GTA 6 on Karim's card. It is not a better bet, for these
+reasons.
+
+- **GTA V is far slower there today.** These are all from its GTA V threads:
+  - On an RTX 4070 Ti with a 5800X3D, at 4K output on main plus three open PRs, the open world
+    ran 6 to 7.5 fps in Performance mode and about 1 fps in Fidelity
+    ([#6754](https://github.com/boykopovar/AnyPS5/issues/6754#issuecomment-6921271777)).
+  - On an RTX 3080 Ti with a Ryzen 9 5900X (TheCruZ's CPU), the prologue bank ran 12.5 fps on
+    main plus one PR with profiling on, 16.3 with three PRs, and 2.3 in Fidelity
+    ([#1203](https://github.com/boykopovar/AnyPS5/discussions/1203#discussioncomment-19655022)).
+  - TheCruZ's Kyty fork reports 60 to 140 fps in Performance and 20 to 30 in Fidelity on an
+    RTX 3090. Scenes and GPUs differ, so roughly: 4 to 11 times faster in Performance and 9 to 13
+    in Fidelity.
+- **Its limit is per-draw CPU work.** Its maintainers say heavy titles need a new draw model,
+  which is being drafted with "no dates promised"
+  ([#17533](https://github.com/boykopovar/AnyPS5/issues/17533)). Even a deliberately wrong test
+  that skipped most per-draw work stayed under 19 fps in GTA V's open world on a 7800X3D with an
+  RX 7900 XTX ([#7895](https://github.com/boykopovar/AnyPS5/issues/7895#issuecomment-6645138156)).
+- **6 GB cards have not done well there.**
+  - On a 6 GB RTX 4050 Laptop, Astro Bot overran its 5152 MiB budget and spilled to host memory
+    at 0.5 to 3.5 fps ([#7210](https://github.com/boykopovar/AnyPS5/issues/7210#issuecomment-6423707965)).
+  - On an RTX 3050 6 GB Laptop, Crash Bandicoot 4 ran at about 8.7 fps with black geometry
+    ([#9065](https://github.com/boykopovar/AnyPS5/discussions/9065)).
+  - GTA V's Fidelity mode ran out of device memory on an 8 GB RTX 4060
+    ([#1203](https://github.com/boykopovar/AnyPS5/discussions/1203#discussioncomment-19048719)).
+  - Its docs also name a cost specific to NVIDIA on Windows: the driver reads imported guest
+    memory slowly, so draw inputs get copied.
+- **Kyty's GPU code measured faster in AnyPS5's own threads.** AnyPS5 contributors compared the
+  two on the same machines in Ghost of Yotei. On an RTX 3080 Laptop, the KytyPS5-Yotei fork ran 63
+  presents per 10 s against 10 for AnyPS5's best branch. Kyty's backend, ported into AnyPS5, ran
+  about 7 times faster than AnyPS5's own driver on an RTX 5080, in under 12 GiB of process memory
+  against 30 to 35
+  ([#675](https://github.com/boykopovar/AnyPS5/discussions/675#discussioncomment-19605082)).
+  KytyPS5-Yotei is a Yotei-only fork of upstream KytyPS5, not this branch, so this shows what the
+  backend can do, not how fast this branch is.
+- **No GTA 6 progress.** Its only GTA VI thread
+  ([#20383](https://github.com/boykopovar/AnyPS5/discussions/20383)) is an empty placeholder. No
+  maintainer has said anything about GTA 6. It has no render-resolution override either.
+- **Safety is fine if you are careful.** GitHub Actions builds and uploads its releases, but they
+  are not signed or attested. On 2026-11-12 alone, 820 PRs were merged, and main requires no
+  approvals. Main breaks often: it has drawn GTA V upside down since 2026-11-15. Converted games run with full
+  user rights, no sandbox and no ASLR.
+
+It moves fast, so look again a few weeks after launch. For launch week, it would add a second
+unknown on top of the first.
 
 ## Where things live
 
