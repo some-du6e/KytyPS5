@@ -334,58 +334,86 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $preflight = Join-Path $env:GITHUB_WORKSPACE '_Build\windows\install\preflight'
           $game = Join-Path $env:RUNNER_TEMP 'preflight-smoke\empty-game'
-          $out = Join-Path $env:RUNNER_TEMP 'preflight-smoke\game'
-          New-Item -ItemType Directory -Force -Path $game, $out | Out-Null
+          New-Item -ItemType Directory -Force -Path $game | Out-Null
           # What an earlier boot left in the shader cache, which the boot's emulator\_PipelineCache
-          # links to (a junction). Nothing may zip it, rewrite it or delete it.
+          # links to (a junction) while it runs. Nothing may zip it, rewrite it or delete it.
           if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is not set on this runner' }
           $cache = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'KytyPS5', 'preflight-cache', '_PipelineCache')
           New-Item -ItemType Directory -Force -Path $cache | Out-Null
           $marker = Join-Path $cache 'ci-marker.txt'
           [System.IO.File]::WriteAllText($marker, 'from an earlier boot')
+          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          # Runs preflight on the empty game folder, with its results in preflight-smoke\<Name>, and
+          # makes the checks every run must pass. Returns the results folder, its summary.json and
+          # the boot's command line.
+          function Invoke-Smoke([string]$Name, [string[]]$Arguments) {
+            $out = Join-Path $env:RUNNER_TEMP "preflight-smoke\$Name"
+            New-Item -ItemType Directory -Force -Path $out | Out-Null
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$preflight\preflight.ps1" -Game $game -BootSeconds 20 -OutDir $out @Arguments | Out-Host
+            $rc = $LASTEXITCODE
+            Write-Host "preflight.ps1 ($Name) exit code: $rc"
+            if ($rc -ne 0 -and $rc -ne 1) { throw "preflight ($Name) exited with $rc" }
+            $run = @(Get-ChildItem -LiteralPath $out -Directory -Filter 'kyty-preflight-*')
+            if ($run.Count -ne 1) { throw "expected one result folder in $out, found $($run.Count)" }
+            $run = $run[0].FullName
+            Get-Content -LiteralPath (Join-Path $run 'summary.txt') | Out-Host
+            if (-not (Test-Path -LiteralPath "$run.zip")) { throw "no zip next to $run" }
+            $summary = [System.IO.File]::ReadAllText((Join-Path $run 'summary.json')) | ConvertFrom-Json
+            $names = @($summary.steps | ForEach-Object { $_.name })
+            if (($names -join ',') -ne 'imports,boot,logs') { throw "summary.json steps: $($names -join ', ')" }
+            # The zip has neither the cache nor the emulator folder, the cache is as it was, and no
+            # link into it is left after the boot.
+            $zip = [System.IO.Compression.ZipFile]::OpenRead("$run.zip")
+            try { $entries = @($zip.Entries | ForEach-Object { $_.FullName }) } finally { $zip.Dispose() }
+            $leaked = @($entries | Where-Object { $_ -match '(^|/)(_PipelineCache|emulator)/' -or $_ -match 'ci-marker' })
+            if ($leaked.Count -gt 0) { throw "the zip holds the cache or the emulator folder: $($leaked -join ', ')" }
+            if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw "the marker in $cache is gone" }
+            if ([System.IO.File]::ReadAllText($marker) -cne 'from an earlier boot') { throw "the marker in $cache was rewritten" }
+            $folder = Join-Path $run 'emulator\_PipelineCache'
+            if ((Test-Path -LiteralPath $folder) -and ((Get-Item -LiteralPath $folder -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+              throw "$folder is still a link after the boot"
+            }
+            $command = [string](@(Get-Content -LiteralPath (Join-Path $run 'emulator-boot.log') -TotalCount 5) -match '^command: ')
+            return [pscustomobject]@{ Run = $run; Summary = $summary; Command = $command }
+          }
           # The emulator cannot load an empty folder: preflight must record that and still zip.
           # The -ExtraArgs value starts with '-' and holds a drive letter's colon, which -File splits.
           $extra = "--nid-names $env:RUNNER_TEMP\preflight-smoke\names.txt"
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$preflight\preflight.ps1" -Game $game -BootSeconds 20 -OutDir $out -ExtraArgs $extra
-          $rc = $LASTEXITCODE
-          Write-Host "preflight.ps1 exit code: $rc"
-          if ($rc -ne 0 -and $rc -ne 1) { throw "preflight exited with $rc" }
-          $run = @(Get-ChildItem -LiteralPath $out -Directory -Filter 'kyty-preflight-*')
-          if ($run.Count -ne 1) { throw "expected one result folder in $out, found $($run.Count)" }
-          $run = $run[0].FullName
-          Get-Content -LiteralPath (Join-Path $run 'summary.txt')
-          if (-not (Test-Path -LiteralPath "$run.zip")) { throw "no zip next to $run" }
-          $summary = [System.IO.File]::ReadAllText((Join-Path $run 'summary.json')) | ConvertFrom-Json
-          $names = @($summary.steps | ForEach-Object { $_.name })
-          if (($names -join ',') -ne 'imports,boot,logs') { throw "summary.json steps: $($names -join ', ')" }
+          $first = Invoke-Smoke 'game' @('-ExtraArgs', $extra)
+          $summary = $first.Summary
           if ((@($summary.options.extra_args) -join ' ') -ne $extra) { throw "-ExtraArgs arrived as: $(@($summary.options.extra_args) -join ' | ')" }
           $imports = @($summary.steps)[0]
           if ($imports.status -ne 'FAIL') { Write-Host "::warning::the import report of an empty folder is $($imports.status), not FAIL" }
-          # The shader cache: summary.json says the boot used it (or why not), emulator\_PipelineCache
-          # is a junction to $cache, the marker is still there, the boot got --shader-cache, and the
-          # zip has none of it.
-          if ($summary.cache.mode -ne 'persistent') { throw "summary.json cache: $($summary.cache | ConvertTo-Json -Compress)" }
-          if ($summary.cache.before.files -lt 1) { throw "summary.json did not count the marker before the boot: $($summary.cache | ConvertTo-Json -Compress)" }
-          $link = Get-Item -LiteralPath (Join-Path $run 'emulator\_PipelineCache') -Force
-          if ($link.LinkType -ne 'Junction') { throw "emulator\_PipelineCache is not a junction: LinkType '$($link.LinkType)', $($link.Attributes)" }
-          # Windows PowerShell 5.1 gives the target as an array; strip a \??\ or \\?\ prefix.
-          $target = ([string]@($link.Target)[0]) -replace '^\\(\?\?|\\\?)\\', ''
-          if ($target.TrimEnd('\') -ine $cache.TrimEnd('\')) { throw "emulator\_PipelineCache links to '$target', not '$cache'" }
-          if (-not (Test-Path -LiteralPath (Join-Path $link.FullName 'ci-marker.txt') -PathType Leaf)) { throw 'the marker is not visible through the junction' }
-          if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw "the marker in $cache is gone" }
-          if ([System.IO.File]::ReadAllText($marker) -cne 'from an earlier boot') { throw "the marker in $cache was rewritten" }
-          $command = @(Get-Content -LiteralPath (Join-Path $run 'emulator-boot.log') -TotalCount 5) -match '^command: '
-          if (-not ($command -match ' --shader-cache( |$)')) { throw "the boot had no --shader-cache: $command" }
-          Add-Type -AssemblyName System.IO.Compression
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $zip = [System.IO.Compression.ZipFile]::OpenRead("$run.zip")
-          try { $entries = @($zip.Entries | ForEach-Object { $_.FullName }) } finally { $zip.Dispose() }
-          $leaked = @($entries | Where-Object { $_ -match '(^|/)(_PipelineCache|emulator)/' -or $_ -match 'ci-marker' })
-          if ($leaked.Count -gt 0) { throw "the zip holds the cache or the emulator folder: $($leaked -join ', ')" }
+          # The boot used the cache, through a junction to $cache that preflight checked with a file
+          # written through it and removed after the boot, and it got --shader-cache.
+          $c = $summary.cache
+          if ($c.mode -ne 'persistent') { throw "summary.json cache: $($c | ConvertTo-Json -Compress -Depth 4)" }
+          if ($c.before.files -lt 1) { throw "summary.json did not count the marker before the boot: $($c | ConvertTo-Json -Compress -Depth 4)" }
+          if ($c.link.type -ne 'Junction' -or $c.link.verified -ne $true -or $c.link.removed -ne $true) { throw "summary.json link: $($c.link | ConvertTo-Json -Compress)" }
+          # summary.json has the profile path as %USERPROFILE%; strip a \??\ or \\?\ prefix too.
+          $target = ([string]$c.link.target).Replace('%USERPROFILE%', $env:USERPROFILE) -replace '^\\(\?\?|\\\?)\\', ''
+          if ($target.TrimEnd('\') -ine $cache.TrimEnd('\')) { throw "emulator\_PipelineCache linked to '$target', not '$cache'" }
+          if (Test-Path -LiteralPath (Join-Path $first.Run 'emulator\_PipelineCache')) { throw 'emulator\_PipelineCache is still there after the boot' }
+          if (-not (Test-Path -LiteralPath (Join-Path $first.Run 'emulator\_PipelineCache.txt') -PathType Leaf)) { throw 'no emulator\_PipelineCache.txt after the boot' }
+          if (-not ($first.Command -match ' --shader-cache( |$)')) { throw "the boot had no --shader-cache: $($first.Command)" }
+          # The next run starts with what this one left.
+          $again = (Invoke-Smoke 'game-again' @()).Summary.cache
+          if ($again.mode -ne 'persistent' -or $again.before.files -ne $c.after.files) {
+            throw "the second run's cache: $($again | ConvertTo-Json -Compress -Depth 4); the first run left $($c.after.files) files"
+          }
+          # -ColdCache: no junction and no --shader-cache.
+          $cold = Invoke-Smoke 'game-cold' @('-ColdCache')
+          $cc = $cold.Summary.cache
+          if ($cc.mode -ne 'cold' -or $cc.shader_cache -ne $false -or $null -ne $cc.link) { throw "-ColdCache: $($cc | ConvertTo-Json -Compress -Depth 4)" }
+          if ($cold.Command -match ' --shader-cache( |$)') { throw "-ColdCache passed --shader-cache: $($cold.Command)" }
           exit 0
 
       # A test that outlives its time limit, with a child process: preflight must stop both
-      # (taskkill /T /F) and still zip. cmd.exe and ping.exe stand in for a hung GPU test.
+      # (taskkill /T /F) and still zip. cmd.exe and ping.exe stand in for a hung GPU test. Before
+      # it, a test makes a junction in the results folder (a test's working folder is <run>\tests),
+      # as a game boot's emulator\_PipelineCache is during the boot: the zip must not go into it,
+      # and the summary in the zip must name it.
       - name: Smoke-test preflight, a hung test (Windows PowerShell 5.1)
         if: ${{ !cancelled() && steps.preflight_package.outcome == 'success' }}
         timeout-minutes: 12
@@ -397,8 +425,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Join-Path $package 'bin') | Out-Null
           Copy-Item (Join-Path $env:GITHUB_WORKSPACE '_Build\windows\install\preflight\preflight.ps1') (Join-Path $root 'preflight')
           Copy-Item (Join-Path $env:SystemRoot 'System32\cmd.exe') (Join-Path $package 'bin\cmd.exe')
-          $tests = '{"format": 1, "tests": [{"name": "hang", "executable": "bin/cmd.exe", "args": ["/d", "/c", "ping -n 600 127.0.0.1"], "timeout": 5, "quick": true}]}'
-          [System.IO.File]::WriteAllText((Join-Path $package 'tests.json'), $tests)
+          $linked = Join-Path $root 'linked'
+          New-Item -ItemType Directory -Force -Path $linked | Out-Null
+          [System.IO.File]::WriteAllText((Join-Path $linked 'link-marker.txt'), 'behind a junction')
+          # cmd /c gets the command as one quoted argument, so the path must not need quotes.
+          if ($linked -match '\s') { throw "the junction's target needs quotes: $linked" }
+          $tests = [ordered]@{ format = 1; tests = @(
+            [ordered]@{ name = 'link'; executable = 'bin/cmd.exe'; args = @('/d', '/c', "mklink /J linked $linked"); timeout = 30; quick = $true },
+            [ordered]@{ name = 'hang'; executable = 'bin/cmd.exe'; args = @('/d', '/c', 'ping -n 600 127.0.0.1'); timeout = 5; quick = $true }
+          ) }
+          [System.IO.File]::WriteAllText((Join-Path $package 'tests.json'), (ConvertTo-Json -InputObject $tests -Depth 5))
           $started = Get-Date
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'preflight\preflight.ps1') -OutDir (Join-Path $root 'out')
           $rc = $LASTEXITCODE
@@ -408,8 +444,26 @@ jobs:
           Get-Content -LiteralPath (Join-Path $run 'summary.txt')
           if (-not (Test-Path -LiteralPath "$run.zip")) { throw "no zip next to $run" }
           $summary = [System.IO.File]::ReadAllText((Join-Path $run 'summary.json')) | ConvertFrom-Json
-          $step = @($summary.steps)[0]
+          $step = @($summary.steps | Where-Object { $_.name -eq 'hang' })[0]
           if ($step.status -ne 'TIMEOUT' -or $step.seconds -gt 30) { throw "hang: $($step.status) after $($step.seconds) s" }
+          $step = @($summary.steps | Where-Object { $_.name -eq 'link' })[0]
+          if ($step.status -ne 'PASS') { throw "link: $($step.status) $($step.detail), see tests\link.log" }
+          $junction = Get-Item -LiteralPath (Join-Path $run 'tests\linked') -Force
+          if ($junction.LinkType -ne 'Junction') { throw "tests\linked is not a junction: LinkType '$($junction.LinkType)', $($junction.Attributes)" }
+          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead("$run.zip")
+          try {
+            $entries = @($zip.Entries | ForEach-Object { $_.FullName })
+            $reader = New-Object System.IO.StreamReader (@($zip.Entries | Where-Object { $_.FullName -like '*/summary.json' })[0].Open())
+            try { $zipped = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+          } finally { $zip.Dispose() }
+          $leaked = @($entries | Where-Object { $_ -match 'link-marker|/linked/' })
+          if ($leaked.Count -gt 0) { throw "the zip went into the junction: $($leaked -join ', ')" }
+          if (-not (@($zipped.problems) -match 'left out of the zip, a junction or symbolic link: tests\\linked')) {
+            throw "the summary in the zip does not name the junction: $(@($zipped.problems) -join ' | ')"
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $linked 'link-marker.txt') -PathType Leaf)) { throw 'the file behind the junction is gone' }
           Start-Sleep -Seconds 2
           $left = @(Get-Process -Name ping, cmd -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$root*" -or ($_.Name -eq 'PING' -and $_.StartTime -ge $started) })
           if ($left.Count -gt 0) { throw "still running: $(($left | ForEach-Object { "$($_.Name) $($_.Id)" }) -join ', ')" }
