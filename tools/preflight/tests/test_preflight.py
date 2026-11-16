@@ -7,6 +7,10 @@
 The scripts pass, fail, hang past their time limit, flood stdout and stderr, check their
 environment, and fail when tests.json says they should. Skips without pwsh, unless
 KYTY_REQUIRE_PWSH is set (CI sets it). PWSH names the pwsh to use instead of the one on PATH.
+
+LOCALAPPDATA points into the test's own folder, where game boots keep the shader cache. pwsh on
+Linux makes no junction, so here a game boot always takes the fallback; CI's Windows PowerShell 5.1
+smoke test checks the junction itself.
 """
 
 import glob
@@ -48,11 +52,16 @@ FAKE_EMULATOR = r"""#!/bin/sh
 printf '%s\n' "$*" >> argv.txt
 imports=""
 session=""
+store=""
 prev=""
 for a in "$@"; do
   case "$prev" in
     --dump-imports) imports="$a" ;;
     --session-log) session="$a" ;;
+  esac
+  case "$a" in
+    --shader-cache) store=1 ;;
+    --no-shader-cache) store="" ;;
   esac
   prev="$a"
 done
@@ -63,12 +72,24 @@ if [ -n "$imports" ]; then
 fi
 [ -n "$session" ] && echo "--- Session ---" > "$session"
 echo "printf log line" > _kyty.txt
+# As a Release build: the driver's pipeline cache always, the shader store with --shader-cache.
+mkdir -p _PipelineCache
+printf 'driver pipeline cache' > _PipelineCache/FAKE00000.bin
+[ -n "$store" ] && printf 'translated shaders' >> _PipelineCache/FAKE00000.shaders
+# Links to a folder in the results folder, which the zip must not go into.
+if [ -n "$KYTY_FAKE_LINK" ]; then
+  mkdir -p ../extra/inner
+  echo "a note" > ../extra/inner/note.txt
+  ln -s "$KYTY_FAKE_LINK" ../linked
+  ln -s "$KYTY_FAKE_LINK" ../extra/inner/linked
+fi
 echo "booting"
 if [ "$KYTY_FAKE_EMULATOR" = crash ]; then
   echo "--- Fatal Error ---" >&2
   exit 5
 fi
 sleep 600 &
+[ -n "$KYTY_FAKE_PIDS" ] && echo "$$ $!" > "$KYTY_FAKE_PIDS"
 wait
 """
 
@@ -108,6 +129,9 @@ class PreflightTests(unittest.TestCase):
         self.package = os.path.join(self.preflight, "gpu-tests")
         self.game = os.path.join(self.tmp, "game")
         self.bin = os.path.join(self.tmp, "bin")
+        # Where Windows has it; preflight keeps the shader cache of game boots in it.
+        self.localappdata = os.path.join(self.home, "AppData", "Local")
+        self.cache = os.path.join(self.localappdata, "KytyPS5", "preflight-cache", "_PipelineCache")
         for folder in (self.home, self.scratch, os.path.join(self.package, "bin"), self.game, self.bin):
             os.makedirs(folder)
         shutil.copy(os.path.join(TOOL, "preflight.ps1"), self.preflight)
@@ -149,13 +173,23 @@ class PreflightTests(unittest.TestCase):
         with open(os.path.join(self.package, "tests.json"), "w", encoding="utf-8") as f:
             json.dump(self.manifest, f)
 
-    def run_preflight(self, *args, **env):
+    def environment(self, **env):
+        """preflight's environment; env adds variables, and a None value removes one."""
         environment = dict(os.environ, HOME=self.home, TMPDIR=self.scratch, COMPUTERNAME="FAKE-PC",
-                           PATH=self.bin + os.pathsep + os.environ.get("PATH", ""), **env)
+                           LOCALAPPDATA=self.localappdata, PATH=self.bin + os.pathsep + os.environ.get("PATH", ""))
         environment.pop("USERPROFILE", None)
+        for key, value in env.items():
+            if value is None:
+                environment.pop(key, None)
+            else:
+                environment[key] = value
+        return environment
+
+    def run_preflight(self, *args, **env):
         started = time.monotonic()
         r = subprocess.run([PWSH, "-NoProfile", "-NonInteractive", "-File", os.path.join(self.preflight, "preflight.ps1"),
-                            "-OutDir", self.out, *args], capture_output=True, text=True, env=environment, timeout=240)
+                            "-OutDir", self.out, *args], capture_output=True, text=True, env=self.environment(**env),
+                           timeout=240)
         r.seconds = time.monotonic() - started
         return r
 
@@ -191,6 +225,7 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(summary["result"], "FAIL")
         self.assertEqual(summary["exit_code"], 1)
         self.assertEqual(summary["mode"], "tests")
+        self.assertIsNone(summary["cache"], "only a game boot has a shader cache")
         self.assertEqual(summary["counts"], {"PASS": 5, "FAIL": 1, "TIMEOUT": 1})
         self.assertEqual(summary["package"], {"commit": "0123456789abcdef", "run_id": "42"})
         self.assertEqual((steps["fail"]["exit_code"], steps["fail"]["exit_code_hex"]), (3, "0x00000003"))
@@ -322,6 +357,10 @@ class PreflightTests(unittest.TestCase):
     def test_game(self):
         # A value that starts with '-' and holds a colon: -File would cut it in two at the colon.
         extra = r"--title-profile gta6 --nid-names C:\PS5\names.txt"
+        # What earlier boots left in the shader cache.
+        os.makedirs(self.cache)
+        with open(os.path.join(self.cache, "marker.txt"), "w", encoding="utf-8") as f:
+            f.write("from an earlier boot\n")
         r = self.run_preflight("-Game", self.game, "-BootSeconds", "3", "-ExtraArgs", extra)
         output = r.stdout + r.stderr
         self.assertEqual(r.returncode, 0, output)
@@ -338,11 +377,32 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("still running after 3 s", boot["detail"])
         self.assertLess(boot["seconds"], 20)
         calls = self.read(folder, "emulator", "argv.txt").splitlines()
+        # --shader-cache for the boot only, and before -ExtraArgs, where --no-shader-cache wins.
         self.assertEqual(calls, [
             f"--game {self.game} --dump-imports {folder}/imports.txt {extra}",
-            f"--game {self.game} --preset rtx3050 --session-log {folder}/session.log {extra}",
+            f"--game {self.game} --preset rtx3050 --session-log {folder}/session.log --shader-cache {extra}",
         ])
         self.assertEqual(summary["options"]["extra_args"], extra.split(" "))
+        self.assertFalse(summary["options"]["cold_cache"])
+
+        # pwsh on Linux makes no junction, so the boot falls back to a cache folder of its own, says
+        # so in one line, and the run goes on.
+        cache = summary["cache"]
+        self.assertEqual((cache["mode"], cache["shader_cache"]), ("fallback", True), cache)
+        self.assertIn("made no junction", cache["reason"])
+        self.assertEqual(cache["path"], f"%USERPROFILE%/out/{base}/emulator/_PipelineCache")
+        self.assertEqual(cache["before"], {"files": 0, "bytes": 0})
+        self.assertEqual(cache["after"], {"files": 2, "bytes": len("driver pipeline cache") + len("translated shaders")})
+        self.assertEqual(output.count("No shader cache from earlier boots (New-Item made no junction"), 1, output)
+        self.assertIn("This boot compiles every shader.", output)
+        self.assertIn("shader cache: cold, fallback (New-Item made no junction: junctions need Windows and an NTFS drive): "
+                      "no files before the boot, 2 files (39 bytes) after", self.read(folder, "summary.txt"))
+        self.assertTrue(os.path.isdir(os.path.join(folder, "emulator", "_PipelineCache")))
+        self.assertFalse(os.path.islink(os.path.join(folder, "emulator", "_PipelineCache")))
+        # Neither cache is in the zip, and the one of earlier boots is as it was.
+        self.assertFalse([n for n in names if "_PipelineCache" in n or "FAKE00000" in n or "marker" in n], names)
+        self.assertEqual(os.listdir(self.cache), ["marker.txt"])
+        self.assertEqual(self.read(self.cache, "marker.txt"), "from an earlier boot\n")
         self.assertIn("libSceFake: 3 imported, 1 unresolved", self.read(folder, "imports.txt"))
         self.assertIn("booting", self.read(folder, "emulator-boot.log"))
         for name in ("imports.txt", "session.log", "emulator-imports.log", "emulator-boot.log", "summary.json"):
@@ -501,6 +561,93 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         _, summary, _ = self.results()
         self.assertEqual([s["name"] for s in summary["steps"]], ["imports", "pass", "boot", "logs"])
+
+    def test_cold_cache(self):
+        """-ColdCache boots as preflight did before it kept a cache: no --shader-cache, no link, and
+        the shader cache of earlier boots left alone. Without LOCALAPPDATA there is no cache either."""
+        r = self.run_preflight("-Game", self.game, "-BootSeconds", "2", "-ColdCache")
+        output = r.stdout + r.stderr
+        self.assertEqual(r.returncode, 0, output)
+        folder, summary, _ = self.results()
+        calls = self.read(folder, "emulator", "argv.txt").splitlines()
+        self.assertEqual(calls[1], f"--game {self.game} --preset rtx3050 --session-log {folder}/session.log")
+        self.assertTrue(summary["options"]["cold_cache"])
+        cache = summary["cache"]
+        self.assertEqual((cache["mode"], cache["reason"], cache["shader_cache"]), ("cold", "-ColdCache", False))
+        self.assertEqual(cache["before"], {"files": 0, "bytes": 0})
+        self.assertEqual(cache["after"], {"files": 1, "bytes": len("driver pipeline cache")})
+        self.assertIn("Shader cache: none (-ColdCache). This boot compiles every shader.", output)
+        self.assertNotIn("No shader cache from earlier boots", output)
+        self.assertIn("shader cache: cold by request (-ColdCache): no files before the boot, 1 file (21 bytes) after",
+                      self.read(folder, "summary.txt"))
+        self.assertFalse(os.path.exists(os.path.join(self.localappdata, "KytyPS5")), "-ColdCache makes no cache folder")
+        shutil.rmtree(self.out)
+
+        r = self.run_preflight("-Game", self.game, "-BootSeconds", "2", LOCALAPPDATA=None)
+        output = r.stdout + r.stderr
+        self.assertEqual(r.returncode, 0, output)
+        folder, summary, _ = self.results()
+        self.assertIn("--shader-cache", self.read(folder, "emulator", "argv.txt").splitlines()[1])
+        self.assertEqual((summary["cache"]["mode"], summary["cache"]["reason"]), ("fallback", "LOCALAPPDATA is not set"))
+        self.assertIn("No shader cache from earlier boots (LOCALAPPDATA is not set). This boot compiles every shader.",
+                      output)
+
+    def test_zip_leaves_out_links(self):
+        """The zip goes into no junction or symbolic link, at the top of the results folder or below
+        (Windows PowerShell 5.1's Get-ChildItem -Recurse follows both). The stand-in emulator links
+        two folders of the results folder to the shader cache."""
+        os.makedirs(self.cache)
+        with open(os.path.join(self.cache, "PPSA00000.shaders"), "wb") as f:
+            f.write(b"\0" * 4096)
+        r = self.run_preflight("-Game", self.game, "-BootSeconds", "2", KYTY_FAKE_LINK=self.cache)
+        output = r.stdout + r.stderr
+        self.assertEqual(r.returncode, 0, output)
+        folder, _, names = self.results()
+        base = os.path.basename(folder)
+        self.assertTrue(os.path.islink(os.path.join(folder, "linked")))
+        self.assertTrue(os.path.islink(os.path.join(folder, "extra", "inner", "linked")))
+        self.assertIn(f"{base}/extra/inner/note.txt", names)
+        self.assertFalse([n for n in names if "linked" in n or "PPSA00000" in n], names)
+        self.assertIn("left out of the zip, a junction or symbolic link: linked", output)
+        self.assertIn("left out of the zip, a junction or symbolic link: extra/inner/linked", output)
+        self.assertEqual(os.listdir(self.cache), ["PPSA00000.shaders"])
+
+    def test_killed_during_boot(self):
+        """Ended during the boot without its finally block (the PC restarted): the summary already
+        has the shader cache the boot started with, and console.txt shows that the boot started."""
+        pids_file = os.path.join(self.tmp, "boot.pids")
+        process = subprocess.Popen([PWSH, "-NoProfile", "-NonInteractive", "-File",
+                                    os.path.join(self.preflight, "preflight.ps1"), "-OutDir", self.out,
+                                    "-Game", self.game, "-BootSeconds", "120"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   env=self.environment(KYTY_FAKE_PIDS=pids_file))
+        pids = []
+        try:
+            deadline = time.monotonic() + 90
+            while len(pids) < 2 and time.monotonic() < deadline and process.poll() is None:
+                time.sleep(0.2)
+                if os.path.exists(pids_file):
+                    pids = [int(p) for p in self.read(pids_file).split()]
+            self.assertEqual(len(pids), 2, "the boot did not start")
+        finally:
+            process.kill()
+            process.wait(timeout=30)
+            # Nothing ends the stand-in emulator on Linux once pwsh is gone.
+            for pid in pids:
+                try:
+                    os.kill(pid, 9)
+                except ProcessLookupError:
+                    pass
+        folders = [p for p in glob.glob(os.path.join(self.out, "kyty-preflight-FAKE-PC-*")) if os.path.isdir(p)]
+        self.assertEqual(len(folders), 1)
+        self.assertFalse(os.path.exists(folders[0] + ".zip"))
+        with open(os.path.join(folders[0], "summary.json"), encoding="utf-8") as f:
+            summary = json.load(f)
+        self.assertEqual([(s["name"], s["status"]) for s in summary["steps"]], [("imports", "PASS"), ("boot", "NOT RUN")])
+        cache = summary["cache"]
+        self.assertEqual((cache["mode"], cache["before"], cache["after"]), ("fallback", {"files": 0, "bytes": 0}, None))
+        self.assertIn("shader cache: cold, fallback (", self.read(folders[0], "summary.txt"))
+        self.assertTrue(self.read(folders[0], "console.txt").endswith("Boot ... "))
 
 
 if __name__ == "__main__":
