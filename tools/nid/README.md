@@ -126,23 +126,31 @@ the option its output does not change.
 ## GTA V check
 
 `python3 -I tools/nid/name_imports.py --hle tools/triage/tests/fixtures/gta5-*.txt` over the 19
-GTA V logs from upstream issues finds 112 unresolved imports. The names file names all 112;
-28 have a LIB_FUNC in gta6-prep now and 84 do not. GTA V called five of them at run time, and
-gta6-prep implements none of those:
+GTA V logs from upstream issues lists 112 imports. 92 of them are unresolved, and the names file
+names all 92; 28 have a LIB_FUNC in gta6-prep now and 64 do not. The other 20 are NpCppWebApi C++
+methods that eboot.bin imports from the game's own `sce_module/libSceNpCppWebApi.prx`. They all
+come from `gta5-829-v22-printf-rx9070.txt`, a build that loads only libc.prx before the first
+relocation. In the full log the fixture was cut from, the game loads that module later, eboot.bin
+is relocated again, and no NpCppWebApi stub is ever called. The tool lists them as `prx`, and
+they need no HLE.
 
-| NID | library | symbol | fixture logs |
+GTA V called five imports at run time, and gta6-prep implements none of those:
+
+| NID | library | symbol | logs that call it |
 |---|---|---|---:|
-| `BYIZGKm6bO4` | NpUtility | `sceNpBandwidthTestGetStatus` | 9 |
-| `hqzi1IHdQQQ` | NpUtility | `sceNpBandwidthTestInitStartDownload` | 9 |
-| `kvdMF48mB3Y` | NpUtility | `sceNpBandwidthTestAbort` | 9 |
-| `pLr1fEQS1z8` | NpUtility | `sceNpBandwidthTestShutdown` | 9 |
+| `BYIZGKm6bO4` | NpUtility | `sceNpBandwidthTestGetStatus` | 2 |
+| `hqzi1IHdQQQ` | NpUtility | `sceNpBandwidthTestInitStartDownload` | 2 |
+| `kvdMF48mB3Y` | NpUtility | `sceNpBandwidthTestAbort` | 2 |
+| `pLr1fEQS1z8` | NpUtility | `sceNpBandwidthTestShutdown` | 2 |
 | `Fc8qxlKINYQ` | VideoRecordingP | `sceVideoRecordingSetInfo` | 11 |
 
-The other 107 were unresolved at load and never called in these logs:
+The last column counts the logs, of the 19, with a call line for the import. Seven more list the
+four NpBandwidthTest imports as unresolved at load without calling them.
+
+The other 87 were unresolved at load and never called in these logs:
 
 | library | NIDs | in gta6-prep now | still unresolved |
 |---|---:|---:|---|
-| NpCppWebApi | 20 | 0 | C++ API: `Matches::V1` RequestMatchPlayer, RequestMatchPlayerFactory, RequestInGameRoster; `Common` String, Vector, IntrusivePtr, InitParams, `initialize`, `terminate` |
 | Agc | 21 | 5 | `sceAgcCbCondWrite`, `sceAgcAcbAtomicMem`, `sceAgcAcbWaitUntilSafeForRendering` and 13 more |
 | AgcDriver | 16 | 0 | `sceAgcDriverRegisterGdsResource`, `sceAgcDriverIsTraceInProgress`, `sceAgcDriverGetResourceName` and 13 more |
 | ContentExport | 5 | 0 | `sceContentExportStart`, `sceContentExportFromFile`, `sceContentExportFromFileWithThumbnail`, `sceContentExportFinish`, `sceContentExportTerm` |
@@ -156,11 +164,18 @@ The other 107 were unresolved at load and never called in these logs:
 | AudioOut, ContentSearch, Coredump, NpUtility, PlayerSelectionDialog | 5 | 0 | `sceAudioOutSetMixLevelPadSpk`, `sceContentSearchSearchContent`, `sceCoredumpWriteUserData`, `sceNpBandwidthTestInitStartUpload`, `scePlayerSelectionDialogTerminate` |
 | ImeDialog, NpEntitlementAccess, Net, SystemService, Posix | 16 | 16 | |
 
+That leaves 59 load-time gaps and the five calls.
+
 The fixtures are trimmed copies. The complete logs behind them, from builds of August to
-October 2026, list 639 imports unresolved at load, 437 of them NpCppWebApi methods, and the same
-five calls. The names file names 638 of the 639; `iQS6DUtLybE` in VideoRecordingP is in no list.
-What GTA V needed and gta6-prep still lacks is the first place to look in GTA 6's report. The
-five calls come first.
+November 2026, list 639 imports. 437 of them are NpCppWebApi methods, all in the November log of
+the TheCruZ fork build (v22) that the v22 fixture was cut from, and all `prx` like the 20 above.
+The nine logs from builds before 2026-10-04, which load every PRX before they relocate, list no
+NpCppWebApi import. That leaves 202 unresolved imports, with the same five calls. The names file
+names 201 of them; `iQS6DUtLybE` in VideoRecordingP is in no list.
+
+For GTA 6 the list to work from is its `--dump-imports` report, which loads all of `sce_module`
+before it resolves anything. What GTA V needed and gta6-prep still lacks is the first place to
+look in it, the five calls first.
 
 ## How the port matches the emulator
 
