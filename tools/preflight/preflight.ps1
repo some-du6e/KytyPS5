@@ -443,7 +443,7 @@ namespace KytyPreflight
         static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref ExtendedLimitInformation info, int length);
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        public static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool QueryInformationJobObject(IntPtr job, int infoClass, IntPtr info, int length, IntPtr returnLength);
@@ -457,16 +457,15 @@ namespace KytyPreflight
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool CloseHandle(IntPtr handle);
 
-        // A job holding `process` that ends every process in it when its last handle closes, so
-        // also when preflight itself ends. IntPtr.Zero when that fails.
-        public static IntPtr CreateJob(IntPtr process)
+        // A job that ends every process in it when its last handle closes, so also when preflight
+        // itself ends. IntPtr.Zero when that fails.
+        public static IntPtr CreateJob()
         {
             IntPtr job = CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
             if (job == IntPtr.Zero) return IntPtr.Zero;
             ExtendedLimitInformation info = new ExtendedLimitInformation();
             info.BasicLimitInformation.LimitFlags = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-            if (!SetInformationJobObject(job, 9, ref info, Marshal.SizeOf(typeof(ExtendedLimitInformation))) ||
-                !AssignProcessToJobObject(job, process))
+            if (!SetInformationJobObject(job, 9, ref info, Marshal.SizeOf(typeof(ExtendedLimitInformation))))
             {
                 CloseHandle(job);
                 return IntPtr.Zero;
@@ -519,6 +518,10 @@ function Initialize-Native {
     if (-not $OnWindows) { return }
     try {
         if ($null -eq ('KytyPreflight.Native' -as [type])) { Add-Type -TypeDefinition $NativeCode -ErrorAction Stop }
+        # Each call once now (the second fails on the null handles, which is the point): the first
+        # call of a method compiles it, and Start-Child's assignment must come quickly after a start.
+        [KytyPreflight.Native]::CloseJob([KytyPreflight.Native]::CreateJob())
+        [void][KytyPreflight.Native]::AssignProcessToJobObject([IntPtr]::Zero, [IntPtr]::Zero)
         $script:NativeReady = $true
     } catch {
         Add-Problem "could not load preflight's Windows helpers ($($_.Exception.Message)): a crashing test may wait for its time limit, and closing this window may leave a test running"
@@ -614,23 +617,33 @@ function Start-Child([string]$File, [string[]]$Arguments, [string]$WorkingDirect
     $errorPath = [System.IO.Path]::ChangeExtension($LogPath, '.stderr.log')
     $stdout = [System.IO.File]::Open($LogPath, 'Append', 'Write', 'ReadWrite')
     $stderr = [System.IO.File]::Open($errorPath, 'Create', 'Write', 'ReadWrite')
+    # The child and whatever it starts go into a job that Windows ends with preflight: closing this
+    # window then stops a running test too, instead of leaving it on the GPU. The job exists before
+    # the start, so the child joins it before it can start anything of its own (what it starts
+    # earlier is not in the job). Without a job, Stop-Child falls back to taskkill.
+    $job = $null
+    if ($NativeReady) {
+        try {
+            $handle = [KytyPreflight.Native]::CreateJob()
+            if ($handle -ne [IntPtr]::Zero) { $job = $handle }
+        } catch { }
+    }
     try {
         $process = [System.Diagnostics.Process]::Start($info)
     } catch {
         $stdout.Dispose()
         $stderr.Dispose()
         Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $job) { [KytyPreflight.Native]::CloseJob($job) }
         throw
     }
-    # The child and whatever it starts go into a job that Windows ends with preflight: closing this
-    # window then stops a running test too, instead of leaving it on the GPU. Without one, Stop-Child
-    # falls back to taskkill.
-    $job = $null
-    if ($NativeReady) {
-        try {
-            $handle = [KytyPreflight.Native]::CreateJob($process.Handle)
-            if ($handle -ne [IntPtr]::Zero) { $job = $handle }
-        } catch { }
+    if ($null -ne $job) {
+        $joined = $false
+        try { $joined = [KytyPreflight.Native]::AssignProcessToJobObject($job, $process.Handle) } catch { }
+        if (-not $joined) {
+            [KytyPreflight.Native]::CloseJob($job)
+            $job = $null
+        }
     }
     $child = [pscustomobject]@{
         Process = $process
