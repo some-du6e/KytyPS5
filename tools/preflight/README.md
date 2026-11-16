@@ -122,9 +122,10 @@ nothing needs administrator rights.
 ## If something goes wrong
 
 - A warning that `VCRUNTIME140.dll` or another runtime DLL is missing, or that `msvcp140.dll` is
-  older than 14.40: install the
-  [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe), then
-  run preflight again. The emulator needs it too.
+  older than this build needs: install the latest
+  [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vc14/vc_redist.x64.exe), then run
+  preflight again. The emulator needs it too. The runtime must be at least as new as the Visual C++
+  version that built the emulator, which `gpu-tests\tests.json` records as `msvc_toolset`.
 - "tests.json is missing": preflight ran from inside the zip. Extract the zip first.
 - The window closes at once: run `preflight.cmd` from a command prompt instead, to see the message.
 

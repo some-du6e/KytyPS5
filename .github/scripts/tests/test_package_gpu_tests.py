@@ -174,7 +174,8 @@ class PackageTests(Fixture):
 
     def test_source_comes_from_the_ci_environment(self):
         old = dict(os.environ)
-        os.environ.update(GITHUB_SHA="0123abc", GITHUB_RUN_ID="42", GITHUB_REPOSITORY="o/r", GITHUB_REF_NAME="b")
+        os.environ.update(GITHUB_SHA="0123abc", GITHUB_RUN_ID="42", GITHUB_REPOSITORY="o/r", GITHUB_REF_NAME="b",
+                          VCToolsVersion="14.51.36231")
         try:
             rc, _, err = self.run_package()
         finally:
@@ -182,7 +183,8 @@ class PackageTests(Fixture):
             os.environ.update(old)
         self.assertEqual(rc, 0, err)
         with open(os.path.join(self.out, "tests.json"), encoding="utf-8") as f:
-            self.assertEqual(json.load(f)["source"], {"repository": "o/r", "commit": "0123abc", "ref": "b", "run_id": "42"})
+            self.assertEqual(json.load(f)["source"], {"repository": "o/r", "commit": "0123abc", "ref": "b", "run_id": "42",
+                                                      "msvc_toolset": "14.51.36231"})
 
     def test_not_a_pe_image(self):
         # A Linux build: the executables are copied, without a DLL list.

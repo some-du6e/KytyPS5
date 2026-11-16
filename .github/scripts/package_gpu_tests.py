@@ -242,8 +242,11 @@ def package(build, out, info):
                         print(f"warning: {rel} imports {name}, which is neither next to it nor in {system32}")
         files[rel] = record
         print(line)
+    # msvc_toolset: the MSVC build tools' version (msvc-dev-cmd sets VCToolsVersion). The VC++
+    # runtime on the PC must be at least as new; preflight.ps1 checks.
     source = {key: os.environ[var] for key, var in (("repository", "GITHUB_REPOSITORY"), ("commit", "GITHUB_SHA"),
-                                                    ("ref", "GITHUB_REF_NAME"), ("run_id", "GITHUB_RUN_ID"))
+                                                    ("ref", "GITHUB_REF_NAME"), ("run_id", "GITHUB_RUN_ID"),
+                                                    ("msvc_toolset", "VCToolsVersion"))
               if os.environ.get(var)}
     manifest = {"format": 1, "source": source, "tests": entries, "executables": files}
     with open(os.path.join(out, "tests.json"), "w", encoding="utf-8", newline="\n") as f:

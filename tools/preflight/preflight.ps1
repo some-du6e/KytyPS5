@@ -964,19 +964,28 @@ function Find-MissingDlls($Manifest, [string]$PackageDir) {
     return $missing
 }
 
-# The tests and the emulator use the VC++ runtime DLLs. Builds of Visual Studio 2022 17.10 and
-# newer (this one) can crash in std::mutex with an msvcp140.dll older than 14.40.
+# The tests and the emulator use the VC++ runtime DLLs, which must be at least as new as the MSVC
+# build tools that built them (Microsoft's rule). tests.json records that version; without it, 14.40,
+# below which builds of Visual Studio 2022 17.10 and newer can crash in std::mutex.
 function Test-MsvcRuntime([string[]]$MissingDlls) {
     if (-not $OnWindows) { return }
-    $redist = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
+    # The latest v14 redistributable. aka.ms/vs/17/release/... is Visual Studio 2022's (14.44).
+    $redist = 'https://aka.ms/vc14/vc_redist.x64.exe'
     $runtime = @(@($MissingDlls) | Where-Object { $_ -match '^(vcruntime|msvcp|concrt|vccorlib)\d' })
     if ($runtime.Count -gt 0) {
         Add-Problem "missing $($runtime -join ', '): install the Microsoft Visual C++ Redistributable (x64) from $redist, then run this again"
         return
     }
+    $needed = New-Object System.Version 14, 40
+    $why = ''
+    $tools = $null
+    if ($Package.Contains('msvc_toolset') -and [System.Version]::TryParse($Package['msvc_toolset'], [ref]$tools)) {
+        $needed = New-Object System.Version $tools.Major, $tools.Minor
+        $why = " (MSVC $tools built it)"
+    }
     $version = Get-FileVersion (Join-Path $System32 'msvcp140.dll')
-    if ($null -ne $version -and $version -lt (New-Object System.Version 14, 40)) {
-        Add-Problem "msvcp140.dll is $version; this build needs 14.40 or newer. Install the Microsoft Visual C++ Redistributable (x64) from $redist"
+    if ($null -ne $version -and $version -lt $needed) {
+        Add-Problem "msvcp140.dll is $version; this build needs $needed or newer$why. Install the Microsoft Visual C++ Redistributable (x64) from $redist"
     }
 }
 
@@ -1412,7 +1421,7 @@ function Write-Summary([string]$Result) {
         $lines.Add("result: $Result (exit code $code)")
     }
     $source = @()
-    foreach ($key in @('repository', 'ref', 'commit', 'run_id')) { if ($Package.Contains($key)) { $source += "$key $($Package[$key])" } }
+    foreach ($key in @('repository', 'ref', 'commit', 'run_id', 'msvc_toolset')) { if ($Package.Contains($key)) { $source += "$key $($Package[$key])" } }
     if ($source.Count -gt 0) { $lines.Add("package: $($source -join ', ')") }
     foreach ($key in @('os', 'cpu', 'ram')) { if ($SystemData.Contains($key)) { $lines.Add("$($key): $($SystemData[$key])") } }
     if ($SystemData.Contains('gpus')) {
