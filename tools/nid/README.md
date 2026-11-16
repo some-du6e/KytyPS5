@@ -90,10 +90,28 @@ library NpUtility: unresolved=5 named=5
   load mA0zsbqm+kA Func eboot.bin sceNpBandwidthTestInitStartUpload
 ```
 
-`called` means the stub ran, `object` is an object import, `load` was only listed as
-unresolved at load time. The fourth field is the importing program, `?` when the line does not
-say. `--hle` marks imports that a LIB_FUNC or LIB_OBJECT in this checkout registers now, which
-helps with a log from an older build: `(hle now: src/libs/libNet.cpp:1684 NpCommerceDialogInitialize)`.
+`called` means the stub ran, `object` is an object import, and `load` was listed as unresolved
+when the program was relocated at load, with nothing later in the log binding it. The fourth
+field is the importing program, `?` when the line does not say.
+
+A load-time list is a snapshot. Since upstream `fdac55a5` (2026-10-04) only `libc.prx` is loaded
+at that point. The game loads the other PRXs in its `sce_module` folder itself, and the linker's
+next relocation binds the imports they export. Two more kinds cover that, and neither counts as
+unresolved:
+
+- `rebound`: a `Rebind:` line says a module loaded later bound the import. gta6-prep writes
+  these lines.
+- `prx`: for logs of older builds, which bound such imports without a line. The import was only
+  unresolved at load, and later in the same log the game loaded the PRX of its library:
+  `(libSceNpCppWebApi.prx loaded later)`. This is read from the order of the lines, not logged.
+
+Over several logs an import gets the least resolved state any of them gives it. The
+`--dump-imports` report is the complete gap list: it loads `eboot.bin` and every PRX in
+`sce_module` before it resolves anything, so its `unresolved` lines are what neither the game's
+own modules nor the HLE provide.
+
+`--hle` marks the unresolved imports that a LIB_FUNC or LIB_OBJECT in this checkout registers
+now, which helps with a log from an older build: `(hle now: src/libs/libNet.cpp:1684 NpCommerceDialogInitialize)`.
 `--json` prints the same list as JSON.
 
 The triage tool takes the names file too. `python3 -I tools/triage/kyty_triage.py --nid-names <file> <logs>`

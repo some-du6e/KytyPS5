@@ -82,7 +82,12 @@ class LogTests(unittest.TestCase):
     def test_every_line_form(self):
         imps = self.imports(u.data("synthetic-log.txt"))
         self.assertEqual(sorted(imps), sorted(["pLr1fEQS1z8", "kvdMF48mB3Y", "BYIZGKm6bO4", "hqzi1IHdQQQ",
-                                               "Fc8qxlKINYQ", "AAAAAAAAAAA", "3ZWa3AoyWZQ"]))
+                                               "Fc8qxlKINYQ", "AAAAAAAAAAA", "3ZWa3AoyWZQ",
+                                               "RolXukwAUco", "djxxOmW6-aw", "1jfXLRVzisc"]))
+        # Stubbed at load, then bound by a module loaded later: Rebind: lines.
+        self.assertEqual((imps["RolXukwAUco"]["kind"], imps["RolXukwAUco"]["kinds"]), ("rebound", ["load", "rebound"]))
+        self.assertEqual((imps["djxxOmW6-aw"]["kind"], imps["djxxOmW6-aw"]["kinds"]), ("rebound", ["object", "rebound"]))
+        self.assertEqual(imps["1jfXLRVzisc"]["kind"], "rebound")
         self.assertEqual(imps["pLr1fEQS1z8"]["kinds"], ["load"])        # Relocate: unresolved
         self.assertEqual(imps["pLr1fEQS1z8"]["programs"], ["eboot.bin"])
         self.assertEqual(imps["kvdMF48mB3Y"]["kinds"], ["called", "load"])  # Stubbed: + pasted console line
@@ -95,6 +100,60 @@ class LogTests(unittest.TestCase):
         self.assertIsNone(imps["AAAAAAAAAAA"]["name"])
         self.assertEqual(imps["3ZWa3AoyWZQ"]["kind"], "called")         # --strict-imports EXIT text
         self.assertEqual(imps["3ZWa3AoyWZQ"]["name"], "sceAgcAsyncCondExecPatchSetCommandAddress")
+
+    def write(self, name, lines):
+        path = os.path.join(self.tmp, name)
+        with open(path, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        return path
+
+    STUB = ("Relocate: unresolved PLT import patched to stub [432] [0000000903cdd458] <- 00000002000003fc, "
+            "%s[%s_v1][%s_v1.1][Func], Func, Global, <game>\\eboot.bin")
+    WEBAPI = STUB % ("RolXukwAUco", "NpCppWebApi", "NpCppWebApi")
+    UTILITY = STUB % ("pLr1fEQS1z8", "NpUtility", "NpUtility")
+    PRX = "Loading: <game>\\sce_module/libSceNpCppWebApi.prx"
+
+    def test_stub_then_rebind(self):
+        # A gta6-prep printf log: the stub at the first relocation, the Rebind: line after the PRX.
+        log = self.write("_kyty.txt", [self.WEBAPI, self.UTILITY, self.PRX,
+                                       "Rebind: RolXukwAUco[NpCppWebApi_v1][NpCppWebApi_v1.1][Func] -> "
+                                       "RolXukwAUco[NpCppWebApi_v1][NpCppWebApi_v1.1][Func] (program=eboot.bin)"])
+        text = self.output(log).decode("ascii")
+        self.assertIn("# totals: unresolved=1 named=1 called=0 object=0 load=1 rebound=1\n", text)
+        self.assertIn("library NpCppWebApi: unresolved=0 named=0 rebound=1\n  rebound RolXukwAUco Func eboot.bin ", text)
+        # A Rebind: line before the stub line leaves it unresolved: the last line wins.
+        log = self.write("again.txt", ["Rebind: RolXukwAUco[NpCppWebApi_v1][NpCppWebApi_v1.1][Func] -> x (program=eboot.bin)",
+                                       self.WEBAPI])
+        self.assertEqual(self.imports(log)["RolXukwAUco"]["kind"], "load")
+
+    def test_prx_loaded_later(self):
+        # A build without Rebind: lines: the game loads its PRX after the first relocation.
+        imps = self.imports(self.write("v22.txt", [self.WEBAPI, self.UTILITY, self.PRX]))
+        self.assertEqual((imps["RolXukwAUco"]["kind"], imps["RolXukwAUco"]["prx"]), ("prx", "libSceNpCppWebApi.prx"))
+        self.assertEqual((imps["pLr1fEQS1z8"]["kind"], imps["pLr1fEQS1z8"]["prx"]), ("load", None))
+        text = self.output(self.write("v22.txt", [self.WEBAPI, self.PRX])).decode("ascii")
+        self.assertIn("# totals: unresolved=0 named=0 called=0 object=0 load=0 prx=1\n", text)
+        self.assertIn("  prx RolXukwAUco Func eboot.bin _ZN3sce2Np9CppWebApi7Matches2V125RequestMatchPlayerFactory"
+                      "6createEPNS1_6Common10LibContextEPKcNS3_10PlayerTypeEPNS5_12IntrusivePtrINS3_18RequestMatchPlayerEEE"
+                      " (libSceNpCppWebApi.prx loaded later)\n", text)
+        # Loaded before the relocation (builds before 2026-10-04 loaded every PRX first): still a gap.
+        self.assertEqual(self.imports(self.write("old.txt", [self.PRX, self.WEBAPI]))["RolXukwAUco"]["kind"], "load")
+        # A build that writes Rebind: lines (it also writes the summary) said nothing: still a gap.
+        log = self.write("prep.txt", [self.WEBAPI, "Unresolved imports: 1 functions, 0 objects; by library: NpCppWebApi=1",
+                                      self.PRX])
+        self.assertEqual(self.imports(log)["RolXukwAUco"]["kind"], "load")
+
+    def test_least_resolved_log_wins(self):
+        bound = self.write("bound.txt", [self.WEBAPI, self.PRX])
+        stuck = self.write("stuck.txt", [self.WEBAPI])
+        imp = self.imports(bound, stuck)["RolXukwAUco"]
+        self.assertEqual((imp["kind"], imp["sources"]), ("load", ["bound.txt", "stuck.txt"]))
+        self.assertEqual(self.imports(bound, self.write("bound2.txt", [self.WEBAPI, self.PRX]))["RolXukwAUco"]["kind"], "prx")
+        # Two inputs with one file name are still two logs.
+        os.makedirs(os.path.join(self.tmp, "other"))
+        same = os.path.join(self.tmp, "other", "bound.txt")
+        shutil.copy(stuck, same)
+        self.assertEqual(self.imports(bound, same)["RolXukwAUco"]["kind"], "load")
 
     def test_gz_zip_and_stdin(self):
         raw = u.read_bytes(u.data("synthetic-log.txt"))
