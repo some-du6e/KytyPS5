@@ -1,2 +1,4 @@
 # Pipeline manifests are text whose bytes do not depend on the platform.
 assets/pipelines/*.kpm text eol=lf
+# The tools/nid tests compare these files byte for byte, so a Windows checkout must keep LF.
+tools/nid/tests/data/** text eol=lf
