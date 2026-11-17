@@ -382,6 +382,20 @@ jobs:
           $extra = "--nid-names $env:RUNNER_TEMP\preflight-smoke\names.txt"
           $first = Invoke-Smoke 'game' @('-ExtraArgs', $extra)
           $summary = $first.Summary
+          # The memory items of system.txt, the RAM profile decision and the first memory.csv row, all
+          # from WMI under Windows PowerShell 5.1. The 30 s rows need a longer boot than this one.
+          $system = @([System.IO.File]::ReadAllLines((Join-Path $first.Run 'system.txt')))
+          if (@($system | Where-Object { $_ -match '^commit: limit \d+ MiB' }).Count -ne 1) { throw "system.txt has no commit line: $($system -join ' | ')" }
+          if (@($system | Where-Object { $_ -match '^page file' -and $_ -notmatch 'not available' }).Count -eq 0) { throw "system.txt has no page file line: $($system -join ' | ')" }
+          $ram = $summary.ram
+          if ($null -eq $ram -or $ram.ram_mib -le 0 -or $ram.free_commit_mib -le 0) { throw "summary.json ram: $($ram | ConvertTo-Json -Compress)" }
+          $low = $ram.ram_mib -lt 14336
+          if (($ram.profile -eq 'low') -ne $low -or $ram.added -ne $low) { throw "summary.json ram does not follow the 14 GiB rule: $($ram | ConvertTo-Json -Compress)" }
+          if ($low -ne ($first.Command -match ' --preset rtx3050 --ram-profile low ')) { throw "the boot's command line does not match summary.json ram: $($first.Command)" }
+          $csv = @(Get-Content -LiteralPath (Join-Path $first.Run 'memory.csv'))
+          if ($csv.Count -lt 2 -or $csv[0] -cne 'seconds,available_mib,committed_mib,commit_limit_mib,pages_input_per_s,processes,private_mib,working_set_mib') { throw "memory.csv: $($csv -join ' | ')" }
+          $cells = $csv[1].Split(',')
+          if ($cells.Count -ne 8 -or [long]$cells[1] -le 0 -or [long]$cells[2] -le 0 -or [long]$cells[3] -lt [long]$cells[2]) { throw "memory.csv's first row: $($csv[1])" }
           if ((@($summary.options.extra_args) -join ' ') -ne $extra) { throw "-ExtraArgs arrived as: $(@($summary.options.extra_args) -join ' | ')" }
           $imports = @($summary.steps)[0]
           if ($imports.status -ne 'FAIL') { Write-Host "::warning::the import report of an empty folder is $($imports.status), not FAIL" }

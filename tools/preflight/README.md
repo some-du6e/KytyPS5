@@ -85,7 +85,8 @@ Preflight then does three things:
    run for 5 minutes, then closes it. Leave the preflight window open. To play longer, add
    `-BootSeconds 0`: the game then runs until you close the game window. A boot that didn't crash
    shows as `RAN`, not `PASS`: a game stuck on a black screen also keeps running, so only the logs
-   tell how far it got.
+   tell how far it got. On a PC with less than 14 GiB of RAM the boot also gets `--ram-profile low`
+   (see "A PC with 8 GB of RAM" below).
 3. **Logs.** It collects the emulator's logs and zips everything.
 
 Send the zip it prints, especially if the game crashed: the zip is how the crash gets fixed.
@@ -131,6 +132,40 @@ boot, or why the boot ran without it. The file count doesn't tell a warm boot fr
 build ignores the files an older one left. The emulator's own lines under it do. `Shader cache:
 loaded 0 programs` means the boot compiled every shader itself.
 
+## A PC with 8 GB of RAM
+
+The emulator commits about 12.4 GiB of guest memory when it starts, before the game runs. Windows
+has to back every committed byte with RAM or the page file, and the GPU driver commits more for
+the video memory it allocates. So on a PC with 8 GB of RAM the page file decides whether the game
+boots at all, and the RAM decides how slow it gets.
+
+- **The RAM profile.** With less than 14 GiB of RAM, preflight adds `--ram-profile low` after
+  `--preset rtx3050` and prints one line saying so. That profile makes the emulator's buffers
+  smaller, runs fewer compile threads and no pipeline helpers, and implies `--oom-recovery`. A PC
+  with 16 GB reports a little under 16 GiB and keeps the normal settings. `-ExtraArgs "--ram-profile
+  normal"` turns it off, and preflight then adds nothing.
+- **The free commit.** Right before the boot, preflight checks how much of the commit limit is
+  free. Below 25,024 MiB (12,736 MiB of guest memory plus 12 GiB for the GPU driver and the
+  emulator) it prints a yellow line with the steps for a bigger page file, and boots anyway. The
+  limit counts the page files' current size only. When Windows manages the page file, or its
+  maximum is above its initial size, the line says that Windows may grow it during the boot, and
+  that a fixed size avoids the stall. In the Virtual memory dialog, untick "Automatically manage
+  paging file size for all drives" first: the drive list and the size boxes stay greyed out until
+  you do.
+- **Boot time.** A cold boot that keeps paging memory to disk can take far longer than 5 minutes,
+  so preflight suggests `-BootSeconds 0`. The game then runs until you close its window.
+- **What gets recorded.** `system.txt` lists the commit limit and how much of it is free, the page
+  files, the free space on each drive, the 10 programs that hold the most memory (names only), and
+  the unexpected restarts, blue screens (bug checks), low virtual memory warnings and GPU resets
+  of the last 14 days from the System event log. During the boot, `memory.csv` gets one row when
+  the boot starts and one every 30 seconds after: the free RAM, the commit charge and limit, the
+  pages read from disk per second to resolve hard faults (from the second row on), and the memory
+  of the emulator's processes. The emulator writes its own `RAM usage:` line to `session.log`
+  every 30 seconds too.
+
+The `ram profile:` line of `summary.txt` says which profile the boot used and why, and how much
+commit was free before the boot.
+
 ## Options
 
 | option | what it does |
@@ -154,10 +189,11 @@ missing file.
 - `summary.txt`: one line per step, with the last lines a failed test printed. `summary.json` is
   the same for programs.
 - `system.txt`: Windows version, CPU, RAM, GPU, driver, VRAM, `nvidia-smi` and `vulkaninfo --summary`
-  output, and the versions of the Visual C++ runtime DLLs.
+  output, the versions of the Visual C++ runtime DLLs, and the memory items of "A PC with 8 GB of
+  RAM" above.
 - `tests\<name>.log`: each test's command line and output.
-- With `-Game`: `imports.txt`, `session.log`, `emulator-imports.log`, `emulator-boot.log` and the
-  `kyty-logs-<date>.zip` that `collect_logs.ps1` makes.
+- With `-Game`: `imports.txt`, `session.log`, `emulator-imports.log`, `emulator-boot.log`,
+  `memory.csv` (Windows) and the `kyty-logs-<date>.zip` that `collect_logs.ps1` makes.
 - `console.txt`: what the window showed.
 
 The emulator's working folder, `emulator` in the results folder, holds the game's save data and temp
@@ -197,6 +233,14 @@ junction behind. Don't remove such a results folder with `Remove-Item -Recurse` 
 empties the cache through the link. pwsh on Linux makes no junction. There, the tests set
 `KYTY_PREFLIGHT_TEST_LINK=SymbolicLink`, which preflight honors only off Windows, to run the
 persistent cache through a symbolic link. The Windows smoke test checks a real junction.
+
+The RAM size, the free commit and whether the page file can grow come from WMI on Windows. Off
+Windows the tests set `KYTY_PREFLIGHT_TEST_RAM_MIB`, `KYTY_PREFLIGHT_TEST_FREE_COMMIT_MIB` and
+`KYTY_PREFLIGHT_TEST_PAGE_FILE_GROWS` instead; preflight ignores all three on Windows.
+`memory.csv` is Windows only (`Win32_PerfRawData_PerfOS_Memory` and the processes of the boot's
+job object). The Windows smoke test checks its first row, the memory lines of `system.txt` and the
+RAM decision in `summary.json`. The rows every 30 s run on no CI machine, since the smoke boots end
+sooner.
 
 The emulator's `PipelineCache::WarmUp` creates a pipeline for every stored compute shader before
 the game starts, and a pipeline the driver rejects there ends the emulator. A compute shader is
