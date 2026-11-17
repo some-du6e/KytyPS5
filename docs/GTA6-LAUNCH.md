@@ -274,6 +274,7 @@ Read this before relying on anything above.
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
 | gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
 | Preflight package | In CI, 13 CI-script tests and 13 preflight tests pass, the preflight ones under pwsh 7.6.10. All three Windows PowerShell 5.1 smoke steps pass. The packaged tests load outside the build tree: `device_creation` fails at the hidden Vulkan window, as it does under ctest on a runner with no GPU. `-Game` on an empty folder reports FAIL for imports and boot and still writes its zip. A hung test gets stopped at 5 s with its child. On that runner `kernel_file_system` ends with 0xC0000028 (bad stack while unwinding an exception) where Linux fails cleanly, so watch for it on Karim's PC. Nothing has run on a PC with a GPU yet. |
+| Read-watch locks (run 44044570383, `709a99b7`, merged as `0aa6b19c`) | Green after one fix: run 44038715401 failed on a Windows-only compile error. Linux passes 74 of 74 host tests and Windows 72 of 72 gated, including `read_watch_lock` and `virtual_memory_allocation`. On the Windows runner, `virtual_memory_allocation` checks with QueryWorkingSetEx that a watch locks the backing pages and the unwatch unlocks them. Whether the lock keeps the blue screen away is unverified: nothing has run on a PC with 8 GB of RAM. |
 | `--ram-profile`, RAM lines, preflight and triage RAM support (run 44020349456, `c0e43876`, merged as `2105e147`) | Green. Linux passes 72 of 72 host tests and Windows 70 of 70 gated, including `ram_policy`, `emulator_ram_cli`, `emulator_ram_profile_invalid` and `diag`, which checks the commit figures against `K32GetPerformanceInfo` on Windows. The tools job passes triage 63, NID 68, CI scripts 15 and preflight 23. The Windows PowerShell 5.1 smoke steps check the RAM lines in `system.txt`, `summary.json` and `memory.csv`. Nothing has run on a PC with 8 GB of RAM or on a GPU. |
 | Preflight shader cache (run 43966470006, `425a5841`) | Green. 22 preflight tests pass in CI under pwsh. Under Windows PowerShell 5.1, the empty-game steps linked the run folder to the shared cache through a real junction, found the marker file there on both runs, and kept it out of the zip. `-ColdCache` made no link. A junction made with `mklink /J` stayed out of the zip. How much time a warm boot saves is unmeasured, since no real game has booted. |
 | GPU group time limit (run 43939026905, `00f3b3b0`) | Green. Once the probe finds no device, the Linux GPU step takes 8.4 minutes instead of 54, and the Linux job 27 minutes instead of 70. The 3 device-free tests still pass on both runners. |
@@ -398,8 +399,19 @@ on the page file, then on physical RAM. The GPU comes after both.
   mishandling such pages of a pagefile-backed section once they are paged out, and reproduced it
   with a standalone program on Windows 11 build 26200
   ([chenxiao07/KytyPS5#5](https://github.com/chenxiao07/KytyPS5/issues/5)). It has not been seen
-  on this branch, upstream or TheCruZ's fork. Their fix locks the watched pages in RAM, so they
-  cannot be paged out. A port of it for `--ram-profile low` is in progress.
+  on this branch, upstream or TheCruZ's fork.
+  - Their fix makes such pages guard pages instead (91a15d6c). Their repro ran twice for 30 minutes
+    on guard pages without a blue screen.
+  - They keep PAGE_NOACCESS only on pages they have locked in RAM, 32 MiB at most (d8f99391a5).
+  - This branch has no guard pages. Under `--ram-profile low` it locks the watched pages on Windows
+    instead, up to an eighth of the RAM (about 1 GiB with 8 GB). Before a run of guest pages becomes
+    NOACCESS, it locks the same pages of the section's read-write view with VirtualLock. It unlocks
+    them when the watch ends.
+  - Three kinds of page stay NOACCESS without a lock, as before: pages past that cap, pages Windows
+    refuses to lock, and pages the game protects with PROT_NONE itself. `unlocked` on the
+    `RAM usage:` lines shows how much of the first two there is.
+  - Nobody has run the lock without guard pages, so whether it keeps the blue screen away is
+    unverified.
 
 **Before the first boot.**
 
@@ -442,8 +454,10 @@ less than 14 GiB of RAM, unless `-ExtraArgs` names a RAM profile.
 | fresh guest stacks | cleared | left as the OS zeroed them | none expected |
 | spilled images in the recycle pool | yes | no | more allocations under pressure |
 | `--oom-recovery` | off (on under `--preset rtx3050`) | on | slow oversubscription instead of an exit |
+| read-watched guest memory locked in RAM (Windows) | none | all of it, up to an eighth of the RAM (`--lock-read-watched-mb`) | up to that much RAM Windows can no longer page out (about 1 GiB with 8 GB), VirtualLock calls that may read pages back from the page file, and about 30 MiB of bookkeeping at 1 GiB locked |
 
-`--pipeline-helpers`, `KYTY_PIPELINE_HELPERS` and `--no-oom-recovery` still win. Under the
+`--pipeline-helpers`, `KYTY_PIPELINE_HELPERS` and `--no-oom-recovery` still win.
+`--lock-read-watched-mb <MiB>` sets a smaller lock budget, and `0` turns the lock off. Under the
 recommended `--preset rtx3050` the last row changes nothing, since the preset already turns OOM
 recovery on. The savings are estimates:
 - 416 MiB of host-visible memory from the rings;
@@ -477,6 +491,21 @@ at each use pins the normal value to the literal it replaced.
   - `noaccess` is the guest memory the read watchers keep NOACCESS now.
   - `oneoff` counts the one-time buffers that took transfers the host rings could not, so far,
     with their MiB.
+  - `locked` is the read-watched memory locked in RAM now, then the budget. It reads `0/0` when the
+    lock is off.
+  - `unlocked` is the read-watched memory of the guest section that is NOACCESS without a lock now,
+    because the budget or Windows refused it. That is the memory the blue screen needs.
+  - `lockfail` counts the page locks Windows refused so far.
+  - `slowlocks` counts the VirtualLock calls that took over 1 ms so far, then gives the longest one
+    in ms.
+- With a lock budget, a `RAM lock:` line appears at startup. It gives the budget and the working
+  set raised to make room for the locks.
+  - The room starts at 64 MiB and grows 64 MiB at a time as the locks need it, up to the budget.
+  - If Windows refuses the first raise, the emulator asks for half as much, down to 1 MiB, and the
+    line names the refusal. If every raise fails, the line says the lock stays off.
+  - More `RAM lock:` lines appear in three cases: when the cap cut `--lock-read-watched-mb`, on the
+    first VirtualLock or VirtualUnlock that failed, and when Windows refused more locks or more
+    room. That last line gives the budget from then on.
 - A `RAM usage:` line written with less than 512 MiB available, or with commit at 90% of its limit
   on Windows, is also synced to disk, so that it can survive a blue screen. Other lines reach the
   disk when Windows flushes its cache.
@@ -496,8 +525,9 @@ at each use pins the normal value to the literal it replaced.
 - `kyty_triage.py` adds a `host_memory` section and five rules: a warning line, commit at 95% or
   more on Windows, under 300 MiB available in most samples, under 14 GiB of RAM with the normal
   profile, and the blue-screen hint.
-  - The hint needs a log that stops low on RAM after NOACCESS samples. It ranks under the plain
-    no-fatal rule, because a session log never has a clean-exit line and preflight stops its boots.
+  - The hint needs a log that stops low on RAM after NOACCESS samples. It quotes `unlocked` from
+    the last sample. It ranks under the plain no-fatal rule, because a session log never has a
+    clean-exit line and preflight stops its boots.
   - A line that a zip holds twice, in `session.log` and `emulator-boot.log`, counts once.
 
 **What the first log answers.**
@@ -506,7 +536,10 @@ at each use pins the normal value to the literal it replaced.
 - Is physical RAM the wall? Look at `avail` and `faults`, and at `pages_input_per_s` in `memory.csv`.
 - Is spill eating host memory? Compare `vk_host` with its budget.
 - Did the smaller rings save memory or cost it? Look at `oneoff`.
-- Is the blue-screen pattern live? Look at `noaccess`, and for Event 1001 in preflight's `system.txt`.
+- Is the blue-screen pattern live? Look at `unlocked`, and for Event 1001 in preflight's
+  `system.txt`. Above 0, some NOACCESS memory has no lock. If it stays above 0 at the cap, the
+  remaining fix is the other fork's guard pages.
+- Does the lock stall the game? Look at `slowlocks`.
 - Where did memory peak? Compare the `RAM usage:` times with the `Shader cache:` lines.
 
 ## Day-one triage playbook
@@ -741,6 +774,6 @@ unknown on top of the first.
 | Triage | `tools/triage/` |
 | Preflight | `tools/preflight/`, `.github/scripts/package_gpu_tests.py`, `.github/scripts/ctest_groups.py` |
 | NID names | `tools/nid/` |
-| RAM | `src/common/ramOptions.h`, `src/common/ramLog.*`, `src/graphics/host_gpu/renderer/cache/streamBuffer.*` (one-time buffer count), `tools/preflight/preflight.ps1`, `tools/triage/` |
+| RAM | `src/common/ramOptions.h`, `src/common/ramLog.*`, `src/kernel/readWatchLocks.h` (the lock bookkeeping), `src/graphics/host_gpu/renderer/cache/streamBuffer.*` (one-time buffer count), `tools/preflight/preflight.ps1`, `tools/triage/` |
 | CI | `.github/workflows/gta6-ci.yml`, `.github/scripts/run_tests.py` |
 | Tests | `tests/TitleProfileTests.cpp`, `HleSoftFailTests.cpp`, `VramPolicyTests.cpp`, `DiagTests.cpp`, `ShaderRecompilerComputeTests.cpp` |
