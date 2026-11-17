@@ -102,6 +102,24 @@ static void PrintVramUsage() {
 	         "                                       (their effect is missing) instead of closing.\n");
 }
 
+// gta6-prep: ram
+static void PrintRamUsage() {
+	::printf("\nSystem memory (PCs with 8 GB of RAM):\n");
+	::printf(
+	    "  --ram-profile <normal|low>           low: smaller host upload and download rings\n"
+	    "                                       (128 and 32 MiB), 3 shader compile workers, 2\n"
+	    "                                       async pipeline threads, 2 threads for the shader\n"
+	    "                                       cache and the pipeline manifest, no automatic\n"
+	    "                                       pipeline helpers (so no --pipeline-precompile\n"
+	    "                                       pause; --pipeline-helpers 1 brings it back),\n"
+	    "                                       driver cache saves every 3 min (1 min after a\n"
+	    "                                       slow pipeline), fresh guest stacks left zeroed\n"
+	    "                                       by the OS instead of cleared, no spilled images\n"
+	    "                                       in the recycled-image pool, and --oom-recovery.\n"
+	    "                                       Options given explicitly win. Default: normal\n"
+	    "                                       (built-in values).\n");
+}
+
 static void PrintUsage() {
 	::printf("%s, %s, ver = %s, git = %s, date = %s\n",
 	         KYTY_BUILD == KYTY_BUILD_DEBUG ? "Debug" : "Release", KYTY_TOOLCHAIN, KYTY_VERSION,
@@ -219,6 +237,7 @@ static void PrintUsage() {
 #endif
 	::printf("  --keymap <Control=Input>             DualSense mapping; may be repeated.\n");
 	::printf("  --rd                                 Enable RenderDoc capture.\n");
+	PrintRamUsage(); // gta6-prep: ram
 	// gta6-prep: config
 	::printf("\nTitle profiles, presets and switches:\n");
 	::printf("  --title-profile <key|none>           Use this title profile instead of the one the\n"
@@ -371,7 +390,8 @@ static bool ParseUserId(const std::string& value, int32_t& out) {
 using Config::ConfigOptions;
 
 // gta6-prep: vram
-// The video memory options that take a value. nullopt: not one of them.
+// The video memory options that take a value, and --ram-profile (gta6-prep: ram). nullopt: not one
+// of them.
 static std::optional<bool> ParseVramOption(const std::string& arg, const std::string& value,
                                            ConfigOptions& config) {
 	if (arg == "--vram-gc") {
@@ -415,6 +435,16 @@ static std::optional<bool> ParseVramOption(const std::string& arg, const std::st
 			::printf("invalid VRAM limit in MiB: %s\n", value.c_str());
 			return false;
 		}
+		return true;
+	}
+	// gta6-prep: ram
+	if (arg == "--ram-profile") {
+		const auto profile = Config::ParseRamProfile(value);
+		if (!profile.has_value()) {
+			::printf("invalid RAM profile (normal or low): %s\n", value.c_str());
+			return false;
+		}
+		config.ram_profile = *profile;
 		return true;
 	}
 	return std::nullopt;
