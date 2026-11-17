@@ -937,8 +937,9 @@ void TestTrackerProtectSharesBackingReads() {
 
 // gta6-prep: ram-lock: a read watch locks the backing view's pages of its guest memory in RAM
 // before they lose their access, and its end unlocks them. Two mappings of the same memory share
-// the lock, and the pages past the budget are never unlocked: VirtualUnlock of a page that is not
-// locked takes it out of the working set. Off Windows the lock compiles to nothing.
+// the lock, the pages past the budget are never unlocked (VirtualUnlock of a page that is not
+// locked takes it out of the working set), and the budget a watch's end frees goes to them. Off
+// Windows the lock compiles to nothing.
 void TestReadWatchLocksBackingPages() {
 	using namespace Libs::LibKernel::Memory;
 	using Libs::Graphics::TRACKER_PAGE_SIZE;
@@ -974,8 +975,9 @@ void TestReadWatchLocksBackingPages() {
 	const auto before = GetReadWatchLockStats();
 	Check(test, before.budget_bytes == 0 && before.locked_bytes == 0,
 	      "the lock is on without --lock-read-watched-mb");
-	TestSetReadWatchLockBudget(size);
+	const auto budget = TestSetReadWatchLockBudget(size);
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	Check(test, budget == size, "the working set made no room for the budget");
 	const auto attributes = [&](uint64_t page) {
 		PSAPI_WORKING_SET_EX_INFORMATION info {};
 		info.VirtualAddress = const_cast<uint8_t*>(backing) + page * TRACKER_PAGE_SIZE;
@@ -1004,7 +1006,8 @@ void TestReadWatchLocksBackingPages() {
 		Check(test, all(locked, 0), "a read watch did not lock its backing pages");
 		Check(test,
 		      GetReadWatchLockStats().locked_bytes == size &&
-		          GetReadWatchLockStats().budget_bytes == size,
+		          GetReadWatchLockStats().budget_bytes == size &&
+		          GetReadWatchLockStats().unlocked_bytes == 0,
 		      "the locked bytes are not counted");
 		manager.UpdatePageWatchers<true, true>(alias, size);
 		Check(test, GetReadWatchLockStats().locked_bytes == size,
@@ -1015,19 +1018,26 @@ void TestReadWatchLocksBackingPages() {
 		Check(test, all(unlocked, 0) && GetReadWatchLockStats().locked_bytes == 0,
 		      "the last unwatch did not unlock the backing pages");
 		// A budget of one page: the other pages stay unlocked, are counted, and are never
-		// unlocked.
+		// unlocked. The end of the first page's watch gives its budget to the second.
 		touch();
 		Check(test, all(resident, 0), "the backing pages are not in the working set");
 		TestSetReadWatchLockBudget(TRACKER_PAGE_SIZE);
 		manager.UpdatePageWatchers<true, true>(base, size);
 		Check(test, locked(0) && all(unlocked, 1),
 		      "the budget's page was not locked, or more were");
-		Check(test,
-		      GetReadWatchLockStats().over_budget_pages == before.over_budget_pages + pages - 1,
+		Check(test, GetReadWatchLockStats().unlocked_bytes == (pages - 1) * TRACKER_PAGE_SIZE,
 		      "the pages past the budget are not counted");
-		manager.UpdatePageWatchers<false, true>(base, size);
-		Check(test, all(unlocked, 0), "the unwatch left a page locked");
-		Check(test, all(resident, 1), "pages past the budget were unlocked without a lock");
+		manager.UpdatePageWatchers<false, true>(base, TRACKER_PAGE_SIZE);
+		Check(test, unlocked(0) && locked(1) && all(unlocked, 2),
+		      "the budget an unwatch freed did not go to the next refused page");
+		Check(test,
+		      GetReadWatchLockStats().locked_bytes == TRACKER_PAGE_SIZE &&
+		          GetReadWatchLockStats().unlocked_bytes == (pages - 2) * TRACKER_PAGE_SIZE,
+		      "the page the unwatch's budget locked is not counted");
+		manager.UpdatePageWatchers<false, true>(base + TRACKER_PAGE_SIZE, size - TRACKER_PAGE_SIZE);
+		Check(test, all(unlocked, 0) && GetReadWatchLockStats().unlocked_bytes == 0,
+		      "the unwatch left a page locked or refused");
+		Check(test, all(resident, 2), "pages past the budget were unlocked without a lock");
 		Check(test, GetReadWatchLockStats().failed_pages == before.failed_pages,
 		      "VirtualLock failed");
 	}
@@ -1042,7 +1052,8 @@ void TestReadWatchLocksBackingPages() {
 	    ProtectGuestHostMemory(base, size, Common::VirtualMemory::Mode::ReadWrite, ReadWatch::End),
 	    "ProtectGuestHostMemory(read unwatch) failed");
 	Check(test,
-	      during.budget_bytes == 0 && during.locked_bytes == 0 && during.over_budget_pages == 0,
+	      budget == 0 && during.budget_bytes == 0 && during.locked_bytes == 0 &&
+	          during.unlocked_bytes == 0,
 	      "the lock did something off Windows");
 #endif
 	TestSetReadWatchLockBudget(0);

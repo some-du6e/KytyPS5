@@ -50,8 +50,10 @@ RenderContext::RenderContext(GraphicContext& graphics, const std::filesystem::pa
 		const auto locks         = LibKernel::Memory::GetReadWatchLockStats();
 		memory.locked_bytes      = locks.locked_bytes;
 		memory.lock_budget_bytes = locks.budget_bytes;
-		memory.over_budget_pages = locks.over_budget_pages;
+		memory.unlocked_bytes    = locks.unlocked_bytes;
 		memory.lock_failed_pages = locks.failed_pages;
+		memory.slow_lock_calls   = locks.slow_lock_calls;
+		memory.longest_lock_us   = locks.longest_lock_us;
 		return memory;
 	});
 }

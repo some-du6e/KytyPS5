@@ -77,7 +77,8 @@ void TestLowProfile() {
 	      "low does not save the driver cache every 180 s (60 s after a slow creation)");
 	Check(!low.clear_fresh_stacks, "low still clears fresh guest stacks");
 	Check(!low.recycle_spilled_images, "low still recycles spilled images");
-	Check(low.lock_read_watched_mb == 128, "low does not lock 128 MiB of read-watched memory");
+	Check(low.lock_read_watched_mb == Config::RamLockAll,
+	      "low does not lock all read-watched memory (up to the cap)");
 	Check(!(low == RamSettings {}), "low equals normal");
 }
 
@@ -96,8 +97,41 @@ void TestLockOverride() {
 	      "--lock-read-watched-mb 512 is lost under low");
 	// Only that setting.
 	auto low                 = ResolveRamSettings(RamProfile::Low, 0);
-	low.lock_read_watched_mb = 128;
+	low.lock_read_watched_mb = Config::RamLockAll;
 	Check(low == ResolveRamSettings(RamProfile::Low), "--lock-read-watched-mb changed more");
+	// The option's values: MiB or all.
+	using Config::ParseLockReadWatched;
+	Check(ParseLockReadWatched("all") == Config::RamLockAll &&
+	          ParseLockReadWatched("128") == 128u && ParseLockReadWatched("0") == 0u,
+	      "--lock-read-watched-mb does not take MiB or all");
+	Check(!ParseLockReadWatched("128M").has_value() && !ParseLockReadWatched("").has_value() &&
+	          !ParseLockReadWatched("-1").has_value() &&
+	          !ParseLockReadWatched("4294967296").has_value() &&
+	          !ParseLockReadWatched("ALL").has_value(),
+	      "--lock-read-watched-mb takes a value that is neither MiB nor all");
+}
+
+// gta6-prep: ram-lock: the budget is an eighth of the RAM at most; all is that cap, and the cap
+// cuts a larger number of MiB (Memory::Initialize() logs it). 128 MiB when the RAM is unknown.
+void TestLockCap() {
+	using Config::RamLockAll;
+	using Config::ReadWatchLockBudget;
+	using Config::ReadWatchLockCap;
+	using Config::ReadWatchLockClamped;
+	// A PC with 8 GB of RAM reports about 8090 MiB.
+	static_assert(ReadWatchLockCap(MiB(8090)) == MiB(1011));
+	static_assert(ReadWatchLockCap(16 * RamGiB) == 2 * RamGiB);
+	static_assert(ReadWatchLockCap(0) == MiB(128));
+	static_assert(ReadWatchLockBudget(RamLockAll, MiB(8090)) == MiB(1011));
+	static_assert(ReadWatchLockBudget(128, MiB(8090)) == MiB(128));
+	static_assert(ReadWatchLockBudget(8192, MiB(8090)) == MiB(1011));
+	static_assert(ReadWatchLockBudget(0, MiB(8090)) == 0);
+	static_assert(ReadWatchLockBudget(RamLockAll, 0) == MiB(128));
+	static_assert(!ReadWatchLockClamped(RamLockAll, MiB(8090)) &&
+	              !ReadWatchLockClamped(1011, MiB(8090)) && ReadWatchLockClamped(1012, MiB(8090)) &&
+	              ReadWatchLockClamped(8192, MiB(8090)) && !ReadWatchLockClamped(0, MiB(8090)));
+	Check(ReadWatchLockBudget(RamLockAll, MiB(8090)) == MiB(1011),
+	      "all is not an eighth of the RAM on a PC with 8 GB");
 }
 
 void TestParsing() {
@@ -234,8 +268,12 @@ void TestProfileLine() {
 	CheckEqual(Config::FormatRamProfile(ResolveRamSettings(RamProfile::Low), true),
 	           "RAM profile: low -> upload_ring=128 download_ring=32 compile_workers=3 "
 	           "async_threads=2 parallel_threads=2 helpers<=0 cache_save=180s/60s "
-	           "fresh_stack_clear=off recycle_spilled=off lock_read_watched=128 oom_recovery=on\n",
+	           "fresh_stack_clear=off recycle_spilled=off lock_read_watched=all oom_recovery=on\n",
 	           "the RAM profile line does not follow the log contract");
+	// gta6-prep: ram-lock: a budget given in MiB.
+	Check(Config::FormatRamProfile(ResolveRamSettings(RamProfile::Low, 128), true)
+	              .find(" lock_read_watched=128 oom_recovery=on\n") != std::string::npos,
+	      "the RAM profile line does not show a lock budget in MiB");
 	CheckEqual(Config::FormatRamProfile(RamSettings {}, false),
 	           "RAM profile: normal -> upload_ring=512 download_ring=64 compile_workers=6 "
 	           "async_threads=3 parallel_threads=auto helpers=auto cache_save=60s/20s "
@@ -363,26 +401,34 @@ void TestUsageLine() {
 	                                              .noaccess          = MiB(312),
 	                                              .one_off_count     = 12,
 	                                              .one_off_bytes     = MiB(340),
-	                                              .locked_bytes      = MiB(128),
-	                                              .lock_budget_bytes = MiB(128),
-	                                              .over_budget_pages = 4096,
-	                                              .lock_failed_pages = 0};
+	                                              .locked_bytes      = MiB(296),
+	                                              .lock_budget_bytes = MiB(1011),
+	                                              .unlocked_bytes    = 0,
+	                                              .lock_failed_pages = 0,
+	                                              .slow_lock_calls   = 3,
+	                                              .longest_lock_us   = 41'700};
 	CheckEqual(Config::FormatRamUsage(usage),
 	           "RAM usage: t=630 ws=2843 private=9875 commit=31790/40858 avail=187 faults=3412 "
 	           "hard=? vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312 "
-	           "oneoff=12/340 locked=128/128 overbudget=4096 lockfail=0\n",
+	           "oneoff=12/340 locked=296/1011 unlocked=0 lockfail=0 slowlocks=3/41\n",
 	           "the RAM usage line does not follow the log contract");
-	// gta6-prep: ram-lock: a single locked page shows, as noaccess does; the lock off is 0/0.
-	usage.renderer->locked_bytes = 4096;
-	Check(Config::FormatRamUsage(usage).find(" locked=1/128 ") != std::string::npos,
-	      "one locked page is not shown");
+	// gta6-prep: ram-lock: a single locked or unlocked page shows, as noaccess does; the lock off
+	// is 0/0, and a call under a millisecond is 0.
+	usage.renderer->locked_bytes   = 4096;
+	usage.renderer->unlocked_bytes = 4096;
+	Check(Config::FormatRamUsage(usage).find(" locked=1/1011 unlocked=1 ") != std::string::npos,
+	      "one locked or unlocked page is not shown");
 	usage.renderer->locked_bytes      = 0;
 	usage.renderer->lock_budget_bytes = 0;
-	usage.renderer->over_budget_pages = 0;
+	usage.renderer->unlocked_bytes    = 0;
 	usage.renderer->lock_failed_pages = 3;
-	Check(Config::FormatRamUsage(usage).ends_with(" locked=0/0 overbudget=0 lockfail=3\n"),
+	usage.renderer->slow_lock_calls   = 0;
+	usage.renderer->longest_lock_us   = 999;
+	Check(Config::FormatRamUsage(usage).ends_with(
+	          " locked=0/0 unlocked=0 lockfail=3 slowlocks=0/0\n"),
 	      "the lock's fields without a budget");
 	usage.renderer->lock_failed_pages = 0;
+	usage.renderer->longest_lock_us   = 0;
 	// A single inaccessible page shows: noaccess rounds up.
 	usage.renderer->noaccess = 4096;
 	usage.hard_faults_per_s  = 12.4;
@@ -423,8 +469,8 @@ void TestUsageLine() {
 	widest.available         = most;
 	widest.faults_per_s      = 1e15;
 	widest.hard_faults_per_s = 1e15;
-	widest.renderer          = Config::RendererMemory {most, most, most, most, most, most,
-                                              most, most, most, most, most, most};
+	widest.renderer          = Config::RendererMemory {most, most, most, most, most, most, most,
+                                              most, most, most, most, most, most, most};
 	char       buffer[Config::RamUsageLineSize];
 	const auto size = Config::FormatRamUsage(widest, buffer, sizeof(buffer));
 	Check(size < sizeof(buffer) && buffer[size - 1] == '\n', "the widest RAM usage line is cut");
@@ -450,6 +496,27 @@ void TestLockLines() {
 	CheckEqual(failed, "RAM lock: first failure: VirtualLock of 64 KiB (error 1453)\n",
 	           "the lock's first failure does not follow the log contract");
 	CheckClearOfTriageRules(failed, "the lock's first failure matches a failure's triage rule");
+	// Windows refused the first room: the half it gave is the budget.
+	const auto halved = Config::FormatLockStart(MiB(32), MiB(48), MiB(49), 200 * 1024, 1380 * 1024,
+	                                            MiB(64), "SetProcessWorkingSetSizeEx", 1450);
+	CheckEqual(halved,
+	           "RAM lock: budget=32 MiB working_set=48/49 MiB (was 0/1), 64 MiB refused "
+	           "(SetProcessWorkingSetSizeEx error 1450)\n",
+	           "the lock's halved start does not follow the log contract");
+	CheckClearOfTriageRules(halved, "the lock's halved start matches a failure's triage rule");
+	const auto clamped = Config::FormatLockClamped(8192, MiB(1011));
+	CheckEqual(
+	    clamped,
+	    "RAM lock: --lock-read-watched-mb 8192 is more than an eighth of the RAM: 1011 MiB\n",
+	    "the lock's cap does not follow the log contract");
+	CheckClearOfTriageRules(clamped, "the lock's cap matches a failure's triage rule");
+	const auto capped =
+	    Config::FormatLockCapped(MiB(320), MiB(1011), "SetProcessWorkingSetSizeEx", 1450);
+	CheckEqual(capped,
+	           "RAM lock: Windows' limit reached at 320 MiB of a 1011 MiB budget "
+	           "(SetProcessWorkingSetSizeEx error 1450): the budget is 320 MiB from now on\n",
+	           "Windows' limit does not follow the log contract");
+	CheckClearOfTriageRules(capped, "Windows' limit matches a failure's triage rule");
 }
 
 // The exit line reads /proc without allocating.
@@ -482,6 +549,7 @@ int main() {
 	TestNormalKeepsToday();
 	TestLowProfile();
 	TestLockOverride();
+	TestLockCap();
 	TestParsing();
 	TestOomRecoveryImplied();
 	TestHelperBound();

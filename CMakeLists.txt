@@ -1159,7 +1159,7 @@ if(BUILD_TESTING)
 	# gta6-prep: ram
 	add_test(NAME emulator_ram_cli
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --ram-profile low --ram-profile normal
-	                 --lock-read-watched-mb 128 --lock-read-watched-mb 0)
+	                 --lock-read-watched-mb 128 --lock-read-watched-mb all --lock-read-watched-mb 0)
 	add_test(NAME emulator_ram_profile_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --ram-profile 8gb)
 	add_test(NAME emulator_lock_read_watched_invalid

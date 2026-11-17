@@ -1170,9 +1170,20 @@ void Initialize() {
 	g_virtual_ranges      = std::make_unique<VirtualRanges>();
 	EXIT_IF(!g_guest_address_space->SelfTest());
 	EXIT_IF(!SelfTestSub64SharedPlaceholderAlias());
-	// gta6-prep: ram-lock: --lock-read-watched-mb, or the RAM profile's (0 under normal: off).
-	g_guest_address_space->SetReadWatchLockBudget(
-	    uint64_t {Config::GetRamSettings().lock_read_watched_mb} * Config::RamMiB);
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	// gta6-prep: ram-lock: --lock-read-watched-mb, or the RAM profile's (0 under normal: off, all
+	// under low), an eighth of the RAM at most. The working set makes room for it now.
+	if (const auto megabytes = Config::GetRamSettings().lock_read_watched_mb; megabytes != 0) {
+		MEMORYSTATUSEX status {};
+		status.dwLength         = sizeof(status);
+		const uint64_t physical = GlobalMemoryStatusEx(&status) != 0 ? status.ullTotalPhys : 0;
+		const auto     budget   = Config::ReadWatchLockBudget(megabytes, physical);
+		if (Config::ReadWatchLockClamped(megabytes, physical)) {
+			Log::WriteToConsoleAndLog(Config::FormatLockClamped(megabytes, budget));
+		}
+		g_guest_address_space->SetReadWatchLockBudget(budget);
+	}
+#endif
 }
 
 void Shutdown() {
@@ -2824,9 +2835,10 @@ bool TestGuestFreeRangeBounds() {
 }
 
 // gta6-prep: ram-lock: the read watch lock budget in bytes (0: off), which Initialize() sets from
-// --lock-read-watched-mb. Pages locked already stay locked until their watch ends.
-void TestSetReadWatchLockBudget(uint64_t bytes) {
-	g_guest_address_space->SetReadWatchLockBudget(bytes);
+// --lock-read-watched-mb. Pages locked already stay locked until their watch ends. Returns the
+// budget the working set made room for (0 off Windows).
+uint64_t TestSetReadWatchLockBudget(uint64_t bytes) {
+	return g_guest_address_space->SetReadWatchLockBudget(bytes);
 }
 #endif
 

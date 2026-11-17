@@ -115,16 +115,18 @@ static void PrintRamUsage() {
 	    "                                       driver cache saves every 3 min (1 min after a\n"
 	    "                                       slow pipeline), fresh guest stacks left zeroed\n"
 	    "                                       by the OS instead of cleared, no spilled images\n"
-	    "                                       in the recycled-image pool, 128 MiB for\n"
-	    "                                       --lock-read-watched-mb, and --oom-recovery.\n"
+	    "                                       in the recycled-image pool,\n"
+	    "                                       --lock-read-watched-mb all, and --oom-recovery.\n"
 	    "                                       Options given explicitly win. Default: normal\n"
 	    "                                       (built-in values).\n");
 	::printf(
-	    "  --lock-read-watched-mb <MiB>         Windows: keep up to this much of the guest memory\n"
+	    "  --lock-read-watched-mb <MiB|all>     Windows: keep up to this much of the guest memory\n"
 	    "                                       the GPU trackers make inaccessible locked in RAM\n"
-	    "                                       (VirtualLock). Paged out, such memory has been\n"
-	    "                                       tied to MEMORY_MANAGEMENT blue screens. 0 is off.\n"
-	    "                                       Default: 0, or 128 under --ram-profile low.\n");
+	    "                                       (VirtualLock), an eighth of the RAM at most.\n"
+	    "                                       Paged out, such memory has been tied to\n"
+	    "                                       MEMORY_MANAGEMENT blue screens. The rest stays\n"
+	    "                                       inaccessible without a lock. 0 is off. Default:\n"
+	    "                                       0, or all under --ram-profile low.\n");
 }
 
 static void PrintUsage() {
@@ -456,12 +458,12 @@ static std::optional<bool> ParseVramOption(const std::string& arg, const std::st
 	}
 	// gta6-prep: ram-lock
 	if (arg == "--lock-read-watched-mb") {
-		uint32_t megabytes = 0;
-		if (!ParseUint32(value, megabytes)) {
-			::printf("invalid read-watched memory lock size in MiB: %s\n", value.c_str());
+		const auto megabytes = Config::ParseLockReadWatched(value);
+		if (!megabytes.has_value()) {
+			::printf("invalid read-watched memory lock size in MiB (or all): %s\n", value.c_str());
 			return false;
 		}
-		config.lock_read_watched_mb = megabytes;
+		config.lock_read_watched_mb = *megabytes;
 		return true;
 	}
 	return std::nullopt;

@@ -208,7 +208,8 @@ struct ConfigOptions {
 	// gta6-prep: ram: --ram-profile normal|low; see RamSettings for what Low sets (it also implies
 	// --oom-recovery, ApplyRamProfile()).
 	RamProfile                  ram_profile = RamProfile::Normal;
-	// gta6-prep: ram-lock: --lock-read-watched-mb (0: off); unset: the RAM profile's.
+	// gta6-prep: ram-lock: --lock-read-watched-mb (0: off, RamLockAll: all); unset: the RAM
+	// profile's.
 	std::optional<uint32_t>     lock_read_watched_mb;
 	// --rt-arena-mb: the BLAS memory of native ray tracing in MiB (0: no limit); unset: the
 	// profile's share of the largest device-local heap. KYTY_RT_ARENA_MB still wins.
