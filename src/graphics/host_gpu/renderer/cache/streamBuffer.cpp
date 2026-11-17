@@ -7,6 +7,7 @@
 #include "graphics/host_gpu/renderer/commandScheduler.h"
 #include "graphics/host_gpu/vulkanCommon.h"
 
+#include <atomic>
 #include <cstring>
 #include <fmt/format.h>
 #include <numeric>
@@ -15,6 +16,10 @@
 namespace Libs::Graphics {
 
 namespace {
+
+// gta6-prep: ram: StreamBuffer::CountOneOff().
+std::atomic<uint64_t> g_one_off_count {0};
+std::atomic<uint64_t> g_one_off_bytes {0};
 
 constexpr size_t WATCHES_INITIAL_RESERVE = 0x4000;
 constexpr size_t WATCHES_RESERVE_CHUNK   = 0x1000;
@@ -316,8 +321,23 @@ StreamBuffer::Download StreamBuffer::MapDownload(uint64_t size, uint64_t alignme
 		Commit();
 		return {this, mapped, offset, nullptr};
 	}
+	CountOneOff(size); // gta6-prep: ram
 	auto owner = std::make_unique<Buffer>(Graphics(), Scheduler(), Usage(), 0, AllFlags, size);
 	return {owner.get(), owner->Mapped().data(), 0, std::move(owner)};
+}
+
+// gta6-prep: ram
+void StreamBuffer::CountOneOff(uint64_t bytes) noexcept {
+	g_one_off_count.fetch_add(1, std::memory_order_relaxed);
+	g_one_off_bytes.fetch_add(bytes, std::memory_order_relaxed);
+}
+
+uint64_t StreamBuffer::OneOffCount() noexcept {
+	return g_one_off_count.load(std::memory_order_relaxed);
+}
+
+uint64_t StreamBuffer::OneOffBytes() noexcept {
+	return g_one_off_bytes.load(std::memory_order_relaxed);
 }
 
 uint64_t StreamBuffer::Copy(const void* source, uint64_t size, uint64_t alignment) {

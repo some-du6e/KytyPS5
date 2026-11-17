@@ -414,7 +414,9 @@ class PreflightTests(unittest.TestCase):
         os.makedirs(self.cache)
         with open(os.path.join(self.cache, "marker.txt"), "w", encoding="utf-8") as f:
             f.write("from an earlier boot\n")
-        r = self.run_preflight("-Game", self.game, "-BootSeconds", "3", "-ExtraArgs", extra)
+        # Without the RAM test variables, as on a PC where WMI gives nothing: no RAM profile added.
+        r = self.run_preflight("-Game", self.game, "-BootSeconds", "3", "-ExtraArgs", extra,
+                               KYTY_PREFLIGHT_TEST_RAM_MIB=None, KYTY_PREFLIGHT_TEST_FREE_COMMIT_MIB=None)
         output = r.stdout + r.stderr
         self.assertEqual(r.returncode, 0, output)
         folder, summary, names = self.results()
@@ -437,6 +439,10 @@ class PreflightTests(unittest.TestCase):
         ])
         self.assertEqual(summary["options"]["extra_args"], extra.split(" "))
         self.assertFalse(summary["options"]["cold_cache"])
+        self.assertEqual(summary["ram"], {"profile": "normal", "added": False, "reason": "the RAM size is unknown",
+                                          "ram_mib": None, "free_commit_mib": None, "needed_commit_mib": 25024})
+        self.assertNotIn("--ram-profile", output)
+        self.assertNotIn("commit is free", output)
 
         # pwsh on Linux makes no junction, so the boot falls back to a cache folder of its own, says
         # so in one line, and the run goes on.
@@ -470,6 +476,72 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("deviceUUID         = (removed by preflight)", inner["vulkaninfo.txt"])
         self.assertNotIn("11111111", inner["vulkaninfo.txt"])
         self.assertEqual(os.listdir(self.scratch), [], "collect_logs.ps1 removed its staging folder")
+
+    def test_game_ram_profile(self):
+        """Under 14 GiB of RAM the boot gets --ram-profile low right after the preset, where
+        -ExtraArgs still overrides it; a free commit under 25024 MiB gets a warning, and the boot runs."""
+        r = self.run_preflight("-Game", self.game, "-BootSeconds", "3",
+                               KYTY_PREFLIGHT_TEST_RAM_MIB="7900", KYTY_PREFLIGHT_TEST_FREE_COMMIT_MIB="9000",
+                               KYTY_PREFLIGHT_TEST_PAGE_FILE_GROWS="1")
+        output = r.stdout + r.stderr
+        self.assertEqual(r.returncode, 0, output)
+        folder, summary, _ = self.results()
+        calls = self.read(folder, "emulator", "argv.txt").splitlines()
+        self.assertEqual(calls, [
+            f"--game {self.game} --dump-imports {folder}/imports.txt",
+            f"--game {self.game} --preset rtx3050 --ram-profile low --session-log {folder}/session.log --shader-cache",
+        ])
+        self.assertEqual(summary["ram"], {"profile": "low", "added": True, "reason": "less than 14 GiB of RAM",
+                                          "ram_mib": 7900, "free_commit_mib": 9000, "needed_commit_mib": 25024})
+        self.assertEqual(output.count("This PC has 7900 MiB of RAM, so the boot adds --ram-profile low"), 1, output)
+        self.assertIn("-BootSeconds 0 runs the game until you close its window", output)
+        warnings = [p for p in summary["problems"] if "only 9000 MiB of commit is free" in p]
+        self.assertEqual(len(warnings), 1, summary["problems"])
+        self.assertIn("less than the 25024 MiB a game boot needs", warnings[0])
+        self.assertIn("SystemPropertiesPerformance", warnings[0])
+        # The dialog's size boxes stay greyed out until the box is unticked.
+        self.assertIn("untick Automatically manage paging file size for all drives", warnings[0])
+        # A page file that can grow: the free commit undercounts, and the warning says so.
+        self.assertIn("Windows may grow the page file during the boot", warnings[0])
+        self.assertEqual([(s["name"], s["status"]) for s in summary["steps"]],
+                         [("imports", "PASS"), ("boot", "RAN"), ("logs", "PASS")])
+        self.assertIn("ram profile: low, added by preflight (less than 14 GiB of RAM); free commit before the boot: "
+                      "9000 MiB, 25024 MiB needed", self.read(folder, "summary.txt"))
+
+        # -ExtraArgs names a RAM profile: preflight adds none. Enough free commit: no warning.
+        shutil.rmtree(self.out)
+        r = self.run_preflight("-Game", self.game, "-BootSeconds", "3", "-ExtraArgs", "--ram-profile normal",
+                               KYTY_PREFLIGHT_TEST_RAM_MIB="7900", KYTY_PREFLIGHT_TEST_FREE_COMMIT_MIB="40000")
+        output = r.stdout + r.stderr
+        self.assertEqual(r.returncode, 0, output)
+        folder, summary, _ = self.results()
+        calls = self.read(folder, "emulator", "argv.txt").splitlines()
+        self.assertEqual(calls[1], f"--game {self.game} --preset rtx3050 --session-log {folder}/session.log "
+                                   "--shader-cache --ram-profile normal")
+        self.assertEqual(summary["ram"], {"profile": "normal", "added": False, "reason": "-ExtraArgs names --ram-profile",
+                                          "ram_mib": 7900, "free_commit_mib": 40000, "needed_commit_mib": 25024})
+        self.assertNotIn("adds --ram-profile low", output)
+        self.assertNotIn("-BootSeconds 0 runs the game", output)
+        self.assertFalse([p for p in summary["problems"] if "commit is free" in p], summary["problems"])
+        self.assertIn("ram profile: normal, from -ExtraArgs; free commit before the boot: 40000 MiB",
+                      self.read(folder, "summary.txt"))
+
+        # A 16 GB PC reports a little under 16 GiB and keeps the normal settings. Its fixed page file
+        # cannot grow: the warning has no word of growth.
+        shutil.rmtree(self.out)
+        r = self.run_preflight("-Game", self.game, "-BootSeconds", "3", KYTY_PREFLIGHT_TEST_RAM_MIB="15974",
+                               KYTY_PREFLIGHT_TEST_FREE_COMMIT_MIB="20000", KYTY_PREFLIGHT_TEST_PAGE_FILE_GROWS="0")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        folder, summary, _ = self.results()
+        calls = self.read(folder, "emulator", "argv.txt").splitlines()
+        self.assertEqual(calls[1], f"--game {self.game} --preset rtx3050 --session-log {folder}/session.log --shader-cache")
+        self.assertEqual((summary["ram"]["profile"], summary["ram"]["added"], summary["ram"]["reason"]),
+                         ("normal", False, "14 GiB of RAM or more"))
+        self.assertEqual(summary["ram"]["free_commit_mib"], 20000)
+        warnings = [p for p in summary["problems"] if "only 20000 MiB of commit is free" in p]
+        self.assertEqual(len(warnings), 1, summary["problems"])
+        self.assertNotIn("grow", warnings[0])
+        self.assertNotIn("-BootSeconds 0 runs the game", r.stdout + r.stderr)
 
     def test_game_crash_and_no_eboot(self):
         os.remove(os.path.join(self.game, "eboot.bin"))

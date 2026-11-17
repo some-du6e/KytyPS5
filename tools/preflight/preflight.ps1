@@ -52,6 +52,8 @@ $Problems = New-Object System.Collections.Generic.List[string]
 $SystemData = [ordered]@{}
 $Package = [ordered]@{}
 $Cache = $null          # the boot's shader cache (Initialize-Cache), for the summary
+$RamPlan = $null        # the boot's RAM profile and free commit (Initialize-RamProfile), for the summary
+$MemorySample = $null   # the last memory.csv row's raw page input count and time (Add-MemorySample)
 $Mode = 'tests'
 $Options = $null
 $RunDir = $null
@@ -857,6 +859,91 @@ function Get-FileVersion([string]$Path) {
     return New-Object System.Version $version.FileMajorPart, $version.FileMinorPart, $version.FileBuildPart, $version.FilePrivatePart
 }
 
+# gta6-prep: ram
+# What decides whether a game boots on a PC with 8 GB of RAM, for system.txt and summary.json: the
+# commit limit (RAM plus the page files) and what is free of it, the page files, the free space for
+# a bigger one, what else holds memory (process names only), and the unexpected restarts (41), bug
+# checks (1001), low virtual memory (2004) and GPU resets (4101) of the last 14 days. Windows only;
+# each item fails on its own.
+function Get-MemoryInfo {
+    $lines = New-Object System.Collections.Generic.List[string]
+    try {
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+        $memory = [ordered]@{
+            visible_mib = [long][Math]::Floor([double]$os.TotalVisibleMemorySize / 1KB)
+            free_mib = [long][Math]::Floor([double]$os.FreePhysicalMemory / 1KB)
+            commit_limit_mib = [long][Math]::Floor([double]$os.TotalVirtualMemorySize / 1KB)
+            free_commit_mib = [long][Math]::Floor([double]$os.FreeVirtualMemory / 1KB)
+        }
+        $lines.Add("memory: $($memory.visible_mib) MiB visible to Windows, $($memory.free_mib) MiB free")
+        $lines.Add("commit: limit $($memory.commit_limit_mib) MiB (RAM plus the page files), $($memory.free_commit_mib) MiB free")
+        $SystemData.memory = $memory
+    } catch { $lines.Add("memory: not available ($($_.Exception.Message))") }
+    try {
+        $computer = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+        $automatic = [bool]$computer.AutomaticManagedPagefile
+        $SystemData.page_file_automatic = $automatic
+        if ($automatic) { $lines.Add('page file: managed by Windows') } else { $lines.Add('page file: set by hand') }
+    } catch { $lines.Add("page file: not available ($($_.Exception.Message))") }
+    try {
+        $settings = New-Object System.Collections.Generic.List[object]
+        foreach ($setting in @(Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction Stop)) {
+            $entry = [ordered]@{ name = [string]$setting.Name; initial_mb = [long]$setting.InitialSize; maximum_mb = [long]$setting.MaximumSize }
+            $settings.Add($entry)
+            $lines.Add("page file setting: $($entry.name), initial $($entry.initial_mb) MB, maximum $($entry.maximum_mb) MB (0: managed by Windows)")
+        }
+        if ($settings.Count -eq 0) { $lines.Add('page file setting: none') }
+        $SystemData.page_file_settings = $settings.ToArray()
+    } catch { $lines.Add("page file setting: not available ($($_.Exception.Message))") }
+    try {
+        $usage = New-Object System.Collections.Generic.List[object]
+        foreach ($file in @(Get-CimInstance -ClassName Win32_PageFileUsage -ErrorAction Stop)) {
+            $entry = [ordered]@{ name = [string]$file.Name; allocated_mb = [long]$file.AllocatedBaseSize; current_mb = [long]$file.CurrentUsage; peak_mb = [long]$file.PeakUsage }
+            $usage.Add($entry)
+            $lines.Add("page file: $($entry.name), $($entry.allocated_mb) MB, $($entry.current_mb) MB in use, peak $($entry.peak_mb) MB")
+        }
+        if ($usage.Count -eq 0) { $lines.Add('page file: none in use') }
+        $SystemData.page_files = $usage.ToArray()
+    } catch { $lines.Add("page file: usage not available ($($_.Exception.Message))") }
+    try {
+        $drives = New-Object System.Collections.Generic.List[object]
+        foreach ($disk in @(Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType = 3' -ErrorAction Stop)) {
+            $entry = [ordered]@{ drive = [string]$disk.DeviceID; free_gib = [long][Math]::Floor([double]$disk.FreeSpace / 1GB); size_gib = [long][Math]::Floor([double]$disk.Size / 1GB) }
+            $drives.Add($entry)
+            $lines.Add("drive $($entry.drive) $($entry.free_gib) GiB free of $($entry.size_gib) GiB")
+        }
+        $SystemData.drives = $drives.ToArray()
+    } catch { $lines.Add("drives: not available ($($_.Exception.Message))") }
+    try {
+        $top = New-Object System.Collections.Generic.List[object]
+        foreach ($process in @(Get-Process -ErrorAction Stop | Sort-Object -Property PrivateMemorySize64 -Descending | Select-Object -First 10)) {
+            $top.Add([ordered]@{ name = [string]$process.ProcessName; private_mib = [long][Math]::Floor([double]$process.PrivateMemorySize64 / 1MB) })
+        }
+        $lines.Add("most private memory: $((@($top | ForEach-Object { "$($_.name) $($_.private_mib) MiB" })) -join ', ')")
+        $SystemData.top_processes = $top.ToArray()
+    } catch { $lines.Add("processes: not available ($($_.Exception.Message))") }
+    try {
+        $events = New-Object System.Collections.Generic.List[object]
+        $filter = @{ LogName = 'System'; Id = @(41, 1001, 2004, 4101); StartTime = (Get-Date).AddDays(-14) }
+        foreach ($record in @(Get-WinEvent -FilterHashtable $filter -MaxEvents 40 -ErrorAction Stop)) {
+            $message = ([string]$record.Message -split '\r?\n')[0]
+            if ($message.Length -gt 300) { $message = $message.Substring(0, 300) }
+            $entry = [ordered]@{ time = (Format-Time $record.TimeCreated); id = [int]$record.Id; provider = [string]$record.ProviderName; message = $message }
+            $events.Add($entry)
+            $lines.Add("event: $($entry.time) $($entry.id) $($entry.provider): $message")
+        }
+        $SystemData.events = $events.ToArray()
+    } catch {
+        if ([string]$_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') {
+            $lines.Add('events: no restart, bug check, low virtual memory or GPU reset in the System log in the last 14 days')
+            $SystemData.events = @()
+        } else {
+            $lines.Add("events: not available ($($_.Exception.Message))")
+        }
+    }
+    return $lines.ToArray()
+}
+
 # The lines of system.txt; $SystemData gets the main facts for summary.json. No serial numbers
 # or UUIDs.
 function Get-SystemInfo {
@@ -893,7 +980,9 @@ function Get-SystemInfo {
             $text = [string]::Format($Invariant, '{0:0.0} GiB', $computer.TotalPhysicalMemory / 1GB)
             $lines.Add("ram: $text")
             $SystemData.ram = $text
+            $SystemData.ram_bytes = [long]$computer.TotalPhysicalMemory
         } catch { $lines.Add("ram: not available ($($_.Exception.Message))") }
+        foreach ($line in @(Get-MemoryInfo)) { $lines.Add($line) }
         $gpus = New-Object System.Collections.Generic.List[object]
         try {
             foreach ($gpu in @(Get-CimInstance -ClassName Win32_VideoController -ErrorAction Stop)) {
@@ -1469,10 +1558,163 @@ function Invoke-Tests($Manifest, [object[]]$Selected, [string]$PackageDir) {
     Save-Progress
 }
 
+# gta6-prep: ram
+# A game boot on a PC with less RAM than this adds --ram-profile low. An 8 GB PC reports about 7.9
+# GiB, a 16 GB one 15.2-15.9 GiB, which keeps the emulator's normal settings.
+$LowRamMiB = 14336
+# The guest memory section the emulator commits at startup (GTA V: 448 + 12288 MiB), and what a
+# session needs on top of it: the GPU driver's commit for video memory, host-visible memory and
+# the emulator's heap.
+$GuestCommitMiB = 12736
+$SessionCommitMiB = 12288
+
+# A whole number of MiB from a test variable, or $null. Honored off Windows only, as the tests run
+# there; Windows reads the real figures.
+function Get-TestMiB([string]$Name) {
+    if ($OnWindows) { return $null }
+    $text = [System.Environment]::GetEnvironmentVariable($Name)
+    $mib = [long]0
+    if ($text -and [long]::TryParse($text, [System.Globalization.NumberStyles]::Integer, $Invariant, [ref]$mib) -and $mib -ge 0) { return $mib }
+    return $null
+}
+
+# The RAM Windows reports in MiB (Win32_ComputerSystem.TotalPhysicalMemory), or $null.
+function Get-RamMiB {
+    if (-not $OnWindows) { return Get-TestMiB 'KYTY_PREFLIGHT_TEST_RAM_MIB' }
+    if ($SystemData.Contains('ram_bytes')) { return [long][Math]::Floor([double]$SystemData.ram_bytes / 1MB) }
+    return $null
+}
+
+# Whether a page file can grow past its current size, which the commit limit does not count:
+# Windows manages it, or a setting has no fixed size (0 and 0) or a maximum above its initial
+# size. $null when unknown; off Windows, KYTY_PREFLIGHT_TEST_PAGE_FILE_GROWS (1 or 0) for the tests.
+function Test-PageFileGrows {
+    if (-not $OnWindows) {
+        $text = [System.Environment]::GetEnvironmentVariable('KYTY_PREFLIGHT_TEST_PAGE_FILE_GROWS')
+        if ($text -eq '1') { return $true }
+        if ($text -eq '0') { return $false }
+        return $null
+    }
+    if ($SystemData.Contains('page_file_automatic') -and $SystemData.page_file_automatic) { return $true }
+    if (-not $SystemData.Contains('page_file_settings')) { return $null }
+    foreach ($setting in @($SystemData.page_file_settings)) {
+        if (($setting.initial_mb -eq 0 -and $setting.maximum_mb -eq 0) -or $setting.maximum_mb -gt $setting.initial_mb) { return $true }
+    }
+    return $false
+}
+
+# What the commit limit leaves free now in MiB (Win32_OperatingSystem.FreeVirtualMemory), or $null.
+function Get-FreeCommitMiB {
+    if (-not $OnWindows) { return Get-TestMiB 'KYTY_PREFLIGHT_TEST_FREE_COMMIT_MIB' }
+    try {
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+        return [long][Math]::Floor([double]$os.FreeVirtualMemory / 1KB)
+    } catch { return $null }
+}
+
+# The value of the last --ram-profile in $ExtraArgs ('' without one), or $null when there is none.
+function Get-RamProfileArg([string[]]$ExtraArgs) {
+    $words = @($ExtraArgs)
+    $named = $null
+    for ($i = 0; $i -lt $words.Count; $i++) {
+        if ($words[$i] -ceq '--ram-profile') {
+            $named = ''
+            if ($i + 1 -lt $words.Count) { $named = $words[$i + 1] }
+        }
+    }
+    return $named
+}
+
+# The boot's RAM profile: low with less than 14 GiB of RAM, unless -ExtraArgs names one. Prints why,
+# keeps the decision and the free commit in $RamPlan for the summary, and warns when the free
+# commit is below what a boot needs (the boot runs anyway). Returns the options to add after
+# --preset rtx3050, where -ExtraArgs still overrides them.
+function Initialize-RamProfile([string[]]$ExtraArgs, [int]$BootSeconds) {
+    $plan = [ordered]@{ profile = 'normal'; added = $false; reason = ''; ram_mib = (Get-RamMiB); free_commit_mib = (Get-FreeCommitMiB); needed_commit_mib = ($GuestCommitMiB + $SessionCommitMiB) }
+    $script:RamPlan = $plan
+    $named = Get-RamProfileArg $ExtraArgs
+    $added = @()
+    if ($null -ne $named) {
+        $plan.profile = $named
+        $plan.reason = '-ExtraArgs names --ram-profile'
+    } elseif ($null -eq $plan.ram_mib) {
+        $plan.reason = 'the RAM size is unknown'
+    } elseif ($plan.ram_mib -lt $LowRamMiB) {
+        $plan.profile = 'low'
+        $plan.added = $true
+        $plan.reason = "less than $($LowRamMiB / 1024) GiB of RAM"
+        $added = @('--ram-profile', 'low')
+        Say "This PC has $($plan.ram_mib) MiB of RAM, so the boot adds --ram-profile low (-ExtraArgs `"--ram-profile normal`" turns it off)."
+    } else {
+        $plan.reason = "$($LowRamMiB / 1024) GiB of RAM or more"
+    }
+    if ($plan.profile -eq 'low' -and $BootSeconds -gt 0) {
+        Say "A cold boot that pages memory to disk can take far longer than $BootSeconds s. -BootSeconds 0 runs the game until you close its window."
+    }
+    $free = $plan.free_commit_mib
+    if ($null -ne $free -and $free -lt $plan.needed_commit_mib) {
+        $text = "only $free MiB of commit is free, less than the $($plan.needed_commit_mib) MiB a game boot needs: the emulator commits " +
+                "$GuestCommitMiB MiB of guest memory at startup, and the GPU driver and the emulator need about $SessionCommitMiB MiB more. "
+        # The free commit counts the page files' current size only.
+        if (Test-PageFileGrows) {
+            $text += 'Windows may grow the page file during the boot (it manages the size, or the maximum is above the initial size); a fixed size avoids the stall. '
+        }
+        Add-Problem ($text + 'Add a page file: Win+R, SystemPropertiesPerformance, Advanced tab, Virtual memory, Change, untick Automatically manage ' +
+                     'paging file size for all drives, pick a drive with space, Custom size with the same initial and maximum size, Set, OK, ' +
+                     'then restart Windows. The boot runs anyway')
+    }
+    return $added
+}
+
+# One row of memory.csv when a game boot starts and every 30 s after (Windows): the system's
+# available RAM, commit charge and commit limit, the pages read from disk per second since the
+# previous row to resolve hard faults (empty in the first row), and the private bytes and working
+# set of the processes in the emulator's job. The raw class, whose names are the same in every
+# Windows language: the rate comes from two rows here, where a one-off query of the formatted class
+# may give 0. Never fails the boot.
+function Add-MemorySample($Child, [string]$Path) {
+    if (-not $OnWindows -or -not $Path) { return }
+    try {
+        $memory = Get-CimInstance -ClassName Win32_PerfRawData_PerfOS_Memory -ErrorAction Stop
+        $pages = [double]$memory.PagesInputPersec
+        $time = [double]$memory.Timestamp_PerfTime
+        $frequency = [double]$memory.Frequency_PerfTime
+        $rate = ''
+        $last = $script:MemorySample
+        if ($null -ne $last -and $frequency -gt 0 -and $time -gt $last.time -and $pages -ge $last.pages) {
+            $rate = [string]::Format($Invariant, '{0:0}', ($pages - $last.pages) * $frequency / ($time - $last.time))
+        }
+        $script:MemorySample = @{ pages = $pages; time = $time }
+        $ids = @($Child.Id)
+        if ($null -ne $Child.Job) { $ids = @([KytyPreflight.Native]::JobProcessIds($Child.Job)) }
+        $count = 0
+        $privateBytes = [long]0
+        $workingBytes = [long]0
+        foreach ($id in $ids) {
+            $process = Get-Process -Id $id -ErrorAction SilentlyContinue
+            if ($null -eq $process) { continue }
+            $count++
+            $privateBytes += [long]$process.PrivateMemorySize64
+            $workingBytes += [long]$process.WorkingSet64
+            $process.Dispose()
+        }
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            Write-Text $Path ('seconds,available_mib,committed_mib,commit_limit_mib,pages_input_per_s,processes,private_mib,working_set_mib' + $NewLine)
+        }
+        $row = [string]::Format($Invariant, '{0:0},{1},{2},{3},{4},{5},{6},{7}', $Child.Clock.Elapsed.TotalSeconds,
+                                [long]$memory.AvailableMBytes, [long][Math]::Floor([double]$memory.CommittedBytes / 1MB),
+                                [long][Math]::Floor([double]$memory.CommitLimit / 1MB), $rate, $count,
+                                [long][Math]::Floor([double]$privateBytes / 1MB), [long][Math]::Floor([double]$workingBytes / 1MB))
+        Write-Text $Path ($row + $NewLine) -Append
+    } catch { }
+}
+
 # Runs the emulator for one step, with its output in $LogName. Returns what happened ($null when it
-# could not start); the caller judges it.
+# could not start); the caller judges it. With $MemoryCsv, a game boot adds a row to that file
+# once it starts and every 30 s after (Add-MemorySample).
 function Invoke-Emulator($Step, [string]$Emulator, [string[]]$Arguments, [string]$WorkingDirectory,
-                         [string]$LogName, [double]$Seconds, [int]$GraceSeconds, [switch]$FollowRestarts) {
+                         [string]$LogName, [double]$Seconds, [int]$GraceSeconds, [switch]$FollowRestarts,
+                         [string]$MemoryCsv = '') {
     $log = Join-Path $RunDir $LogName
     $Step.log = $LogName
     $limit = 'none'
@@ -1492,12 +1734,17 @@ function Invoke-Emulator($Step, [string]$Emulator, [string[]]$Arguments, [string
         Write-Text $log "$($Step.detail)$NewLine" -Append
         return $null
     }
+    # memory.csv's first row, before the emulator commits its guest memory or soon after.
+    if ($MemoryCsv) {
+        $script:MemorySample = $null
+        Add-MemorySample $child $MemoryCsv
+    }
     $dotState = @{ printed = $false }
     $known = New-Object System.Collections.Generic.List[int]
     # The processes followed below, kept open until the step ends: their ids cannot go to another
     # process meanwhile.
     $held = New-Object System.Collections.Generic.List[object]
-    $exited = Wait-Child $child $Seconds { Say '.' -NoNewline; $dotState.printed = $true }
+    $exited = Wait-Child $child $Seconds { Say '.' -NoNewline; $dotState.printed = $true; Add-MemorySample $child $MemoryCsv }
     $code = $null
     $restarted = 0
     # An emulator LoadExec starts its successor and exits: the game goes on in that process, another
@@ -1524,10 +1771,16 @@ function Invoke-Emulator($Step, [string]$Emulator, [string[]]$Arguments, [string
         if ($followed.Count -eq 0) { continue }
         $restarted++
         Say "(the emulator restarted itself as process $(@($followed | ForEach-Object { $_.Id }) -join ', ')) " -NoNewline
+        # memory.csv goes on every 30 s; the job holds the new emulator too.
+        $nextSample = ([Math]::Floor($child.Clock.Elapsed.TotalSeconds / 30) + 1) * 30
         foreach ($p in $followed) {
             while (-not $p.WaitForExit(250)) {
                 Stop-OnKey
                 if ($Seconds -gt 0 -and $child.Clock.Elapsed.TotalSeconds -ge $Seconds) { $exited = $false; break }
+                if ($MemoryCsv -and $child.Clock.Elapsed.TotalSeconds -ge $nextSample) {
+                    Add-MemorySample $child $MemoryCsv
+                    $nextSample += 30
+                }
             }
             if (-not $exited) { break }
             $code = $p.ExitCode
@@ -1594,6 +1847,7 @@ function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [in
     $boot.boot_seconds = $BootSeconds
     $sessionLog = Join-Path $RunDir 'session.log'
     $cacheArgs = @(Initialize-Cache $cwd $ColdCache $ExtraArgs)
+    $ramArgs = @(Initialize-RamProfile $ExtraArgs $BootSeconds)
     if ($BootSeconds -gt 0) {
         Say "Booting the game for $BootSeconds s. Leave this window open; close the game window to stop early."
     } else {
@@ -1602,9 +1856,10 @@ function Invoke-Game([string]$Emulator, [string]$Game, [string[]]$ExtraArgs, [in
     Say 'Boot ... ' -NoNewline
     # A PC that restarts during the boot leaves the summary with the cache the boot started with.
     Save-Progress
-    # --shader-cache before -ExtraArgs, so that a --no-shader-cache there wins.
-    $arguments = @('--game', $Game, '--preset', 'rtx3050', '--session-log', $sessionLog) + $cacheArgs + $ExtraArgs
-    $r = Invoke-Emulator $boot $Emulator $arguments $cwd 'emulator-boot.log' $BootSeconds 15 -FollowRestarts
+    # --ram-profile low after the preset and --shader-cache before -ExtraArgs, so that a
+    # --ram-profile normal or --no-shader-cache there wins.
+    $arguments = @('--game', $Game, '--preset', 'rtx3050') + $ramArgs + @('--session-log', $sessionLog) + $cacheArgs + $ExtraArgs
+    $r = Invoke-Emulator $boot $Emulator $arguments $cwd 'emulator-boot.log' $BootSeconds 15 -FollowRestarts -MemoryCsv (Join-Path $RunDir 'memory.csv')
     # A boot that did not crash is RAN, not PASS: a game frozen on a black screen runs too, and
     # closing the game window ends the emulator with 0. Only session.log tells how far it got.
     if ($null -eq $r) {
@@ -1797,6 +2052,7 @@ function Write-Summary([string]$Result) {
         package = $Package
         system = $SystemData
         cache = $Cache
+        ram = $RamPlan
         counts = $counts
         steps = $Steps.ToArray()
         problems = $Problems.ToArray()
@@ -1822,6 +2078,14 @@ function Write-Summary([string]$Result) {
         }
     }
     if ($null -ne $Cache) { foreach ($line in @(Format-Cache)) { $lines.Add($line) } }
+    if ($null -ne $RamPlan) {
+        $free = 'unknown'
+        if ($null -ne $RamPlan.free_commit_mib) { $free = "$($RamPlan.free_commit_mib) MiB" }
+        $how = "the default ($($RamPlan.reason))"
+        if ($RamPlan.added) { $how = "added by preflight ($($RamPlan.reason))" }
+        if ($RamPlan.reason -eq '-ExtraArgs names --ram-profile') { $how = 'from -ExtraArgs' }
+        $lines.Add("ram profile: $($RamPlan.profile), $how; free commit before the boot: $free, $($RamPlan.needed_commit_mib) MiB needed")
+    }
     if ($counts.Count -gt 0) { $lines.Add("steps: $((@($counts.Keys) | ForEach-Object { "$($counts[$_]) $_" }) -join ', ')") }
     $lines.Add('')
     foreach ($step in $Steps) {
@@ -1840,7 +2104,7 @@ function Write-Summary([string]$Result) {
         foreach ($problem in $Problems) { $lines.Add("  - $problem") }
     }
     $lines.Add('')
-    $lines.Add('Details: system.txt, tests\<name>.log, emulator-*.log, imports.txt, session.log, console.txt.')
+    $lines.Add('Details: system.txt, tests\<name>.log, emulator-*.log, imports.txt, session.log, memory.csv, console.txt.')
     Write-Text (Join-Path $RunDir 'summary.txt') (($lines -join $NewLine) + $NewLine)
 }
 
@@ -1977,7 +2241,7 @@ function Invoke-Preflight([object[]]$Arguments) {
     $system = @(Get-SystemInfo)
     Write-Text (Join-Path $script:RunDir 'system.txt') (($system -join $NewLine) + $NewLine)
     foreach ($line in $system) {
-        if ($line -match '^(os|cpu|gpu|vram \(registry\)): ') { Say "  $line" 'DarkGray' }
+        if ($line -match '^(os|cpu|ram|commit|gpu|vram \(registry\)): ') { Say "  $line" 'DarkGray' }
     }
     Stop-OnKey
 

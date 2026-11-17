@@ -29,6 +29,10 @@ public:
 	template <bool track, bool is_read = false>
 	void UpdatePageWatchersForRegion(uint64_t base_addr, RegionBits& mask);
 
+	// gta6-prep: ram: the pages (TRACKER_PAGE_SIZE) the read watchers of every PageManager keep
+	// inaccessible now. Any thread.
+	[[nodiscard]] static uint64_t NoAccessPages() noexcept;
+
 private:
 	struct Impl;
 	std::unique_ptr<Impl> m_impl;

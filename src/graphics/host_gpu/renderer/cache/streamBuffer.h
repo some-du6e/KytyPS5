@@ -121,6 +121,14 @@ public:
 	// in place until it changes.
 	[[nodiscard]] uint64_t Lap() const noexcept { return m_lap; }
 
+	// gta6-prep: ram: counts a buffer of its own that took `bytes` in place of a host ring that was
+	// full or too small (UploadMemory() in bufferCache.cpp, MapDownload()), for the "oneoff" field
+	// of the "RAM usage:" lines. Any thread.
+	static void CountOneOff(uint64_t bytes) noexcept;
+	// The buffers CountOneOff() counted so far and their bytes (freeing one subtracts nothing).
+	[[nodiscard]] static uint64_t OneOffCount() noexcept;
+	[[nodiscard]] static uint64_t OneOffBytes() noexcept;
+
 private:
 	friend struct StreamBufferTestAccess;
 

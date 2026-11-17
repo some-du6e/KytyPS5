@@ -604,6 +604,75 @@
    "known": []
   },
   {
+   "id": "ram-warning",
+   "category": "HOST_MEMORY",
+   "title": "RAM warning: the commit limit is too small for the session",
+   "scope": "meta",
+   "severity": 55,
+   "fix_area": [
+    "tools/preflight/README.md",
+    "src/common/ramOptions.h"
+   ],
+   "next_step": "Windows backs every committed byte with RAM or the page file, and the emulator commits its guest memory at startup. Add the page file the warning names (fixed size, any drive with space; untick Automatically manage paging file size for all drives first), restart Windows, and check that the next RAM: line shows a headroom of 12288 MiB or more. The warning counts the page files' current size only: if preflight's system.txt says the page file is managed by Windows, it may grow during the session, and a fixed size avoids the stall.",
+   "known": [
+    "gta6-prep: ram: the RAM warning lines"
+   ]
+  },
+  {
+   "id": "ram-commit-full",
+   "category": "HOST_MEMORY",
+   "title": "Commit at 95% of its limit or more in the last RAM usage sample",
+   "scope": "meta",
+   "severity": 75,
+   "fix_area": [
+    "tools/preflight/README.md",
+    "src/common/ramLog.cpp",
+    "src/kernel/memoryAddressSpace.inc"
+   ],
+   "next_step": "Allocations fail at the commit limit, in the emulator and in the GPU driver: a crash or a lost device right after this is probably that. Add page file (tools/preflight/README.md, 'A PC with 8 GB of RAM') and close other programs, then compare the commit of the RAM usage lines.",
+   "known": []
+  },
+  {
+   "id": "ram-available-low",
+   "category": "HOST_MEMORY",
+   "title": "Little physical RAM left in most RAM usage samples",
+   "scope": "meta",
+   "severity": 50,
+   "fix_area": [
+    "src/common/ramOptions.h"
+   ],
+   "next_step": "Physical RAM is the limit: Windows pages constantly and frames stall. Boot with --ram-profile low, close browsers, launchers and overlays before starting, and compare the avail and faults fields; no setting makes a 12 GiB guest fit in 8 GB.",
+   "known": []
+  },
+  {
+   "id": "ram-low-ram-normal-profile",
+   "category": "HOST_MEMORY",
+   "title": "Less than 14 GiB of RAM with the normal RAM profile",
+   "scope": "meta",
+   "severity": 45,
+   "fix_area": [
+    "src/common/ramOptions.h",
+    "tools/preflight/preflight.ps1"
+   ],
+   "next_step": "Rerun with --ram-profile low (preflight adds it on such a PC unless -ExtraArgs names a RAM profile).",
+   "known": []
+  },
+  {
+   "id": "ram-noaccess-bluescreen",
+   "category": "HOST_MEMORY",
+   "title": "Log stops without a report, low on RAM, after samples with NOACCESS guest pages",
+   "scope": "meta",
+   "severity": 35,
+   "fix_area": [
+    "src/graphics/host_gpu/pageManager.cpp",
+    "src/kernel/memoryAddressSpace.inc"
+   ],
+   "next_step": "Only if Windows restarted with a blue screen: a session log that stops is also what a kill, a hang or preflight's time limit leaves. Look for Event 1001 with MEMORY_MANAGEMENT 0x1A, first parameter 0x41202, in preflight's system.txt. Another fork traced that bug check to read-watched (PAGE_NOACCESS) pages of the pagefile-backed guest section once Windows pages them out (unverified here). The fix that was designed locks those pages in RAM (VirtualLock) before making them NOACCESS; write it only once such an event shows up. Until then, a bigger page file and fewer other programs make it rarer.",
+   "known": [
+    "chenxiao07/KytyPS5#5: 0x1A/0x41202 with PAGE_NOACCESS on a pagefile-backed section"
+   ]
+  },
+  {
    "id": "vuid-mention",
    "category": "VALIDATION",
    "title": "Vulkan validation VUID",

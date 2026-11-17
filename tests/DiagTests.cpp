@@ -1,6 +1,8 @@
 // Pure checks of the crash-log diagnostics text (gta6-prep log contract): no GPU, no files
 // outside a temporary folder.
+#include "common/hostStats.h"
 #include "common/logging/log.h"
+#include "common/ramLog.h"
 #include "common/threads.h"
 #include "graphics/host_gpu/vulkanDiag.h"
 
@@ -15,6 +17,13 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
+
+#if defined(_WIN32)
+#include <windows.h> // IWYU pragma: keep
+// clang-format off
+#include <psapi.h>
+// clang-format on
+#endif
 
 namespace {
 
@@ -225,6 +234,51 @@ void TestMutexTryLock() {
   Check(try_from_other_thread(), "TryLock failed after the owner released the mutex");
 }
 
+// gta6-prep: ram: one real sample of the commit fields the "RAM" lines print,
+// on the runner. Windows: the commit charge and its limit against another API's
+// reading, and private bytes. Linux: Committed_AS and CommitLimit (overcommit
+// lets the charge pass the limit, so no order is checked).
+void TestHostCommitStats() {
+  Common::HostStatsSampler sampler;
+  const auto stats = sampler.Sample();
+  (void)stats;
+#if defined(_WIN32) || defined(__linux__)
+  Check(stats.commit_limit.has_value() && stats.commit_used.has_value(),
+        "the commit charge or its limit is missing");
+  Check(*stats.commit_limit > 0 && *stats.commit_used > 0,
+        "the commit charge or its limit is zero");
+#endif
+#if defined(_WIN32)
+  // HostStats reads GlobalMemoryStatusEx; GetPerformanceInfo counts the same
+  // system figures in pages. The charge moves between the two calls, the limit
+  // only when a page file grows.
+  PERFORMANCE_INFORMATION performance{};
+  performance.cb = sizeof(performance);
+  Check(K32GetPerformanceInfo(&performance, sizeof(performance)) != 0,
+        "GetPerformanceInfo failed");
+  const uint64_t page = performance.PageSize;
+  const uint64_t limit = uint64_t{performance.CommitLimit} * page;
+  const uint64_t used = uint64_t{performance.CommitTotal} * page;
+  const auto within = [](uint64_t a, uint64_t b, uint64_t tolerance) {
+    return (a > b ? a - b : b - a) <= tolerance;
+  };
+  constexpr uint64_t MiB = uint64_t{1} << 20u;
+  Check(within(*stats.commit_limit, limit, 256 * MiB),
+        "the commit limit is not GetPerformanceInfo's CommitLimit");
+  Check(within(*stats.commit_used, used, 1024 * MiB),
+        "the commit charge is not GetPerformanceInfo's CommitTotal");
+  Check(stats.system_memory_total.has_value() &&
+            *stats.commit_limit >= *stats.system_memory_total / 2,
+        "the commit limit is far below the RAM");
+  Check(stats.process_private.has_value() && *stats.process_private > 0 &&
+            *stats.process_private <= *stats.commit_used,
+        "private bytes are missing or larger than the system's commit charge");
+#endif
+  // Without RamLog::Start() (no emulator session) the exit line of a fatal
+  // report writes nothing; this only shows that it returns.
+  Common::RamLog::WriteExitLine();
+}
+
 } // namespace
 
 int main() {
@@ -236,6 +290,7 @@ int main() {
   TestIsSessionLogFileName();
   TestPruneSessionLogs();
   TestMutexTryLock();
+  TestHostCommitStats();
   std::printf("DiagTests: ok\n");
   return 0;
 }

@@ -64,6 +64,21 @@ constexpr auto DriverCacheTimerPeriod   = std::chrono::milliseconds {250};
 // looks for the result. It sleeps, so that its core goes to the helper.
 constexpr auto HelperPoll = std::chrono::milliseconds {1};
 
+// gta6-prep: ram: both intervals come from Config::GetRamSettings() (3 and 1 min with
+// --ram-profile low: each write holds a copy of the whole cache); the constants are the defaults.
+static_assert(DriverCacheSaveInterval ==
+              std::chrono::seconds {Config::RamSettings {}.cache_save_seconds});
+static_assert(SlowCreationSaveInterval ==
+              std::chrono::seconds {Config::RamSettings {}.slow_cache_save_seconds});
+
+std::chrono::seconds DriverCacheSaveEvery() {
+	return std::chrono::seconds {Config::GetRamSettings().cache_save_seconds};
+}
+
+std::chrono::seconds SlowCreationSaveEvery() {
+	return std::chrono::seconds {Config::GetRamSettings().slow_cache_save_seconds};
+}
+
 uint8_t RemapSourceAlphaFactor(uint8_t factor) {
 	switch (static_cast<Prospero::BlendFactor>(factor)) {
 		case Prospero::BlendFactor::kSrcAlpha:
@@ -1295,7 +1310,7 @@ PipelineCache::PipelineCache(GraphicContext&                         graphics,
                              ShaderRecompiler::IR::ImageHeapSource* image_heap,
                              const std::filesystem::path&           shader_store)
     : m_graphics(graphics), m_image_heap(image_heap),
-      m_next_driver_cache_save(std::chrono::steady_clock::now() + DriverCacheSaveInterval) {
+      m_next_driver_cache_save(std::chrono::steady_clock::now() + DriverCacheSaveEvery()) {
 	EXIT_NOT_IMPLEMENTED(!Common::Thread::IsMainThread());
 	InitializeDriverCache();
 	// A recording takes what the session compiles: programs the store compiled would be missing
@@ -1309,12 +1324,16 @@ PipelineCache::PipelineCache(GraphicContext&                         graphics,
 	// Before the manifest's threads, which give them work.
 	StartHelpers();
 	OpenManifest();
-	for (uint32_t i = 0; i < CompileWorkers; i++) {
+	// gta6-prep: ram: --ram-profile low runs 3 workers and 2 async pipeline threads (each holds a
+	// shader translation or a driver compile); the constants are the defaults.
+	static_assert(CompileWorkers == Config::RamSettings {}.compile_workers);
+	for (uint32_t i = 0; i < Config::GetRamSettings().compile_workers; i++) {
 		m_workers.emplace_back([this] { CompileWorker(); });
 	}
 	if (Config::AsyncPipelinesEnabled()) {
 		constexpr uint32_t AsyncThreads = 3;
-		for (uint32_t i = 0; i < AsyncThreads; i++) {
+		static_assert(AsyncThreads == Config::RamSettings {}.async_pipeline_threads);
+		for (uint32_t i = 0; i < Config::GetRamSettings().async_pipeline_threads; i++) {
 			m_async_threads.emplace_back([this] { AsyncPipelineWorker(); });
 		}
 	}
@@ -1447,8 +1466,8 @@ void PipelineCache::CheckpointDriverCache(bool slow_creation) {
 	std::lock_guard lock(m_driver_cache_mutex);
 	m_driver_cache_dirty = true;
 	if (slow_creation) {
-		m_next_driver_cache_save = std::min(m_next_driver_cache_save,
-		                                    m_driver_cache_posted + SlowCreationSaveInterval);
+		m_next_driver_cache_save =
+		    std::min(m_next_driver_cache_save, m_driver_cache_posted + SlowCreationSaveEvery());
 	}
 	PostDueDriverCache();
 }
@@ -1464,7 +1483,7 @@ void PipelineCache::PostDueDriverCache() {
 	if (const auto now = std::chrono::steady_clock::now(); now >= m_next_driver_cache_save) {
 		m_driver_cache_dirty     = false;
 		m_driver_cache_posted    = now;
-		m_next_driver_cache_save = now + DriverCacheSaveInterval;
+		m_next_driver_cache_save = now + DriverCacheSaveEvery();
 		// The cache object is internally synchronized, so pipelines may be created meanwhile.
 		m_store.Post([this] { WriteDriverCache(); });
 	}

@@ -20,6 +20,8 @@ static std::atomic<Common::QuirkMask> g_title_quirks {0};
 
 // gta6-prep: vram
 static VramSettings g_vram_settings;
+// gta6-prep: ram
+static RamSettings g_ram_settings;
 
 static VramRequest VramRequestOf(const ConfigOptions& cfg) {
 	VramRequest request;
@@ -28,7 +30,8 @@ static VramRequest VramRequestOf(const ConfigOptions& cfg) {
 	request.no_oom_recovery = cfg.no_oom_recovery;
 	request.profile         = cfg.vram_profile;
 	request.rt_arena_mb     = cfg.rt_arena_mb;
-	return request;
+	// gta6-prep: ram: --ram-profile low implies --oom-recovery (--no-oom-recovery still wins).
+	return ApplyRamProfile(request, cfg.ram_profile);
 }
 
 void Initialize() {
@@ -42,6 +45,7 @@ void Shutdown() {
 	g_config.reset();
 	g_title_quirks = 0;
 	g_vram_settings = {}; // gta6-prep: vram
+	g_ram_settings  = {}; // gta6-prep: ram
 }
 
 void Load(const ConfigOptions& cfg) {
@@ -53,6 +57,7 @@ void Load(const ConfigOptions& cfg) {
 
 	*g_config = cfg;
 	g_vram_settings = ResolveVramSettings(VramRequestOf(cfg)); // gta6-prep: vram
+	g_ram_settings  = ResolveRamSettings(cfg.ram_profile);     // gta6-prep: ram
 	Common::DebugCounters::SetEnabled(cfg.perf_overlay_enabled);
 }
 
@@ -477,6 +482,11 @@ bool NoTypeImportFallbackEnabled() {
 // gta6-prep: vram
 const VramSettings& GetVramSettings() {
 	return g_vram_settings;
+}
+
+// gta6-prep: ram
+const RamSettings& GetRamSettings() {
+	return g_ram_settings;
 }
 
 uint32_t GetVramLimitMb() {

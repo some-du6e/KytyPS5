@@ -711,7 +711,13 @@ static int CreateGuestStack(PthreadAttr attr) {
 	attr->stack_map_addr = stack_addr;
 	attr->stack_map_size = map_size;
 
-	std::memset(attr->stack_addr, 0, stack_size);
+	// gta6-prep: ram: a stack mapped above is a new commit, which the host hands out zeroed
+	// (VirtualAlloc2 MEM_COMMIT; an anonymous mapping elsewhere), so --ram-profile low clears only
+	// reused stacks: a fresh one's pages stay untouched until the thread uses them.
+	static_assert(Config::RamSettings {}.clear_fresh_stacks);
+	if (cached || Config::GetRamSettings().clear_fresh_stacks) {
+		std::memset(attr->stack_addr, 0, stack_size);
+	}
 
 	return OK;
 }
