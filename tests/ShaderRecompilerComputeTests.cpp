@@ -1079,9 +1079,27 @@ std::string Hex(u32 value) {
 void Require(const char *shader_name, const char *stage, bool value,
              const std::string &message);
 
+// gta6-prep: ram: tools/preflight sets KYTY_TEST_GUEST_MEMORY_MB, so that these tests start on a
+// PC whose page file cannot commit the console's whole guest section. They need far less of it.
+void ApplyTestGuestMemoryBudget() {
+  const char *value = std::getenv("KYTY_TEST_GUEST_MEMORY_MB");
+  if (value == nullptr) {
+    return;
+  }
+  char *end = nullptr;
+  const unsigned long long mib = std::strtoull(value, &end, 10);
+  if (end == value || *end != '\0' || mib < 1024u || mib > 12800u) {
+    std::printf("[host]    KYTY_TEST_GUEST_MEMORY_MB=%s ignored: not 1024-12800\n", value);
+    return;
+  }
+  Libs::LibKernel::Memory::SetGuestMemoryBudgetForTests(static_cast<uint64_t>(mib) << 20u);
+  std::printf("[host]    guest memory budget: %llu MiB (KYTY_TEST_GUEST_MEMORY_MB)\n", mib);
+}
+
 void EnsureConfigInitialized() {
   static bool config_initialized = false;
   if (!config_initialized) {
+    ApplyTestGuestMemoryBudget();
     static Common::Subsystems subsystems;
     Common::InitializeThreads();
     subsystems.Initialize<Config::Lifecycle>();
@@ -45849,6 +45867,13 @@ void CheckFiniteBufferSelection(VulkanHarness &vulkan) {
 }
 
 void CheckStorageBufferBindingOver2GiB(VulkanHarness &vulkan) {
+  // gta6-prep: ram: tools/preflight sets this on a PC with less than 14 GiB of RAM. The case needs
+  // about 2 GiB of host memory for its initial data, as much again to upload it, and 2 GiB of
+  // VRAM; on an 8 GB PC with a 6 GB card its allocation fails and the whole run stops here.
+  if (std::getenv("KYTY_TEST_SKIP_OVER_2GIB") != nullptr) {
+    std::printf("[compute] %-32s skipped (KYTY_TEST_SKIP_OVER_2GIB)\n", "StorageBufferBindingOver2GiB");
+    return;
+  }
   // OpArrayLength reads 0 for ranges of 2 GiB or more on NVIDIA; bounds use the pushed binding size.
   constexpr u32 bytes = 0x80000010u, end = bytes / 4u, last = end - 1u;
   TestCase test;

@@ -85,6 +85,8 @@ constexpr uint64_t RESERVED_CACHE_SIZE   = 64ull * 1024ull * 1024ull;
 constexpr uint64_t INCLUDED_TABLE_MEMORY = 64ull * 1024ull * 1024ull;
 constexpr uint64_t MAPPING_TABLE_SIZE    = 4ull * 1024ull;
 
+// gta6-prep: ram: SetGuestMemoryBudgetForTests(); 0: GUEST_MEMORY_BUDGET.
+static uint64_t                 g_test_memory_budget   = 0;
 static uint64_t                 g_guest_memory_size    = GUEST_MEMORY_BUDGET - RESERVED_CACHE_SIZE;
 static uint64_t                 g_flexible_memory_size = DEFAULT_FLEXIBLE_MEMORY_SIZE;
 static uint64_t                 g_cpu_table_memory     = INCLUDED_TABLE_MEMORY;
@@ -1144,6 +1146,10 @@ static bool SelfTestSub64SharedPlaceholderAlias() {
 
 static int ReplaceFixedRangeWithReserved(uint64_t start, uint64_t size);
 
+void SetGuestMemoryBudgetForTests(uint64_t bytes) {
+	g_test_memory_budget = bytes;
+}
+
 void Initialize() {
 	const auto params = Loader::SystemContentGetMemoryParams();
 	if (params.flexible_size != 0) {
@@ -1155,8 +1161,9 @@ void Initialize() {
 	const auto table_overhead = g_cpu_table_memory + g_gpu_table_memory +
 	                            std::max(params.amm_table_memory, INCLUDED_TABLE_MEMORY) -
 	                            3 * INCLUDED_TABLE_MEMORY;
-	const auto memory_budget = GUEST_MEMORY_BUDGET +
-	                           (Loader::SystemContentIsTrinityMode() ? 1216ull * 1024ull * 1024ull : 0);
+	const auto memory_budget =
+	    (g_test_memory_budget != 0 ? g_test_memory_budget : GUEST_MEMORY_BUDGET) +
+	    (Loader::SystemContentIsTrinityMode() ? 1216ull * 1024ull * 1024ull : 0);
 	EXIT_IF(g_flexible_memory_size + table_overhead >= memory_budget - RESERVED_CACHE_SIZE);
 	g_guest_memory_size = memory_budget - RESERVED_CACHE_SIZE - table_overhead;
 	LOGF("\t flexible memory size = %" PRIu64 " MiB, direct memory size = %" PRIu64 " MiB\n",

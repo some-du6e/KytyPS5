@@ -14,6 +14,7 @@
 #include "graphics/presentation/window/windowInternal.h"
 #include "kernel/eventQueue.h"
 #include "kernel/fileSystem.h"
+#include "kernel/memory.h"
 #include "kernel/pthread.h"
 #include "libs/errno.h"
 #include "libs/network.h"
@@ -2807,6 +2808,16 @@ void CheckSocketWakeup() {
 } // namespace
 
 int main(int argc, char** argv) {
+  // gta6-prep: ram: tools/preflight sets KYTY_TEST_GUEST_MEMORY_MB, so that the tests start on a PC
+  // whose page file cannot commit the console's whole guest section.
+  if (const char* value = std::getenv("KYTY_TEST_GUEST_MEMORY_MB"); value != nullptr) {
+    char* end = nullptr;
+    const unsigned long long mib = std::strtoull(value, &end, 10);
+    if (end != value && *end == '\0' && mib >= 1024u && mib <= 12800u) {
+      Libs::LibKernel::Memory::SetGuestMemoryBudgetForTests(static_cast<uint64_t>(mib) << 20u);
+      std::printf("KernelFileSystemTests: guest memory budget: %llu MiB (KYTY_TEST_GUEST_MEMORY_MB)\n", mib);
+    }
+  }
   Common::InitializeThreads();
   Common::Subsystems subsystems;
   subsystems.Initialize<Config::Lifecycle>();

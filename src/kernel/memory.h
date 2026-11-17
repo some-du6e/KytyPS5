@@ -17,6 +17,11 @@ enum class PageFaultAccess;
 namespace Libs::LibKernel::Memory {
 
 void Initialize();
+// gta6-prep: ram: the guest memory budget Initialize() uses instead of the console's 12800 MiB
+// (0: the console's). Only the GPU test executables call it, from KYTY_TEST_GUEST_MEMORY_MB, so
+// that they start on a PC whose page file cannot commit the whole guest section; the emulator
+// never does. Call it before Initialize().
+void SetGuestMemoryBudgetForTests(uint64_t bytes);
 void Shutdown();
 
 // Guest memory usage for the performance panel. Takes only bookkeeping locks, so it never

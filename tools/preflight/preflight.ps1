@@ -1455,6 +1455,10 @@ function Invoke-Tests($Manifest, [object[]]$Selected, [string]$PackageDir) {
     $plural = ''
     if ($count -ne 1) { $plural = 's' }
     Say "Running $count GPU test$plural, one at a time. Close games and other programs that use the GPU."
+    $testEnvironment = Get-TestEnvironment
+    if ($testEnvironment.Contains('KYTY_TEST_SKIP_OVER_2GIB')) {
+        Say "This PC has less than $($LowRamMiB / 1024) GiB of RAM, so the case that needs 2 GiB buffers in RAM and VRAM at once is skipped."
+    }
     $colors = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Yellow'; ERROR = 'Red' }
     for ($i = 0; $i -lt $count; $i++) {
         Save-Progress
@@ -1472,11 +1476,14 @@ function Invoke-Tests($Manifest, [object[]]$Selected, [string]$PackageDir) {
             $cwd = Get-PackagePath $PackageDir ([string]$cwdRelative)
             New-Item -ItemType Directory -Force -Path $cwd | Out-Null
         }
-        $environment = $null
+        $environment = @{}
         $envObject = Get-Field $test 'env'
         if ($null -ne $envObject) {
-            $environment = @{}
             foreach ($property in $envObject.PSObject.Properties) { $environment[$property.Name] = [string]$property.Value }
+        }
+        # tests.json's own variables win over preflight's.
+        foreach ($key in @($testEnvironment.Keys)) {
+            if (-not $environment.ContainsKey($key)) { $environment[$key] = $testEnvironment[$key] }
         }
         $file = $name -replace '[^A-Za-z0-9_.-]', '_'
         $log = Join-Path $testsDir "$file.log"
@@ -1567,6 +1574,20 @@ $LowRamMiB = 14336
 # the emulator's heap.
 $GuestCommitMiB = 12736
 $SessionCommitMiB = 12288
+# The GPU tests need far less guest memory than a game. With the console's 12800 MiB, a PC whose
+# page file cannot commit a game's guest section could not run them either: on an 8 GB PC, 37 of
+# 42 stopped at "could not reserve 12736 MB for guest direct memory" before reaching the GPU.
+$TestGuestMemoryMiB = 6144
+
+# What every GPU test gets on top of tests.json's own variables: the smaller guest memory budget,
+# and with less than $LowRamMiB MiB of RAM, the skip of the one case that needs 2 GiB buffers in
+# RAM and VRAM at once (StorageBufferBindingOver2GiB).
+function Get-TestEnvironment {
+    $environment = [ordered]@{ KYTY_TEST_GUEST_MEMORY_MB = [string]$TestGuestMemoryMiB }
+    $ram = Get-RamMiB
+    if ($null -ne $ram -and $ram -lt $LowRamMiB) { $environment['KYTY_TEST_SKIP_OVER_2GIB'] = '1' }
+    return $environment
+}
 
 # A whole number of MiB from a test variable, or $null. Honored off Windows only, as the tests run
 # there; Windows reads the real figures.

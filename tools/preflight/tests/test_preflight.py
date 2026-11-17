@@ -349,6 +349,27 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual([s["name"] for s in summary["steps"]], ["pass"])
         self.assertIsNone(summary["cache"])
 
+    def test_test_environment(self):
+        # Every GPU test commits a smaller guest section than a game does. Under 14 GiB of RAM, the
+        # case that needs 2 GiB buffers in RAM and VRAM at once is skipped as well.
+        r = self.run_preflight("-Only", "env", KYTY_PREFLIGHT_TEST_RAM_MIB="16384")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("so the case that needs 2 GiB buffers", r.stdout)
+        folder, _, _ = self.results()
+        log = self.read(folder, "tests", "env.log")
+        self.assertIn("KYTY_TEST_GUEST_MEMORY_MB=6144", log)
+        self.assertNotIn("KYTY_TEST_SKIP_OVER_2GIB", log)
+        self.assertIn("KYTY_FAKE_VALUE=a b=c", log, "tests.json's own variable is kept")
+        shutil.rmtree(self.out)
+        r = self.run_preflight("-Only", "env", KYTY_PREFLIGHT_TEST_RAM_MIB="7900")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("less than 14 GiB of RAM, so the case that needs 2 GiB buffers in RAM and VRAM at once is skipped",
+                      r.stdout)
+        folder, _, _ = self.results()
+        log = self.read(folder, "tests", "env.log")
+        self.assertIn("KYTY_TEST_GUEST_MEMORY_MB=6144", log)
+        self.assertIn("KYTY_TEST_SKIP_OVER_2GIB=1", log)
+
     def test_run_from_a_prompt(self):
         """Not the -File of its process: the arguments come from $args."""
         environment = dict(os.environ, HOME=self.home, TMPDIR=self.scratch, COMPUTERNAME="FAKE-PC",
