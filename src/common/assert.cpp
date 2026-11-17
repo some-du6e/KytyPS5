@@ -1,5 +1,6 @@
 #include "common/assert.h"
 
+#include "common/ramLog.h"
 #include "common/subsystems.h"
 #include "kytyGitVersion.h"
 
@@ -38,6 +39,8 @@ static void ThrowIfSoft([[maybe_unused]] const std::string& text) {
 		                      shader.hash);
 	}
 	Log::WriteToConsoleAndLog(report);
+	// gta6-prep: ram: what memory looked like at the end (a failed allocation, a full commit).
+	RamLog::WriteExitLine();
 	Subsystems::EmergencyShutdownActive();
 	std::fflush(nullptr);
 	std::_Exit(321);

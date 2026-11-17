@@ -16,10 +16,14 @@
 #include <spdlog/sinks/stdout_sinks.h>
 
 #if defined(_WIN32)
-#include <share.h>
 #include <windows.h> // IWYU pragma: keep
+#include <io.h>
+#include <share.h>
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
+#endif
+#if !defined(_WIN32)
+#include <unistd.h>
 #endif
 
 #include <algorithm>
@@ -156,6 +160,26 @@ void WriteToSessionLog(std::string_view text) {
 	if (g_session != nullptr) {
 		std::fwrite(text.data(), 1, text.size(), g_session);
 	}
+}
+
+// gta6-prep: ram
+bool SessionLogOpen() {
+	return g_session != nullptr;
+}
+
+void SyncSessionLog() {
+	if (g_session == nullptr) {
+		return;
+	}
+	std::fflush(g_session);
+#if defined(_WIN32)
+	const auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(g_session)));
+	if (handle != INVALID_HANDLE_VALUE) {
+		(void)FlushFileBuffers(handle);
+	}
+#else
+	(void)fsync(fileno(g_session));
+#endif
 }
 
 // gta6-prep: diag

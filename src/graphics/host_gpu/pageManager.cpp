@@ -56,6 +56,10 @@ constexpr uint64_t REGION_PAGES = REGION_SIZE / PAGE_SIZE;
 // The page tracking's lock: waiters sleep instead of spinning on a preempted holder.
 using SpinGuard = std::lock_guard<TrackingSpinLock>;
 
+// gta6-prep: ram: pages the read watchers of every PageManager keep inaccessible (the "noaccess" of
+// the "RAM usage:" lines).
+std::atomic<int64_t> g_noaccess_pages {0};
+
 void ValidateRange(uint64_t vaddr, uint64_t size) {
 	if (!GuestRange {vaddr, size}.Valid()) {
 		Fatal("invalid range vaddr=0x%016" PRIx64 ", size=0x%016" PRIx64, vaddr, size);
@@ -188,6 +192,7 @@ struct PageManager::Impl {
 		uint64_t  range_begin           = 0;
 		uint64_t  range_bytes           = 0;
 		uint64_t  potential_range_bytes = 0;
+		int64_t   noaccess_delta        = 0; // gta6-prep: ram
 
 		const auto release_pending = [&] {
 			if (range_bytes != 0) {
@@ -207,6 +212,11 @@ struct PageManager::Impl {
 			const auto new_count = update ? page.AddDelta<delta, is_read>(address)
 			                              : page.AddDelta<0, is_read>(address);
 			const auto new_perms = page.Perms();
+			if constexpr (is_read) {
+				using Mode = Common::VirtualMemory::Mode;
+				noaccess_delta += static_cast<int64_t>(new_perms == Mode::NoAccess) -
+				                  static_cast<int64_t>(old_perms == Mode::NoAccess);
+			}
 
 			if (new_perms != perms) [[unlikely]] {
 				release_pending();
@@ -230,6 +240,9 @@ struct PageManager::Impl {
 		}
 
 		release_pending();
+		if (noaccess_delta != 0) {
+			g_noaccess_pages.fetch_add(noaccess_delta, std::memory_order_relaxed);
+		}
 	}
 
 	template <bool track, bool is_read>
@@ -259,6 +272,12 @@ struct PageManager::Impl {
 static_assert(std::atomic<void*>::is_always_lock_free);
 
 PageManager::PageManager(): m_impl(std::make_unique<Impl>()) {}
+
+// gta6-prep: ram
+uint64_t PageManager::NoAccessPages() noexcept {
+	const auto pages = g_noaccess_pages.load(std::memory_order_relaxed);
+	return pages > 0 ? static_cast<uint64_t>(pages) : 0;
+}
 
 PageManager::~PageManager() = default;
 

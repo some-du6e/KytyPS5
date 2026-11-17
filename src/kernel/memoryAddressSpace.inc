@@ -124,10 +124,21 @@ public:
 		    INVALID_HANDLE_VALUE, nullptr, PAGE_EXECUTE_READWRITE | SEC_COMMIT,
 		    static_cast<DWORD>(m_size >> 32u), static_cast<DWORD>(m_size & 0xffffffffu), nullptr);
 		if (m_handle == nullptr) {
+			const auto error = static_cast<uint32_t>(GetLastError());
+			// gta6-prep: ram: the free commit, the limit and the page file that would fit.
+			std::optional<uint64_t> commit_used;
+			std::optional<uint64_t> commit_limit;
+			MEMORYSTATUSEX          status {};
+			status.dwLength = sizeof(status);
+			if (GlobalMemoryStatusEx(&status) != 0) {
+				commit_limit = status.ullTotalPageFile;
+				commit_used  = status.ullTotalPageFile - status.ullAvailPageFile;
+			}
 			EXIT("could not reserve %" PRIu64 " MB for guest direct memory: 0x%08" PRIx32
 			     ". Windows commits\n"
-			     "this up front, so the paging file is usually what needs to be larger.\n",
-			     m_size / (1024U * 1024U), static_cast<uint32_t>(GetLastError()));
+			     "this up front, so the paging file is usually what needs to be larger.\n%s",
+			     m_size / (1024U * 1024U), error,
+			     Config::FormatReserveAdvice(m_size, commit_used, commit_limit).c_str());
 		}
 		// The guest regions take the address space below HOST_USER_MAX, and the alias went to the
 		// lowest free range: the one left below 1 TiB. The NVIDIA driver reserves its CUDA address

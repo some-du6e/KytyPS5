@@ -502,6 +502,12 @@ bool GraphicContext::SpilledOutOfDeviceMemory(VmaAllocation allocation) const {
 	return (properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0;
 }
 
+// gta6-prep: ram
+uint64_t GraphicContext::SpilledBytes() noexcept {
+	return g_image_spills.bytes.load(std::memory_order_relaxed) +
+	       g_buffer_spills.bytes.load(std::memory_order_relaxed);
+}
+
 void GraphicContext::SetRecycledImageBudget(uint64_t bytes) {
 	g_recycled_bytes_max.store(bytes, std::memory_order_relaxed);
 }

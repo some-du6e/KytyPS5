@@ -558,6 +558,9 @@ void TestSharedReadWatchers() {
     return reinterpret_cast<void *>(address + page_size * index);
   };
 
+  // gta6-prep: ram: NoAccessPages() counts the pages the access watchers deny.
+  const auto noaccess_before = PageManager::NoAccessPages();
+
   // Two owners hold the first two pages; one of them also holds the next one.
   manager.UpdatePageWatchers<true, true>(address, page_size * 2);
   manager.UpdatePageWatchers<true, true>(address + page_size, page_size * 2);
@@ -568,16 +571,24 @@ void TestSharedReadWatchers() {
         "access watchers did not deny the watched pages");
   Check(manager.IsWatched(address) && !manager.IsWatched(address + page_size * 3),
         "IsWatched ignored the access watchers");
+  Check(PageManager::NoAccessPages() == noaccess_before + 3,
+        "NoAccessPages() did not count three denied pages once each");
 
   manager.UpdatePageWatchers<false, true>(address, page_size * 2);
   Check(IsWritable(page(0)) && Protection(page(1)) == PAGE_NOACCESS &&
             Protection(page(2)) == PAGE_NOACCESS,
         "one owner's unwatch released pages the other still holds");
+  Check(PageManager::NoAccessPages() == noaccess_before + 2,
+        "NoAccessPages() did not drop the released page");
 
   manager.UpdatePageWatchers<true>(address + page_size * 2, page_size);
+  Check(PageManager::NoAccessPages() == noaccess_before + 2,
+        "a write watcher on a denied page changed NoAccessPages()");
   manager.UpdatePageWatchers<false, true>(address + page_size, page_size * 2);
   Check(IsWritable(page(1)) && Protection(page(2)) == PAGE_READONLY,
         "access unwatch did not fall back to the write watcher");
+  Check(PageManager::NoAccessPages() == noaccess_before,
+        "NoAccessPages() kept pages that went read-only or writable");
   manager.UpdatePageWatchers<false>(address + page_size * 2, page_size);
   Check(IsWritable(page(2)), "write unwatch did not restore access");
 

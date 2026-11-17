@@ -6,6 +6,7 @@
 #include "common/file.h"
 #include "common/logging/log.h"
 #include "common/profiler.h"
+#include "common/ramLog.h"
 #include "common/singleton.h"
 #include "common/stringUtils.h"
 #include "common/subsystems.h"
@@ -174,6 +175,10 @@ static void Init(const RunOptions& options, const std::filesystem::path& param_j
 	subsystems.Initialize<Profiler::Lifecycle>();
 	subsystems.Initialize<Libs::Network::Lifecycle>();
 	subsystems.Initialize<Libs::LibKernel::Memory::Lifecycle>();
+	// gta6-prep: ram: the "RAM:" line once the guest memory section is committed, before the
+	// renderer and the shader store take their share.
+	const auto guest_memory = Libs::LibKernel::Memory::GetDebugStats();
+	Common::RamLog::Start(guest_memory.direct_total + guest_memory.flexible_total);
 	subsystems.Initialize<Libs::LibKernel::FileSystem::Lifecycle>();
 	subsystems.Initialize<Libs::Controller::Lifecycle>();
 	subsystems.Initialize<Libs::Audio::Lifecycle>();

@@ -146,6 +146,9 @@ struct GraphicContext {
 	// Counts a spilled image or buffer of `bytes` and logs the "VRAM spill:" line on the first and
 	// every power-of-two count of its kind. `what` describes the first one.
 	void               NoteSpill(bool image, uint64_t bytes, std::string_view what);
+	// gta6-prep: ram: the bytes NoteSpill() counted so far, images and buffers (freed ones are not
+	// subtracted), for the "spilled" field of the "RAM usage:" lines. Any thread.
+	[[nodiscard]] static uint64_t SpilledBytes() noexcept;
 	// The bytes the recycled-image pool (CreateImage()) keeps at most; 256 MiB until set. Any
 	// thread.
 	void                   SetRecycledImageBudget(uint64_t bytes);

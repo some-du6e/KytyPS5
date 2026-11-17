@@ -38,6 +38,9 @@ struct HostStats {
 	std::optional<uint64_t> process_compressed; // Compressed or swapped out.
 	std::optional<uint64_t> process_file_backed;
 	std::optional<uint64_t> process_virtual; // Reserved address space.
+	// gta6-prep: ram: the process's private commit (Windows private bytes). Mapped shared sections,
+	// such as the guest memory, are not in it.
+	std::optional<uint64_t> process_private;
 
 	// System memory.
 	std::optional<uint64_t> system_memory_used;
@@ -48,6 +51,10 @@ struct HostStats {
 	std::optional<uint64_t> system_free;
 	std::optional<uint64_t> swap_used;
 	std::optional<uint64_t> swap_total;
+	// gta6-prep: ram: the system's commit charge and its limit (Windows: RAM plus the page files;
+	// Linux: Committed_AS and CommitLimit, which overcommit lets the charge pass).
+	std::optional<uint64_t> commit_used;
+	std::optional<uint64_t> commit_limit;
 	MemoryPressure          memory_pressure = MemoryPressure::Unknown;
 
 	// Disk I/O of the emulator process.

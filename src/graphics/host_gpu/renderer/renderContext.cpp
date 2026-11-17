@@ -4,6 +4,7 @@
 #include "common/emulatorConfig.h"
 #include "common/hackNotice.h"
 #include "common/logging/log.h"
+#include "common/ramLog.h"
 #include "graphics/guest_gpu/graphicsRun.h"
 #include "graphics/presentation/videoOut.h"
 #include "graphics/shader/shaderBindings.h"
@@ -11,6 +12,7 @@
 #include "libs/errno.h"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 
 namespace Libs::Graphics {
@@ -30,6 +32,20 @@ RenderContext::RenderContext(GraphicContext& graphics, const std::filesystem::pa
 	m_graphics.SetRecycledImageBudget(MemoryPolicy::RecycledImageBytes(
 	    m_graphics.GetTotalMemoryBudget(), settings.small_recycle_pool));
 	LogVramBreakdown();
+	// gta6-prep: ram: the renderer's fields of the "RAM usage:" lines, until the destructor.
+	Common::RamLog::SetExtraFields([this] {
+		std::array<GraphicContext::HeapUsage, VK_MAX_MEMORY_HEAPS> heaps {};
+		const auto             count = m_graphics.GetHeapUsage(heaps);
+		Config::RendererMemory memory;
+		for (uint32_t heap = 0; heap < count; heap++) {
+			const bool local = heaps[heap].device_local;
+			(local ? memory.local_usage : memory.host_usage) += heaps[heap].usage;
+			(local ? memory.local_budget : memory.host_budget) += heaps[heap].budget;
+		}
+		memory.spilled  = GraphicContext::SpilledBytes();
+		memory.noaccess = PageManager::NoAccessPages() * TRACKER_PAGE_SIZE;
+		return memory;
+	});
 }
 
 // gta6-prep: vram: the "VRAM:" line of the log contract, once the caches exist: what the
@@ -63,6 +79,8 @@ void RenderContext::LogVramBreakdown() {
 }
 
 RenderContext::~RenderContext() {
+	// gta6-prep: ram: before anything goes: the thread of the lines no longer calls in after this.
+	Common::RamLog::SetExtraFields({});
 	ShutdownGpu();
 	m_command_scheduler.Shutdown();
 }

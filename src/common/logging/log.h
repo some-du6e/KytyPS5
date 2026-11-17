@@ -34,6 +34,11 @@ void WriteToConsoleAndLog(std::string_view text);
 // The session log (--session-log): the console messages above and the reports of a fatal error,
 // whatever the log direction and without the printf log. Buffered: Flush() writes it out.
 void WriteToSessionLog(std::string_view text);
+// gta6-prep: ram: whether a session log is open.
+[[nodiscard]] bool SessionLogOpen();
+// gta6-prep: ram: Flush() of the session log, then through the OS cache to the disk, so that its
+// last lines survive a crash of the whole machine. Nothing without a session log.
+void SyncSessionLog();
 
 // gta6-prep: diag
 // --session-log auto: opens <executable folder>/_Logs/<title>_<yyyy-MM-dd_HH-mm-ss>.log once the

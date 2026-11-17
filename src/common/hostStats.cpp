@@ -76,10 +76,13 @@ void SamplePlatform(PlatformState& /*state*/, HostStats& stats, Counters& now) {
 		now.system_busy  = *now.system_total - FileTimeTo100Ns(idle);
 	}
 
-	PROCESS_MEMORY_COUNTERS memory {};
-	if (K32GetProcessMemoryInfo(process, &memory, sizeof(memory)) != 0) {
+	// gta6-prep: ram: the _EX form for PrivateUsage.
+	PROCESS_MEMORY_COUNTERS_EX memory {};
+	if (K32GetProcessMemoryInfo(process, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory),
+	                            sizeof(memory)) != 0) {
 		stats.process_memory   = memory.WorkingSetSize;
 		stats.process_resident = memory.WorkingSetSize;
+		stats.process_private  = memory.PrivateUsage;
 		now.page_faults        = memory.PageFaultCount;
 	}
 	IO_COUNTERS io {};
@@ -94,6 +97,9 @@ void SamplePlatform(PlatformState& /*state*/, HostStats& stats, Counters& now) {
 		stats.system_memory_total = system.ullTotalPhys;
 		stats.system_memory_used  = system.ullTotalPhys - system.ullAvailPhys;
 		stats.system_free         = system.ullAvailPhys;
+		// gta6-prep: ram: ullTotalPageFile is the commit limit, ullAvailPageFile what is left.
+		stats.commit_limit        = system.ullTotalPageFile;
+		stats.commit_used         = system.ullTotalPageFile - system.ullAvailPageFile;
 		stats.memory_pressure     = system.dwMemoryLoad >= 90   ? MemoryPressure::Critical
 		                            : system.dwMemoryLoad >= 80 ? MemoryPressure::Warning
 		                                                        : MemoryPressure::Normal;
@@ -471,6 +477,9 @@ void SamplePlatform(PlatformState& /*state*/, HostStats& stats, Counters& now) {
 		stats.swap_total = swap_total;
 		stats.swap_used  = *swap_total - *swap_free;
 	}
+	// gta6-prep: ram
+	stats.commit_limit = Find(memory, "CommitLimit");
+	stats.commit_used  = Find(memory, "Committed_AS");
 
 	// Pressure stall information: share of the last 10 s some task waited on memory.
 	std::ifstream pressure("/proc/pressure/memory");
