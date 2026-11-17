@@ -325,6 +325,10 @@ struct RendererMemory {
 	uint64_t spilled = 0;
 	// Guest memory the read watchers keep inaccessible now (printed rounded up to a MiB).
 	uint64_t noaccess = 0;
+	// The one-time buffers that took transfers the host upload and download rings could not, so
+	// far, and their bytes (StreamBuffer::CountOneOff(); freeing one subtracts nothing).
+	uint64_t one_off_count = 0;
+	uint64_t one_off_bytes = 0;
 };
 
 // `private_bytes` is the process's private commit (Windows private bytes). The guest memory section
@@ -345,7 +349,8 @@ struct RamUsage {
 inline constexpr size_t RamUsageLineSize = 512;
 
 // "RAM usage: t=630 ws=2843 private=9875 commit=31790/40858 avail=187 faults=3412 hard=?
-// vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312\n" into `out`, cut to `size`.
+// vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312 oneoff=12/340\n" into `out`, cut
+// to `size`.
 // Returns the length. Allocates nothing.
 inline size_t FormatRamUsage(const RamUsage& usage, char* out, size_t size) noexcept {
 	RamLineWriter line(out, size);
@@ -379,6 +384,10 @@ inline size_t FormatRamUsage(const RamUsage& usage, char* out, size_t size) noex
 		line.MiB(renderer.spilled);
 		line.Text(" noaccess=");
 		line.Number(renderer.noaccess / RamMiB + (renderer.noaccess % RamMiB != 0 ? 1 : 0));
+		line.Text(" oneoff=");
+		line.Number(renderer.one_off_count);
+		line.Text("/");
+		line.MiB(renderer.one_off_bytes);
 	}
 	line.Text("\n");
 	return line.View().size();

@@ -204,6 +204,8 @@ class ContractRamTests(unittest.TestCase):
                           last["vk_host_mib"], last["vk_host_budget_mib"], last["spilled_mib"], last["noaccess_mib"]),
                          (180, 2843, 9875, 23400, 24474, 187, 3412, None, 5402, 5560, 1873, 3711, 1504, 312))
         self.assertEqual([s["t"] for s in hm["tail"]], [90, 120, 150, 180])
+        self.assertEqual((last["one_off_buffers"], last["one_off_mib"]), (15, 400))
+        self.assertEqual(hm["one_off"], {"buffers": 15, "mib": 400, "t": 180})
         # Every host memory rule. The log stops low on RAM after NOACCESS samples, so it gets the blue screen hint,
         # under the plain no-fatal one: a log that stops is also a kill, a hang or preflight's time limit.
         self.assertEqual([a["rule_id"] for a in rep["fix_areas"]],
@@ -216,7 +218,8 @@ class ContractRamTests(unittest.TestCase):
         self.assertIn("## Host memory", md)
         self.assertIn("6 `RAM usage:` sample(s) from t=30 to t=180 s; available RAM down to 187 MiB (under 300 MiB "
                       "in 4 of 6); commit up to 95% of its limit", md)
-        self.assertIn("NOACCESS guest pages in 5 sample(s), up to 312 MiB", md)
+        self.assertIn("NOACCESS guest pages in 5 sample(s), up to 312 MiB; 15 one-time ring buffer(s) by t=180 s "
+                      "(400 MiB)", md)
 
     def test_low_profile_and_the_exit_line_of_a_fatal_report(self):
         # The low profile's lines, then a fatal report followed by RamLog::WriteExitLine()'s line, which has no
@@ -247,6 +250,10 @@ class ContractRamTests(unittest.TestCase):
         self.assertEqual((last["t"], last["commit_percent"], last["faults_per_s"], last["hard_faults_per_s"]),
                          (95, 95, None, None))
         self.assertNotIn("noaccess_mib", last)
+        # A build before the oneoff field: its samples parse, without one.
+        self.assertEqual(hm["first"]["noaccess_mib"], 4)
+        self.assertNotIn("one_off_buffers", hm["first"])
+        self.assertIsNone(hm["one_off"])
         ids = [a["rule_id"] for a in rep["fix_areas"]]
         self.assertEqual(ids[0], "vram-oom")
         self.assertIn("ram-commit-full", ids)

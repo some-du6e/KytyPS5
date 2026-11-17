@@ -333,26 +333,34 @@ void TestUsageLine() {
 	usage.commit_limit  = MiB(40858);
 	usage.available     = MiB(187);
 	usage.faults_per_s  = 3411.6;
-	usage.renderer      = Config::RendererMemory {.local_usage  = MiB(5402),
-	                                              .local_budget = MiB(5560),
-	                                              .host_usage   = MiB(1873),
-	                                              .host_budget  = MiB(3711),
-	                                              .spilled      = MiB(1504),
-	                                              .noaccess     = MiB(312)};
+	usage.renderer      = Config::RendererMemory {.local_usage   = MiB(5402),
+	                                              .local_budget  = MiB(5560),
+	                                              .host_usage    = MiB(1873),
+	                                              .host_budget   = MiB(3711),
+	                                              .spilled       = MiB(1504),
+	                                              .noaccess      = MiB(312),
+	                                              .one_off_count = 12,
+	                                              .one_off_bytes = MiB(340)};
 	CheckEqual(Config::FormatRamUsage(usage),
 	           "RAM usage: t=630 ws=2843 private=9875 commit=31790/40858 avail=187 faults=3412 "
-	           "hard=? vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312\n",
+	           "hard=? vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312 "
+	           "oneoff=12/340\n",
 	           "the RAM usage line does not follow the log contract");
 	// A single inaccessible page shows: noaccess rounds up.
 	usage.renderer->noaccess = 4096;
 	usage.hard_faults_per_s  = 12.4;
 	const auto line          = Config::FormatRamUsage(usage);
 	Check(line.find(" hard=12 ") != std::string::npos &&
-	          line.find(" noaccess=1\n") != std::string::npos,
+	          line.find(" noaccess=1 ") != std::string::npos,
 	      "the hard faults or one inaccessible page are not shown");
 	usage.renderer->noaccess = 0;
-	Check(Config::FormatRamUsage(usage).find(" noaccess=0\n") != std::string::npos,
+	Check(Config::FormatRamUsage(usage).find(" noaccess=0 ") != std::string::npos,
 	      "no inaccessible page is not 0");
+	// One-time buffers smaller than a MiB: the count shows them.
+	usage.renderer->one_off_count = 3;
+	usage.renderer->one_off_bytes = 3 * 4096;
+	Check(Config::FormatRamUsage(usage).ends_with(" oneoff=3/0\n"),
+	      "one-time buffers under a MiB are not counted");
 	// The exit line: no renderer fields, nothing sampled yet.
 	Config::RamUsage exit_line;
 	exit_line.seconds = 5;
@@ -378,7 +386,7 @@ void TestUsageLine() {
 	widest.available         = most;
 	widest.faults_per_s      = 1e15;
 	widest.hard_faults_per_s = 1e15;
-	widest.renderer          = Config::RendererMemory {most, most, most, most, most, most};
+	widest.renderer = Config::RendererMemory {most, most, most, most, most, most, most, most};
 	char       buffer[Config::RamUsageLineSize];
 	const auto size = Config::FormatRamUsage(widest, buffer, sizeof(buffer));
 	Check(size < sizeof(buffer) && buffer[size - 1] == '\n', "the widest RAM usage line is cut");

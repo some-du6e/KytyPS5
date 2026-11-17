@@ -425,7 +425,7 @@ R_RAM_USAGE = re.compile(r"^RAM usage: t=(?P<t>\d+) ws=(?P<ws>\S+) private=(?P<p
                          r"commit=(?P<commit>\S+)/(?P<limit>\S+) avail=(?P<avail>\S+) faults=(?P<faults>\S+) "
                          r"hard=(?P<hard>\S+)(?: vk_local=(?P<vk_local>\S+)/(?P<vk_local_budget>\S+) "
                          r"vk_host=(?P<vk_host>\S+)/(?P<vk_host_budget>\S+) spilled=(?P<spilled>\S+) "
-                         r"noaccess=(?P<noaccess>\S+))?")
+                         r"noaccess=(?P<noaccess>\S+)(?: oneoff=(?P<oneoff>\d+)/(?P<oneoff_mib>\S+))?)?")
 # Below this the RAM usage thread's samples count as "little RAM left" (ram-available-low), and a
 # PC with less RAM than LOW_RAM_MIB wants --ram-profile low (ram-low-ram-normal-profile).
 LOW_AVAILABLE_MIB = 300
@@ -1285,7 +1285,7 @@ class Scanner:
                                        "samples": 0, "first": None, "last": None, "tail": collections.deque(maxlen=4),
                                        "with_available": 0, "low_available": 0, "min_available": None,
                                        "noaccess_samples": 0, "max_noaccess_mib": 0, "peak_commit_percent": None,
-                                       "peak_private_mib": None, "peak_working_set_mib": None}
+                                       "peak_private_mib": None, "peak_working_set_mib": None, "one_off": None}
         return hm
 
     def _ram_seen(self, line):
@@ -1345,6 +1345,9 @@ class Scanner:
             sample.update({"vk_local_mib": ram_mib(g["vk_local"]), "vk_local_budget_mib": ram_mib(g["vk_local_budget"]),
                            "vk_host_mib": ram_mib(g["vk_host"]), "vk_host_budget_mib": ram_mib(g["vk_host_budget"]),
                            "spilled_mib": ram_mib(g["spilled"]), "noaccess_mib": ram_mib(g["noaccess"])})
+            # The one-time buffers that took transfers the host rings could not, so far (newer builds).
+            if g["oneoff"] is not None:
+                sample.update({"one_off_buffers": int(g["oneoff"]), "one_off_mib": ram_mib(g["oneoff_mib"])})
         used, limit = sample["commit_mib"], sample["commit_limit_mib"]
         sample["commit_percent"] = used * 100 // limit if used is not None and limit else None
         sample["evidence"] = self.ev(line).as_dict()
@@ -1361,6 +1364,8 @@ class Scanner:
                 hm["low_available"] += 1
             if hm["min_available"] is None or avail < hm["min_available"]["available_mib"]:
                 hm["min_available"] = sample
+        if "one_off_buffers" in sample:
+            hm["one_off"] = {"buffers": sample["one_off_buffers"], "mib": sample["one_off_mib"], "t": sample["t"]}
         if sample.get("noaccess_mib"):
             hm["noaccess_samples"] += 1
             hm["max_noaccess_mib"] = max(hm["max_noaccess_mib"], sample["noaccess_mib"])
@@ -1691,6 +1696,7 @@ def host_memory_report(hm):
     out["peak_commit_percent"] = hm["peak_commit_percent"]
     out["peak_private_mib"] = hm["peak_private_mib"]
     out["peak_working_set_mib"] = hm["peak_working_set_mib"]
+    out["one_off"] = hm["one_off"]
     return out
 
 
@@ -2721,6 +2727,10 @@ def render_markdown(rep, top=10):
             if hm["noaccess_samples"]:
                 bits.append("NOACCESS guest pages in %d sample(s), up to %d MiB" % (hm["noaccess_samples"],
                                                                                  hm["max_noaccess_mib"]))
+            if hm["one_off"]:
+                bits.append("%d one-time ring buffer(s) by t=%d s (%s MiB)" % (
+                    hm["one_off"]["buffers"], hm["one_off"]["t"],
+                    hm["one_off"]["mib"] if hm["one_off"]["mib"] is not None else "?"))
             out.append("- " + "; ".join(bits))
             out.append("- last: `%s` (%s)" % (_md_escape(last["evidence"]["text"]), _fmt_ev(last["evidence"])))
         out.append("")

@@ -42,8 +42,10 @@ RenderContext::RenderContext(GraphicContext& graphics, const std::filesystem::pa
 			(local ? memory.local_usage : memory.host_usage) += heaps[heap].usage;
 			(local ? memory.local_budget : memory.host_budget) += heaps[heap].budget;
 		}
-		memory.spilled  = GraphicContext::SpilledBytes();
-		memory.noaccess = PageManager::NoAccessPages() * TRACKER_PAGE_SIZE;
+		memory.spilled       = GraphicContext::SpilledBytes();
+		memory.noaccess      = PageManager::NoAccessPages() * TRACKER_PAGE_SIZE;
+		memory.one_off_count = StreamBuffer::OneOffCount();
+		memory.one_off_bytes = StreamBuffer::OneOffBytes();
 		return memory;
 	});
 }

@@ -37,7 +37,8 @@ constexpr uint64_t MiB           = 1024 * 1024;
 constexpr uint64_t GdsBufferSize = 64 * 1024;
 // gta6-prep: ram: the host-visible rings' sizes come from Config::GetRamSettings() (128 and 32 MiB
 // with --ram-profile low); these are the defaults. A transfer the ring cannot hold takes a one-time
-// buffer (UploadMemory(), StreamBuffer::MapDownload()) or waits for the ring.
+// buffer (UploadMemory(), StreamBuffer::MapDownload(); the "oneoff" field of the "RAM usage:"
+// lines counts them) or waits for the ring.
 constexpr uint64_t UploadRingMiB   = 512;
 constexpr uint64_t DownloadRingMiB = 64;
 static_assert(UploadRingMiB == Config::RamSettings {}.upload_ring_mb &&
@@ -56,6 +57,7 @@ std::pair<Buffer*, uint64_t> UploadMemory(GraphicContext& graphics, CommandSched
 	}
 
 	// Large transfers use the same one-time host allocation as ordinary buffer uploads.
+	StreamBuffer::CountOneOff(size); // gta6-prep: ram
 	auto temporary = std::make_unique<Buffer>(graphics, scheduler, MemoryUsage::Upload, 0,
 	                                         usage, size);
 	write(temporary->Mapped().data(), 0);

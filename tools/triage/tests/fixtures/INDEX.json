@@ -492,7 +492,7 @@
   "file": "synthetic-ram-lines.txt",
   "synthetic": true,
   "description": "gta6-prep: ram: the RAM, RAM warning and RAM usage lines of a session on 8 GB of RAM with the normal RAM profile; commit reaches 95% and the log stops, low on RAM, after samples with NOACCESS pages",
-  "bytes": 2791
+  "bytes": 2869
  },
  {
   "case": "synthetic-rule-lines",
