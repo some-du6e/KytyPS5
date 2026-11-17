@@ -2,8 +2,11 @@
 
 import io
 import os
+import shutil
 import sys
+import tempfile
 import unittest
+import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import triage_test_util as u  # noqa: E402
@@ -174,6 +177,182 @@ class ContractOtherTests(unittest.TestCase):
         self.assertEqual((e["key"], e["fatal"]), ("MIMG:0xe6", 1))
         self.assertEqual(e["shaders"][0]["stage"], "CS")
         self.assertIn("src/graphics/shader/recompiler/frontend/decode/ImageOps.cpp", rep["fix_areas"][0]["paths"])
+
+
+class ContractRamTests(unittest.TestCase):
+    """gta6-prep: ram: the "RAM" lines of src/common/ramOptions.h, as tests/RamPolicyTests.cpp pins them."""
+
+    def test_ram_lines_of_a_session(self):
+        rep = u.report("synthetic-ram-lines.txt")
+        hm = rep["host_memory"]
+        st = hm["startup"]
+        self.assertEqual((st["phys_mib"], st["available_mib"], st["commit_mib"], st["commit_limit_mib"],
+                          st["headroom_mib"], st["page_file_mib"], st["page_file_estimated"], st["guest_mib"],
+                          st["profile"]),
+                         (8090, 4712, 18242, 24474, 6232, 16384, True, 12736, "normal"))
+        self.assertIsNone(hm["profile"])
+        self.assertEqual(hm["warning_count"], 2)
+        self.assertTrue(hm["warnings"][0]["text"].startswith("commit headroom 6232 MiB is below 12288 MiB."))
+        self.assertEqual((hm["samples"], hm["samples_with_available"], hm["low_available_samples"]), (6, 6, 4))
+        self.assertEqual((hm["noaccess_samples"], hm["max_noaccess_mib"], hm["peak_commit_percent"],
+                          hm["peak_private_mib"], hm["peak_working_set_mib"]), (5, 312, 95, 9875, 2843))
+        self.assertEqual(hm["min_available"]["available_mib"], 187)
+        last = hm["last"]
+        self.assertEqual((last["t"], last["working_set_mib"], last["private_mib"], last["commit_mib"],
+                          last["commit_limit_mib"], last["available_mib"], last["faults_per_s"],
+                          last["hard_faults_per_s"], last["vk_local_mib"], last["vk_local_budget_mib"],
+                          last["vk_host_mib"], last["vk_host_budget_mib"], last["spilled_mib"], last["noaccess_mib"]),
+                         (180, 2843, 9875, 23400, 24474, 187, 3412, None, 5402, 5560, 1873, 3711, 1504, 312))
+        self.assertEqual([s["t"] for s in hm["tail"]], [90, 120, 150, 180])
+        # Every host memory rule. The log stops low on RAM after NOACCESS samples, so it gets the blue screen hint,
+        # under the plain no-fatal one: a log that stops is also a kill, a hang or preflight's time limit.
+        self.assertEqual([a["rule_id"] for a in rep["fix_areas"]],
+                         ["ram-commit-full", "ram-warning", "ram-available-low", "ram-low-ram-normal-profile",
+                          "no-fatal-no-fatal", "ram-noaccess-bluescreen"])
+        bluescreen = rep["fix_areas"][-1]
+        self.assertIn("0x41202", bluescreen["next_step"])
+        self.assertIn("with 187 MiB of RAM available in the last sample", bluescreen["why"][0])
+        md = u.kt.render_markdown(rep)
+        self.assertIn("## Host memory", md)
+        self.assertIn("6 `RAM usage:` sample(s) from t=30 to t=180 s; available RAM down to 187 MiB (under 300 MiB "
+                      "in 4 of 6); commit up to 95% of its limit", md)
+        self.assertIn("NOACCESS guest pages in 5 sample(s), up to 312 MiB", md)
+
+    def test_low_profile_and_the_exit_line_of_a_fatal_report(self):
+        # The low profile's lines, then a fatal report followed by RamLog::WriteExitLine()'s line, which has no
+        # renderer fields and "?" for the rates: no blue screen hint (there is a report), no profile hint.
+        text = (
+            "--- Session 2026-11-19 21:00:00 ---\n"
+            "Fork build some-du6e/KytyPS5 1234abc\n"
+            "RAM: phys=8090 MiB avail=4712 commit=18242/40858 headroom=22616 pagefile=~32768 guest=12736 profile=low\n"
+            "RAM profile: low -> upload_ring=128 download_ring=32 compile_workers=3 async_threads=2 parallel_threads=2 "
+            "helpers<=0 cache_save=180s/60s fresh_stack_clear=off recycle_spilled=off oom_recovery=on\n"
+            "RAM usage: t=30 ws=2100 private=6400 commit=30000/40858 avail=900 faults=900 hard=? vk_local=1200/5560 "
+            "vk_host=300/3711 spilled=0 noaccess=4\n"
+            "vmaCreateImage failed: ErrorOutOfDeviceMemory (-2) for image extent=3840x2160x1 format=97 layers=1 "
+            "levels=1 samples=1\n"
+            "--- Build ---\n"
+            "Fork build some-du6e/KytyPS5 1234abc\n"
+            "--- Error ---\n"
+            "TextureCache: failed to create image: extent=3840x2160x1 in "
+            "D:\\a\\KytyPS5\\KytyPS5\\src\\graphics\\host_gpu\\renderer\\cache\\textureCache.cpp:1200\n"
+            "RAM usage: t=95 ws=2843 private=9875 commit=38900/40858 avail=150 faults=? hard=?\n")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(text.encode("utf-8")))
+        self.assertEqual(rep["outcome"], "crash")
+        hm = rep["host_memory"]
+        self.assertEqual(hm["profile"]["profile"], "low")
+        self.assertTrue(hm["profile"]["settings"].startswith("upload_ring=128 download_ring=32 "))
+        self.assertEqual(hm["startup"]["profile"], "low")
+        last = hm["last"]
+        self.assertEqual((last["t"], last["commit_percent"], last["faults_per_s"], last["hard_faults_per_s"]),
+                         (95, 95, None, None))
+        self.assertNotIn("noaccess_mib", last)
+        ids = [a["rule_id"] for a in rep["fix_areas"]]
+        self.assertEqual(ids[0], "vram-oom")
+        self.assertIn("ram-commit-full", ids)
+        self.assertNotIn("ram-noaccess-bluescreen", ids)
+        self.assertNotIn("ram-low-ram-normal-profile", ids)
+        self.assertNotIn("ram-available-low", ids)
+
+    def test_reserve_failure_keeps_its_rule(self):
+        # GuestBackingStore's message with the commit advice that follows it (FormatReserveAdvice()).
+        text = (
+            "--- Build ---\n"
+            "Fork build some-du6e/KytyPS5 1234abc\n"
+            "--- Error ---\n"
+            "could not reserve 12736 MB for guest direct memory: 0x000005af. Windows commits\n"
+            "this up front, so the paging file is usually what needs to be larger.\n"
+            "Commit: 9000 MiB free of a 24474 MiB limit, 12736 MiB needed. Add about 24576 MiB of page file, fixed "
+            "size, on any drive with space (System Properties > Advanced > Performance Settings > Advanced > Virtual "
+            "memory > Change, untick Automatically manage paging file size for all drives, pick the drive, Custom "
+            "size), then restart Windows.\n"
+            " in D:\\a\\KytyPS5\\KytyPS5\\src\\kernel\\memoryAddressSpace.inc:142\n")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(text.encode("utf-8")))
+        self.assertEqual((rep["primary"]["rule_id"], rep["primary"]["crash_site"]),
+                         ("guest-memory", "memoryAddressSpace.inc:142"))
+        self.assertIn("Add about 24576 MiB of page file", rep["primary"]["message"])
+        self.assertNotIn("host_memory", rep)
+
+    def test_bluescreen_hint_needs_little_ram_at_the_end(self):
+        # A healthy session on 32 GB: NOACCESS pages, then the log stops (preflight's time limit, or a window
+        # closed: the clean exit lines never reach a session log). No blue screen hint, and nothing above no-fatal.
+        text = (
+            "--- Session 2026-11-19 21:00:00 ---\n"
+            "Fork build some-du6e/KytyPS5 1234abc\n"
+            "Title ID: PPSA03420\n"
+            "RAM: phys=32690 MiB avail=24000 commit=21000/52000 headroom=31000 pagefile=~19310 guest=12736 "
+            "profile=normal\n"
+            "RAM usage: t=30 ws=6100 private=16400 commit=26000/52000 avail=19000 faults=900 hard=? vk_local=1200/5560 "
+            "vk_host=300/3711 spilled=0 noaccess=2\n"
+            "RAM usage: t=60 ws=6420 private=16810 commit=26650/52000 avail=18800 faults=2210 hard=? "
+            "vk_local=3300/5560 vk_host=820/3711 spilled=0 noaccess=4\n")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(text.encode("utf-8")))
+        self.assertEqual(rep["outcome"], "no-fatal")
+        self.assertEqual(rep["host_memory"]["noaccess_samples"], 2)
+        self.assertEqual([a["rule_id"] for a in rep["fix_areas"]], ["no-fatal-no-fatal"])
+        # The same end with little RAM left gets the hint, ranked under no-fatal.
+        low = text.replace("avail=18800", "avail=180")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(low.encode("utf-8")))
+        self.assertEqual([a["rule_id"] for a in rep["fix_areas"]], ["no-fatal-no-fatal", "ram-noaccess-bluescreen"])
+        # Little RAM, but no NOACCESS page in the last samples: no hint.
+        none = low.replace("noaccess=2", "noaccess=0").replace("noaccess=4", "noaccess=0")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(none.encode("utf-8")))
+        self.assertNotIn("ram-noaccess-bluescreen", [a["rule_id"] for a in rep["fix_areas"]])
+
+    def test_commit_full_only_where_the_limit_holds(self):
+        # Linux overcommits: Committed_AS past CommitLimit is harmless, and the emulator does not warn there.
+        head = "--- Session 2026-11-19 21:00:00 ---\nFork build some-du6e/KytyPS5 1234abc\n"
+        usage = ("RAM usage: t=30 ws=6100 private=? commit=%s avail=19000 faults=900 hard=3 vk_local=1200/5560 "
+                 "vk_host=300/3711 spilled=0 noaccess=0\n")
+        cases = [
+            # (what tells the platform, the last sample's commit, whether the rule fires)
+            ("Host: cpu=AMD Ryzen 5 5600 6-Core Processor threads=12 ram=31900 MiB os=Linux 6.8.0-45-generic\n",
+             "36650/20000", False),
+            ("Host: cpu=AMD Ryzen 5 5600 6-Core Processor threads=12 ram=31900 MiB os=Linux 6.8.0-45-generic\n",
+             "19500/20000", False),
+            ("RAM: phys=31900 MiB avail=24000 commit=19000/20000 headroom=1000 pagefile=4096 guest=12736 "
+             "profile=normal\n", "19500/20000", False),
+            ("RAM: phys=8090 MiB avail=4712 commit=18242/24474 headroom=6232 pagefile=~16384 guest=12736 "
+             "profile=low\n", "23400/24474", True),
+            ("Host: cpu=AMD Ryzen 5 5600 6-Core Processor threads=12 ram=8090 MiB os=Windows 10.0.26100\n",
+             "23400/24474", True),
+            # Nothing tells: a charge within the limit counts, one past it cannot be Windows.
+            ("", "23400/24474", True),
+            ("", "36650/20000", False),
+        ]
+        for where, commit, fires in cases:
+            with self.subTest(where=where.strip(), commit=commit):
+                text = head + where + usage % commit
+                rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(text.encode("utf-8")))
+                self.assertEqual("ram-commit-full" in [a["rule_id"] for a in rep["fix_areas"]], fires)
+
+    def test_ram_lines_count_once_across_sources(self):
+        # A preflight zip has each RAM line twice, in session.log and in the console's emulator-boot.log.
+        single = u.report("synthetic-ram-lines.txt")["host_memory"]
+        folder = tempfile.mkdtemp(prefix="kyty-triage-ram-")
+        try:
+            path = os.path.join(folder, "run.zip")
+            with open(u.fixture("synthetic-ram-lines.txt"), "rb") as f:
+                data = f.read()
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("kyty-preflight-X/session.log", data)
+                z.writestr("kyty-preflight-X/emulator-boot.log", data)
+            rep = u.kt.triage([path], rules=u.RULES)
+        finally:
+            shutil.rmtree(folder)
+        hm = rep["host_memory"]
+        for key in ("samples", "warning_count", "samples_with_available", "low_available_samples", "noaccess_samples",
+                    "max_noaccess_mib", "peak_commit_percent"):
+            self.assertEqual(hm[key], single[key], key)
+        self.assertEqual(len(hm["warnings"]), 2)
+        self.assertEqual([s["t"] for s in hm["tail"]], [90, 120, 150, 180])
+
+    def test_reports_without_ram_lines_keep_their_shape(self):
+        for case in ("synthetic-contract-session.txt", "gta5-829-v22-session-log.txt"):
+            with self.subTest(case=case):
+                rep = u.report(case)
+                self.assertNotIn("host_memory", rep)
+                self.assertNotIn("## Host memory", u.kt.render_markdown(rep))
 
 
 if __name__ == "__main__":

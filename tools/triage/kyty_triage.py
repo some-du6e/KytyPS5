@@ -416,6 +416,21 @@ R_TITLE_PROFILE = re.compile(r"^Title profile: (?P<key>\S+) \((?P<display>.*?)\)
 R_PRESET = re.compile(r"^Preset: (?P<name>\S+) -> (?P<tokens>.*)$")
 R_VRAM = re.compile(r"^VRAM: budget=(?P<budget>\d+) MiB limit=(?P<limit>\S+?)(?: MiB)? profile=(?P<profile>\S+) "
                     r"gc=(?P<gc>\S+)")
+# gta6-prep: ram (src/common/ramOptions.h). Sizes in MiB, "?" unknown, "~" an estimate.
+R_RAM = re.compile(r"^RAM: phys=(?P<phys>\S+) MiB avail=(?P<avail>\S+) commit=(?P<commit>\S+)/(?P<limit>\S+) "
+                   r"headroom=(?P<headroom>\S+) pagefile=(?P<pagefile>\S+) guest=(?P<guest>\S+) profile=(?P<profile>\S+)")
+R_RAM_PROFILE = re.compile(r"^RAM profile: (?P<profile>\S+) -> (?P<settings>.*?)\s*$")
+R_RAM_WARNING = re.compile(r"^RAM warning: (?P<text>.*?)\s*$")
+R_RAM_USAGE = re.compile(r"^RAM usage: t=(?P<t>\d+) ws=(?P<ws>\S+) private=(?P<private>\S+) "
+                         r"commit=(?P<commit>\S+)/(?P<limit>\S+) avail=(?P<avail>\S+) faults=(?P<faults>\S+) "
+                         r"hard=(?P<hard>\S+)(?: vk_local=(?P<vk_local>\S+)/(?P<vk_local_budget>\S+) "
+                         r"vk_host=(?P<vk_host>\S+)/(?P<vk_host_budget>\S+) spilled=(?P<spilled>\S+) "
+                         r"noaccess=(?P<noaccess>\S+))?")
+# Below this the RAM usage thread's samples count as "little RAM left" (ram-available-low), and a
+# PC with less RAM than LOW_RAM_MIB wants --ram-profile low (ram-low-ram-normal-profile).
+LOW_AVAILABLE_MIB = 300
+LOW_RAM_MIB = 14336
+COMMIT_FULL_PERCENT = 95
 R_SHADERS = re.compile(r"^Shaders: VS (?P<VS>\d+) \| PS (?P<PS>\d+) \| CS (?P<CS>\d+) \| GS (?P<GS>\d+) \| "
                        r"LS (?P<LS>\d+) \| HS (?P<HS>\d+) \| TES (?P<TES>\d+)")
 R_TRACE = re.compile(r"^\[(\d+)\]\[(\d\d:\d\d:\d\d\.\d{3})\] (\w+)::(\w+)::(\w+)\(\)\s*$")
@@ -526,6 +541,8 @@ class Results:
         self.title_profile = None
         self.presets = []
         self.vram_config = None
+        self.host_memory = None      # gta6-prep: ram: the "RAM" lines, see Scanner.h_ram()
+        self.ram_lines = set()       # gta6-prep: ram: their text, so that a second copy counts once
         self.device_rejects = []
         self.fatal = []
         self.inline_fatal = []
@@ -603,6 +620,10 @@ class Scanner:
             (b"Title profile: ", self.h_title_profile),
             (b"Preset: ", self.h_preset),
             (b"VRAM: budget=", self.h_vram),
+            (b"RAM: phys=", self.h_ram),
+            (b"RAM profile: ", self.h_ram_profile),
+            (b"RAM warning: ", self.h_ram_warning),
+            (b"RAM usage: ", self.h_ram_usage),
             (b"terminate", self.h_terminate),
             (b"PageManager fatal: ", self.h_side_fatal),
             (b"Guest abort diagnostics:", self.h_guest_abort),
@@ -1256,6 +1277,98 @@ class Scanner:
             d["line"] = line
             self.r.vram_config = d
 
+    # -- host memory (gta6-prep: ram) -------------------------------------------
+    def _host_memory(self):
+        hm = self.r.host_memory
+        if hm is None:
+            hm = self.r.host_memory = {"startup": None, "profile": None, "warnings": [], "warning_count": 0,
+                                       "samples": 0, "first": None, "last": None, "tail": collections.deque(maxlen=4),
+                                       "with_available": 0, "low_available": 0, "min_available": None,
+                                       "noaccess_samples": 0, "max_noaccess_mib": 0, "peak_commit_percent": None,
+                                       "peak_private_mib": None, "peak_working_set_mib": None}
+        return hm
+
+    def _ram_seen(self, line):
+        """Whether this "RAM" line was read before. The emulator writes each one to the console, the session log
+        and the printf log, so a preflight zip has every line in session.log and in emulator-boot.log (the
+        console), and a _kyty.txt may hold a third copy: the samples and warnings count once."""
+        text = line.strip()
+        if text in self.r.ram_lines:
+            return True
+        self.r.ram_lines.add(text)
+        return False
+
+    def h_ram(self, line):
+        if self._ram_seen(line):
+            return
+        m = R_RAM.match(line)
+        if not m:
+            return
+        g = m.groupdict()
+        pagefile = g["pagefile"]
+        self._host_memory()["startup"] = {
+            "phys_mib": ram_mib(g["phys"]), "available_mib": ram_mib(g["avail"]), "commit_mib": ram_mib(g["commit"]),
+            "commit_limit_mib": ram_mib(g["limit"]), "headroom_mib": ram_mib(g["headroom"]),
+            "page_file_mib": ram_mib(pagefile.lstrip("~")), "page_file_estimated": pagefile.startswith("~"),
+            "guest_mib": ram_mib(g["guest"]), "profile": g["profile"], "evidence": self.ev(line).as_dict()}
+
+    def h_ram_profile(self, line):
+        if self._ram_seen(line):
+            return
+        m = R_RAM_PROFILE.match(line)
+        if m:
+            self._host_memory()["profile"] = {"profile": m.group("profile"), "settings": m.group("settings"),
+                                              "evidence": self.ev(line).as_dict()}
+
+    def h_ram_warning(self, line):
+        if self._ram_seen(line):
+            return
+        m = R_RAM_WARNING.match(line)
+        if m:
+            hm = self._host_memory()
+            hm["warning_count"] += 1
+            if len(hm["warnings"]) < 6:
+                hm["warnings"].append({"text": m.group("text"), "evidence": self.ev(line).as_dict()})
+
+    def h_ram_usage(self, line):
+        if self._ram_seen(line):
+            return
+        m = R_RAM_USAGE.match(line)
+        if not m:
+            return
+        g = m.groupdict()
+        sample = {"t": int(g["t"]), "working_set_mib": ram_mib(g["ws"]), "private_mib": ram_mib(g["private"]),
+                  "commit_mib": ram_mib(g["commit"]), "commit_limit_mib": ram_mib(g["limit"]),
+                  "available_mib": ram_mib(g["avail"]), "faults_per_s": ram_mib(g["faults"]),
+                  "hard_faults_per_s": ram_mib(g["hard"])}
+        if g["noaccess"] is not None:
+            sample.update({"vk_local_mib": ram_mib(g["vk_local"]), "vk_local_budget_mib": ram_mib(g["vk_local_budget"]),
+                           "vk_host_mib": ram_mib(g["vk_host"]), "vk_host_budget_mib": ram_mib(g["vk_host_budget"]),
+                           "spilled_mib": ram_mib(g["spilled"]), "noaccess_mib": ram_mib(g["noaccess"])})
+        used, limit = sample["commit_mib"], sample["commit_limit_mib"]
+        sample["commit_percent"] = used * 100 // limit if used is not None and limit else None
+        sample["evidence"] = self.ev(line).as_dict()
+        hm = self._host_memory()
+        hm["samples"] += 1
+        if hm["first"] is None:
+            hm["first"] = sample
+        hm["last"] = sample
+        hm["tail"].append(sample)
+        avail = sample["available_mib"]
+        if avail is not None:
+            hm["with_available"] += 1
+            if avail < LOW_AVAILABLE_MIB:
+                hm["low_available"] += 1
+            if hm["min_available"] is None or avail < hm["min_available"]["available_mib"]:
+                hm["min_available"] = sample
+        if sample.get("noaccess_mib"):
+            hm["noaccess_samples"] += 1
+            hm["max_noaccess_mib"] = max(hm["max_noaccess_mib"], sample["noaccess_mib"])
+        for key, peak in (("commit_percent", "peak_commit_percent"), ("private_mib", "peak_private_mib"),
+                          ("working_set_mib", "peak_working_set_mib")):
+            if sample[key] is not None and (hm[peak] is None or sample[key] > hm[peak]):
+                hm[peak] = sample[key]
+
     # -- imports --------------------------------------------------------------
     def _called(self, sym, line, **extra):
         rec = self.r.imports_called.get(sym)
@@ -1531,6 +1644,55 @@ class Scanner:
 
 # ---------------------------------------------------------------------------
 # Analysis
+
+def ram_mib(text):
+    """A number of a "RAM" line ("?": unknown, None)."""
+    return int(text) if text and text.isdigit() else None
+
+
+def commit_limit_enforced(rep, hm):
+    """Whether the host refuses commit past its limit, as Windows does: from the Host line, else from the RAM line's
+    page file (Windows' is an estimate, "~"; elsewhere it is the swap). None when the log tells neither. Linux
+    overcommits, so its Committed_AS passes CommitLimit harmlessly."""
+    os_name = (rep["identity"].get("host") or {}).get("os") or ""
+    if os_name:
+        return os_name.startswith("Windows")
+    st = hm.get("startup")
+    if st and st["page_file_mib"] is not None:
+        return st["page_file_estimated"]
+    return None
+
+
+def low_available_at_end(hm):
+    """Little RAM available when the log stops: the last sample under LOW_AVAILABLE_MIB, or most of the tail."""
+    last = hm.get("last")
+    if last and last["available_mib"] is not None and last["available_mib"] < LOW_AVAILABLE_MIB:
+        return True
+    tail = [s["available_mib"] for s in hm.get("tail") or [] if s["available_mib"] is not None]
+    return bool(tail) and sum(1 for a in tail if a < LOW_AVAILABLE_MIB) * 2 > len(tail)
+
+
+def host_memory_report(hm):
+    """rep["host_memory"]: the startup figures, the RAM profile, the warnings and the samples."""
+    out = collections.OrderedDict()
+    out["startup"] = hm["startup"]
+    out["profile"] = hm["profile"]
+    out["warnings"] = hm["warnings"]
+    out["warning_count"] = hm["warning_count"]
+    out["samples"] = hm["samples"]
+    out["first"] = hm["first"]
+    out["last"] = hm["last"]
+    out["tail"] = list(hm["tail"])
+    out["samples_with_available"] = hm["with_available"]
+    out["low_available_samples"] = hm["low_available"]
+    out["min_available"] = hm["min_available"]
+    out["noaccess_samples"] = hm["noaccess_samples"]
+    out["max_noaccess_mib"] = hm["max_noaccess_mib"]
+    out["peak_commit_percent"] = hm["peak_commit_percent"]
+    out["peak_private_mib"] = hm["peak_private_mib"]
+    out["peak_working_set_mib"] = hm["peak_working_set_mib"]
+    return out
+
 
 def library_files(repo):
     """LIB_NAME/LIB_VERSION library name -> repo-relative source files."""
@@ -1920,6 +2082,9 @@ def analyze(results, rules, repo=None, exit_code=None):
     rep["soft_fails"] = [{"api": a.fields["api"], "message": a.fields["message"], "count": a.count,
                           "first": a.examples[0].as_dict()} for a in results.soft_fails.values()]
     rep["guest_syscalls"] = [dict(s, evidence=s["evidence"].as_dict()) for s in results.syscalls]
+    # gta6-prep: ram: only with "RAM" lines, so that the other reports keep their shape.
+    if results.host_memory is not None:
+        rep["host_memory"] = host_memory_report(results.host_memory)
 
     # ---- progress / outcome
     p = results.progress
@@ -2134,6 +2299,40 @@ def rank_fix_areas(rep, rules, vendor):
     for s in rep["guest_syscalls"]:
         add("guest-syscall", rules.rule("guest-syscall").severity * 4, s["evidence"],
             "%d raw syscalls in %s" % (s["count"], s["module"]))
+
+    # gta6-prep: ram: the host memory figures of the "RAM" lines.
+    hm = rep.get("host_memory")
+    if hm:
+        if hm["warnings"]:
+            add("ram-warning", rules.rule("ram-warning").severity * 4 + _score_count(hm["warning_count"]),
+                hm["warnings"][0]["evidence"], "RAM warning: %s" % hm["warnings"][0]["text"][:160])
+        last = hm["last"]
+        # Only where the limit holds: Windows, or an unknown host whose charge is still within it.
+        enforced = commit_limit_enforced(rep, hm)
+        if (last and last["commit_percent"] is not None and last["commit_percent"] >= COMMIT_FULL_PERCENT and
+                (enforced or (enforced is None and last["commit_percent"] <= 100))):
+            add("ram-commit-full", rules.rule("ram-commit-full").severity * 4, last["evidence"],
+                "the last RAM usage sample has commit at %d%% of its limit (%d of %d MiB)" % (
+                    last["commit_percent"], last["commit_mib"], last["commit_limit_mib"]))
+        if hm["samples_with_available"] and hm["low_available_samples"] * 2 > hm["samples_with_available"]:
+            add("ram-available-low", rules.rule("ram-available-low").severity * 4 + _score_count(hm["low_available_samples"]),
+                hm["min_available"]["evidence"], "available RAM under %d MiB in %d of %d RAM usage samples (down to %d MiB)" % (
+                    LOW_AVAILABLE_MIB, hm["low_available_samples"], hm["samples_with_available"],
+                    hm["min_available"]["available_mib"]))
+        st = hm["startup"]
+        if st and st["phys_mib"] is not None and st["phys_mib"] < LOW_RAM_MIB and st["profile"] == "normal":
+            add("ram-low-ram-normal-profile", rules.rule("ram-low-ram-normal-profile").severity * 4, st["evidence"],
+                "%d MiB of RAM with the normal RAM profile" % st["phys_mib"])
+        # A session log never has a clean exit (those lines go to the printf log only), and preflight stops its
+        # boots: a log that stops is normal. The hint needs the end of the log to look like the bug check's
+        # setting, NOACCESS pages in the last samples with little RAM left, and it ranks under no-fatal.
+        if (not fatal and rep["outcome"] in ("no-fatal", "truncated") and last and
+                any(s.get("noaccess_mib") for s in hm["tail"]) and low_available_at_end(hm)):
+            add("ram-noaccess-bluescreen", rules.rule("ram-noaccess-bluescreen").severity * 4, last["evidence"],
+                "the log stops without a fatal report or a clean exit, with %s MiB of RAM available in the last "
+                "sample, after %d RAM usage sample(s) with NOACCESS guest pages (up to %d MiB)" % (
+                    last["available_mib"] if last["available_mib"] is not None else "?", hm["noaccess_samples"],
+                    hm["max_noaccess_mib"]))
 
     if not fatal:
         prog = rep["progress"]
@@ -2496,6 +2695,34 @@ def render_markdown(rep, top=10):
             out.append("- %s: %s x%d" % (s["api"], _md_escape(s["message"][:160]), s["count"]))
         for s in rep["guest_syscalls"]:
             out.append("- %d raw syscall(s) in %s (first at +%s)" % (s["count"], s["module"], s["offset"]))
+        out.append("")
+
+    hm = rep.get("host_memory")
+    if hm:
+        out.append("## Host memory")
+        out.append("")
+        if hm["startup"]:
+            out.append("- `%s`" % _md_escape(hm["startup"]["evidence"]["text"]))
+        if hm["profile"]:
+            out.append("- `%s`" % _md_escape(hm["profile"]["evidence"]["text"]))
+        for w in hm["warnings"]:
+            out.append("- RAM warning (%s): %s" % (_fmt_ev(w["evidence"]), _md_escape(w["text"][:300])))
+        if hm["samples"]:
+            first, last = hm["first"], hm["last"]
+            bits = ["%d `RAM usage:` sample(s) from t=%d to t=%d s" % (hm["samples"], first["t"], last["t"])]
+            if hm["min_available"]:
+                bits.append("available RAM down to %d MiB (under %d MiB in %d of %d)" % (
+                    hm["min_available"]["available_mib"], LOW_AVAILABLE_MIB, hm["low_available_samples"],
+                    hm["samples_with_available"]))
+            if hm["peak_commit_percent"] is not None:
+                bits.append("commit up to %d%% of its limit" % hm["peak_commit_percent"])
+            if hm["peak_private_mib"] is not None:
+                bits.append("private bytes up to %d MiB" % hm["peak_private_mib"])
+            if hm["noaccess_samples"]:
+                bits.append("NOACCESS guest pages in %d sample(s), up to %d MiB" % (hm["noaccess_samples"],
+                                                                                 hm["max_noaccess_mib"]))
+            out.append("- " + "; ".join(bits))
+            out.append("- last: `%s` (%s)" % (_md_escape(last["evidence"]["text"]), _fmt_ev(last["evidence"])))
         out.append("")
 
     out.append("## How far it got")

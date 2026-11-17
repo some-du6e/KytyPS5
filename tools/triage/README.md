@@ -78,6 +78,15 @@ Formats it knows (the emitters are listed in the survey catalogue and `notes/log
   pipeline creation.
 - Workarounds: `[HACK] ...: first at ...` grouped by hack, with totals from the 10 s summaries,
   plus `Soft-fail:` and `Guest syscall:`.
+- Host memory (gta6-prep: ram): `RAM:`, `RAM profile:`, `RAM warning:` and the `RAM usage:`
+  samples, in a `host_memory` section that only reports with those lines have. A line that two
+  sources share counts once: a preflight zip has each one in `session.log` and in
+  `emulator-boot.log`. Five rules rank them: a warning line; commit at 95% or more of its limit
+  in the last sample, on Windows only (Linux overcommits); under 300 MiB of available RAM in most
+  samples; under 14 GiB of RAM with the normal RAM profile; and a log that stops without a report,
+  low on RAM, after samples with NOACCESS guest pages. That last one is a hint and ranks under the
+  plain no-fatal rule, since a session log has no clean-exit line and preflight stops its boots.
+  It points at the Windows blue screen 0x1A/0x41202 and at Event 1001 in preflight's `system.txt`.
 - Progress: `Initialized:`, `Shaders: VS ...`, `--- Execute: Main`, pipeline cache and manifest
   lines, flips (only visible when a trace of `...Flip()` calls or `Flip done:` is on), the frame
   time `[HACK]` line, the last traced HLE call, and the clean-exit markers. Without a fatal

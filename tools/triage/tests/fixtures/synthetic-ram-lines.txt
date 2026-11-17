@@ -1,0 +1,18 @@
+SYNTHETIC gta6-prep: ram: the RAM lines of a session on a PC with 8 GB of RAM, normal RAM profile, that stops without a report
+--- Session 2026-11-19 21:00:00 ---
+Fork build some-du6e/KytyPS5 1234abc
+Session log: _Logs/PPSA00002_2026-11-19_21-00-00.log
+Title ID: PPSA00002
+RAM: phys=8090 MiB avail=4712 commit=18242/24474 headroom=6232 pagefile=~16384 guest=12736 profile=normal
+RAM warning: commit headroom 6232 MiB is below 12288 MiB. Add about 16384 MiB of page file, fixed size, on any drive with space (System Properties > Advanced > Performance Settings > Advanced > Virtual memory > Change, untick Automatically manage paging file size for all drives, pick the drive, Custom size), then restart Windows. A page file that Windows manages may grow on its own; a fixed size avoids the stall while it grows. The GPU driver may also charge commit for the video memory it allocates.
+GPU: NVIDIA GeForce RTX 3050 vendor=0x10de device=0x2582 driver=581.42.0.0 api=1.4.312 driverID=NvidiaProprietary vram=6144 MiB bar=256 MiB
+VRAM: budget=5376 MiB limit=off profile=low gc=proportional fixed: bda_table=768 fault=36 rings=192 recycle_cap=168 rt_arena=off thresholds: tex_trigger=2956 tex_pressure=4193 tex_critical=4945 buf_trigger=3763 buf_critical=4945
+Shader cache: compiling shaders and pipelines from _PipelineCache/PPSA00002.shaders (0.0 MB) with 6 threads
+Shader cache: loaded 0 programs, 0 modules, 0 pipelines in 0 ms
+RAM usage: t=30 ws=2100 private=6400 commit=20000/24474 avail=1900 faults=900 hard=? vk_local=1200/5560 vk_host=300/3711 spilled=0 noaccess=0
+RAM usage: t=60 ws=2420 private=7810 commit=21650/24474 avail=280 faults=2210 hard=? vk_local=3300/5560 vk_host=820/3711 spilled=0 noaccess=4
+RAM usage: t=90 ws=2610 private=8600 commit=22390/24474 avail=241 faults=3105 hard=? vk_local=4800/5560 vk_host=1210/3711 spilled=256 noaccess=96
+RAM usage: t=120 ws=2701 private=9120 commit=22880/24474 avail=1020 faults=2950 hard=? vk_local=5320/5560 vk_host=1530/3711 spilled=768 noaccess=210
+RAM usage: t=150 ws=2790 private=9640 commit=23210/24474 avail=203 faults=3388 hard=? vk_local=5390/5560 vk_host=1801/3711 spilled=1280 noaccess=288
+RAM usage: t=180 ws=2843 private=9875 commit=23400/24474 avail=187 faults=3412 hard=? vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312
+RAM warning: commit 23400 MiB is 95% of the 24474 MiB limit, past which allocations fail. Close other programs, or add about 20480 MiB of page file, fixed size, on any drive with space (System Properties > Advanced > Performance Settings > Advanced > Virtual memory > Change, untick Automatically manage paging file size for all drives, pick the drive, Custom size), then restart Windows. A page file that Windows manages may grow on its own; a fixed size avoids the stall while it grows.
