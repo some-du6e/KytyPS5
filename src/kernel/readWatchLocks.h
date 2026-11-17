@@ -71,9 +71,17 @@ public:
 	// SetBudget() halves what it asks for while Windows refuses, down to this.
 	static constexpr uint64_t SmallestAsk = uint64_t {1} << 20u;
 
-	// `room_step`: RoomStep, but in tests.
-	explicit ReadWatchLocks(Os os = {}, uint64_t room_step = RoomStep)
-	    : m_os(std::move(os)), m_room_step(std::max(room_step - room_step % PageSize, PageSize)) {}
+	// The room step, whole pages, at least one.
+	static constexpr uint64_t StepOf(uint64_t room_step) {
+		return std::max(room_step - room_step % PageSize, PageSize);
+	}
+
+	// `room_step`: RoomStep, but in tests. The OS side is built in place: the Windows one holds
+	// atomics, so it can be neither copied nor moved.
+	explicit ReadWatchLocks(uint64_t room_step = RoomStep): m_room_step(StepOf(room_step)) {}
+	// The tests' OS side, handed in (only instantiated for an OS side that can be moved).
+	explicit ReadWatchLocks(Os os, uint64_t room_step = RoomStep)
+	    : m_os(std::move(os)), m_room_step(StepOf(room_step)) {}
 
 	// The most bytes locked at once; 0: no new locks. The first room for them is made at once:
 	// when Windows refuses it, SetBudget() asks for half as much, down to SmallestAsk, and the room
