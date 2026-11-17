@@ -87,6 +87,12 @@ Formats it knows (the emitters are listed in the survey catalogue and `notes/log
   low on RAM, after samples with NOACCESS guest pages. That last one is a hint and ranks under the
   plain no-fatal rule, since a session log has no clean-exit line and preflight stops its boots.
   It points at the Windows blue screen 0x1A/0x41202 and at Event 1001 in preflight's `system.txt`.
+  Newer builds end the renderer's part of `RAM usage:` with `locked=<MiB>/<budget MiB>
+  overbudget=<pages> lockfail=<pages>`: the read-watched guest memory locked in RAM now, and so far
+  the page locks the budget refused (a page can count again when its run is protected again) and
+  those Windows refused. `host_memory.lock` keeps the last of them with the peak, and the hint says
+  how much was locked. `RAM lock:` lines (the working set raised before the first lock, or why the
+  lock stays off, and the first failed call) go to `host_memory.lock_lines`. Older lines still parse.
 - Progress: `Initialized:`, `Shaders: VS ...`, `--- Execute: Main`, pipeline cache and manifest
   lines, flips (only visible when a trace of `...Flip()` calls or `Flip done:` is on), the frame
   time `[HACK]` line, the last traced HLE call, and the clean-exit markers. Without a fatal

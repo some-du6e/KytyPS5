@@ -141,9 +141,12 @@ boots at all, and the RAM decides how slow it gets.
 
 - **The RAM profile.** With less than 14 GiB of RAM, preflight adds `--ram-profile low` after
   `--preset rtx3050` and prints one line saying so. That profile makes the emulator's buffers
-  smaller, runs fewer compile threads and no pipeline helpers, and implies `--oom-recovery`. A PC
-  with 16 GB reports a little under 16 GiB and keeps the normal settings. `-ExtraArgs "--ram-profile
-  normal"` turns it off, and preflight then adds nothing.
+  smaller, runs fewer compile threads and no pipeline helpers, and implies `--oom-recovery`. It also
+  keeps up to 128 MiB of the guest memory the GPU trackers make inaccessible locked in RAM, which
+  another fork found Windows can blue-screen on once it pages such memory out
+  (`--lock-read-watched-mb` sets the amount). A PC with 16 GB reports a little under 16 GiB and
+  keeps the normal settings. `-ExtraArgs "--ram-profile normal"` turns it off, and preflight then
+  adds nothing.
 - **The free commit.** Right before the boot, preflight checks how much of the commit limit is
   free. Below 25,024 MiB (12,736 MiB of guest memory plus 12 GiB for the GPU driver and the
   emulator) it prints a yellow line with the steps for a bigger page file, and boots anyway. The
