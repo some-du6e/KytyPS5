@@ -664,10 +664,11 @@
    "scope": "meta",
    "severity": 35,
    "fix_area": [
-    "src/graphics/host_gpu/pageManager.cpp",
-    "src/kernel/memoryAddressSpace.inc"
+    "src/kernel/readWatchLocks.h",
+    "src/kernel/memoryAddressSpace.inc",
+    "src/graphics/host_gpu/pageManager.cpp"
    ],
-   "next_step": "Only if Windows restarted with a blue screen: a session log that stops is also what a kill, a hang or preflight's time limit leaves. Look for Event 1001 with MEMORY_MANAGEMENT 0x1A, first parameter 0x41202, in preflight's system.txt. Another fork traced that bug check to read-watched (PAGE_NOACCESS) pages of the pagefile-backed guest section once Windows pages them out (unverified here). The fix that was designed locks those pages in RAM (VirtualLock) before making them NOACCESS; write it only once such an event shows up. Until then, a bigger page file and fewer other programs make it rarer.",
+   "next_step": "Only if Windows restarted with a blue screen: a session log that stops is also what a kill, a hang or preflight's time limit leaves. Look for Event 1001 with MEMORY_MANAGEMENT 0x1A, first parameter 0x41202, in preflight's system.txt. Another fork traced that bug check to read-watched (PAGE_NOACCESS) pages of the pagefile-backed guest section once Windows pages them out (unverified here). Their fix makes those pages guard pages instead and keeps PAGE_NOACCESS only on pages it has locked in RAM (32 MiB at most); this branch has no guard pages. --ram-profile low locks the read-watched pages of the section in RAM instead, up to an eighth of the RAM (VirtualLock; --lock-read-watched-mb sets the amount, 0 turns it off). The RAM usage lines' locked field shows how much is locked, unlocked how much stays NOACCESS without a lock (the pages the bug check needs), lockfail the page locks Windows refused and slowlocks the VirtualLock calls over 1 ms; the RAM lock lines show the working-set raise, a budget the cap cut and Windows' limit. With unlocked at 0 in the last samples, the lock covered every read-watched page and the cause is elsewhere (the guest's own PROT_NONE pages are never locked). With unlocked above 0, the cap or Windows stopped the lock, and the fix is the other fork's guard pages for the pages past it (not ported). A bigger page file and fewer other programs also make it rarer.",
    "known": [
     "chenxiao07/KytyPS5#5: 0x1A/0x41202 with PAGE_NOACCESS on a pagefile-backed section"
    ]

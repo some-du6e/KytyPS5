@@ -1421,7 +1421,8 @@ void TestFaultOnProtectedStack() {
 namespace Libs::LibKernel::Memory {
 
 bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size,
-                            Common::VirtualMemory::Mode mode) {
+                            Common::VirtualMemory::Mode mode,
+                            ReadWatch /*watch*/) {
   return ProtectAddressSpace(vaddr, size, mode);
 }
 

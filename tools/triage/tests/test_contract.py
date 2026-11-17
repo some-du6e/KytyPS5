@@ -354,6 +354,115 @@ class ContractRamTests(unittest.TestCase):
         self.assertEqual(len(hm["warnings"]), 2)
         self.assertEqual([s["t"] for s in hm["tail"]], [90, 120, 150, 180])
 
+    def test_lock_fields_and_lines(self):
+        # gta6-prep: ram-lock: --ram-profile low on 8 GB. The RAM usage lines end with the locked read-watched
+        # memory and what stays NOACCESS without a lock, and the RAM lock line says how the working set was raised.
+        text = (
+            "--- Session 2026-11-19 21:00:00 ---\n"
+            "Fork build some-du6e/KytyPS5 1234abc\n"
+            "Title ID: PPSA00002\n"
+            "RAM lock: budget=1011 MiB working_set=80/81 MiB (was 0/1)\n"
+            "RAM: phys=8090 MiB avail=4712 commit=18242/40858 headroom=22616 pagefile=~32768 guest=12736 profile=low\n"
+            "RAM profile: low -> upload_ring=128 download_ring=32 compile_workers=3 async_threads=2 parallel_threads=2 "
+            "helpers<=0 cache_save=180s/60s fresh_stack_clear=off recycle_spilled=off lock_read_watched=all "
+            "oom_recovery=on\n"
+            "RAM usage: t=30 ws=2100 private=6400 commit=30000/40858 avail=900 faults=900 hard=? vk_local=1200/5560 "
+            "vk_host=300/3711 spilled=0 noaccess=0 oneoff=0/0 locked=0/1011 unlocked=0 lockfail=0 slowlocks=0/0\n"
+            "RAM usage: t=60 ws=2420 private=7810 commit=31650/40858 avail=280 faults=2210 hard=? vk_local=3300/5560 "
+            "vk_host=820/3711 spilled=0 noaccess=96 oneoff=3/96 locked=96/1011 unlocked=0 lockfail=0 slowlocks=2/7\n"
+            "RAM usage: t=90 ws=2610 private=8600 commit=32390/40858 avail=241 faults=3105 hard=? vk_local=4800/5560 "
+            "vk_host=1210/3711 spilled=256 noaccess=1312 oneoff=9/260 locked=1011/1011 unlocked=301 lockfail=0 "
+            "slowlocks=9/48\n"
+            "RAM usage: t=120 ws=2701 private=9120 commit=32880/40858 avail=203 faults=2950 hard=? vk_local=5320/5560 "
+            "vk_host=1530/3711 spilled=768 noaccess=1210 oneoff=11/300 locked=1009/1011 unlocked=201 lockfail=0 "
+            "slowlocks=12/48\n")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(text.encode("utf-8")))
+        hm = rep["host_memory"]
+        self.assertTrue(hm["profile"]["settings"].endswith("lock_read_watched=all oom_recovery=on"))
+        last = hm["last"]
+        self.assertEqual((last["noaccess_mib"], last["one_off_buffers"], last["locked_mib"], last["lock_budget_mib"],
+                          last["unlocked_mib"], last["lock_failed_pages"], last["slow_lock_calls"],
+                          last["longest_lock_ms"]), (1210, 11, 1009, 1011, 201, 0, 12, 48))
+        self.assertEqual(hm["lock"], {"locked_mib": 1009, "max_locked_mib": 1011, "budget_mib": 1011,
+                                      "unlocked_mib": 201, "max_unlocked_mib": 301, "failed_pages": 0,
+                                      "slow_lock_calls": 12, "longest_lock_ms": 48, "t": 120})
+        self.assertEqual([x["text"] for x in hm["lock_lines"]], ["budget=1011 MiB working_set=80/81 MiB (was 0/1)"])
+        # The log stops low on RAM with NOACCESS pages: the hint, which says how much of it had no lock.
+        bluescreen = [a for a in rep["fix_areas"] if a["rule_id"] == "ram-noaccess-bluescreen"]
+        self.assertEqual(len(bluescreen), 1)
+        self.assertIn("with 203 MiB of RAM available in the last sample", bluescreen[0]["why"][0])
+        self.assertIn("201 MiB of it NOACCESS without a lock in the last sample (1009 MiB locked of a 1011 MiB "
+                      "budget, 0 page lock(s) Windows refused so far)", bluescreen[0]["why"][0])
+        self.assertIn("0x41202", bluescreen[0]["next_step"])
+        self.assertIn("--lock-read-watched-mb", bluescreen[0]["next_step"])
+        self.assertIn("guard pages", bluescreen[0]["next_step"])
+        self.assertNotIn("fixed it by locking", bluescreen[0]["next_step"])
+        md = u.kt.render_markdown(rep)
+        self.assertIn("- RAM lock (", md)
+        self.assertIn("budget=1011 MiB working_set=80/81 MiB (was 0/1)", md)
+        self.assertIn("read-watched memory locked in RAM up to 1011 MiB of a 1011 MiB budget, up to 301 MiB NOACCESS "
+                      "without a lock, 0 page lock(s) Windows refused and 12 VirtualLock call(s) over 1 ms (longest "
+                      "48 ms) by t=120 s", md)
+        # Nothing above the plain no-fatal rule and the other host memory rules changes.
+        self.assertNotIn("ram-low-ram-normal-profile", [a["rule_id"] for a in rep["fix_areas"]])
+
+    def test_lock_off_and_failures(self):
+        # The normal profile prints the fields with no budget: the hint says nothing was locked, and the markdown
+        # leaves the lock out. A failed raise, a cut budget, a failed VirtualLock and Windows' limit show as RAM
+        # lock lines.
+        head = ("--- Session 2026-11-19 21:00:00 ---\n"
+                "Fork build some-du6e/KytyPS5 1234abc\n")
+        usage = ("RAM usage: t=60 ws=2420 private=7810 commit=21650/24474 avail=180 faults=2210 hard=? "
+                 "vk_local=3300/5560 vk_host=820/3711 spilled=0 noaccess=40 oneoff=3/96 locked=%s unlocked=%s "
+                 "lockfail=%s slowlocks=%s\n")
+        rep = u.kt.triage(["-"], rules=u.RULES,
+                          stdin=io.BytesIO((head + usage % ("0/0", "0", "0", "0/0")).encode("utf-8")))
+        hm = rep["host_memory"]
+        self.assertEqual(hm["lock"]["budget_mib"], 0)
+        self.assertEqual(hm["lock_lines"], [])
+        bluescreen = [a for a in rep["fix_areas"] if a["rule_id"] == "ram-noaccess-bluescreen"]
+        self.assertIn("none of it locked in RAM (no --lock-read-watched-mb budget)", bluescreen[0]["why"][0])
+        self.assertNotIn("read-watched memory locked in RAM", u.kt.render_markdown(rep))
+        failed = (head +
+                  "RAM lock: budget=1011 MiB working_set=? (SetProcessWorkingSetSizeEx error 1450): read-watched "
+                  "guest memory stays unlocked\n" +
+                  usage % ("0/0", "0", "0", "0/0"))
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(failed.encode("utf-8")))
+        self.assertTrue(rep["host_memory"]["lock_lines"][0]["text"].startswith("budget=1011 MiB working_set=? "))
+        self.assertIn("SetProcessWorkingSetSizeEx error 1450", u.kt.render_markdown(rep))
+        locks = (head +
+                 "RAM lock: --lock-read-watched-mb 8192 is more than an eighth of the RAM: 1011 MiB\n"
+                 "RAM lock: budget=1011 MiB working_set=80/81 MiB (was 0/1)\n"
+                 "RAM lock: first failure: VirtualLock of 64 KiB (error 1453)\n"
+                 "RAM lock: Windows' limit reached at 300 MiB of a 1011 MiB budget (VirtualLock error 1453): the "
+                 "budget is 300 MiB from now on\n" +
+                 usage % ("300/300", "12", "16", "1/3"))
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(locks.encode("utf-8")))
+        hm = rep["host_memory"]
+        self.assertEqual(len(hm["lock_lines"]), 4)
+        self.assertEqual((hm["lock"]["failed_pages"], hm["lock"]["locked_mib"], hm["lock"]["unlocked_mib"],
+                          hm["lock"]["budget_mib"]), (16, 300, 12, 300))
+        md = u.kt.render_markdown(rep)
+        self.assertIn("16 page lock(s) Windows refused and 1 VirtualLock call(s) over 1 ms (longest 3 ms) by t=60 s",
+                      md)
+        self.assertIn("Windows' limit reached at 300 MiB", md)
+        bluescreen = [a for a in rep["fix_areas"] if a["rule_id"] == "ram-noaccess-bluescreen"]
+        self.assertIn("12 MiB of it NOACCESS without a lock in the last sample (300 MiB locked of a 300 MiB budget, "
+                      "16 page lock(s) Windows refused so far)", bluescreen[0]["why"][0])
+        # A zip with the lines twice counts each once.
+        doubled = locks + locks
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(doubled.encode("utf-8")))
+        self.assertEqual(len(rep["host_memory"]["lock_lines"]), 4)
+        # A line from a build before the lock fields still parses, without them.
+        older = head + usage.split(" locked=")[0] + "\n"
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(older.encode("utf-8")))
+        self.assertEqual(rep["host_memory"]["last"]["noaccess_mib"], 40)
+        self.assertNotIn("locked_mib", rep["host_memory"]["last"])
+        self.assertIsNone(rep["host_memory"]["lock"])
+        bluescreen = [a for a in rep["fix_areas"] if a["rule_id"] == "ram-noaccess-bluescreen"]
+        self.assertNotIn("locked in RAM", bluescreen[0]["why"][0])
+        self.assertNotIn("without a lock", bluescreen[0]["why"][0])
+
     def test_reports_without_ram_lines_keep_their_shape(self):
         for case in ("synthetic-contract-session.txt", "gta5-829-v22-session-log.txt"):
             with self.subTest(case=case):

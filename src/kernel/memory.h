@@ -256,8 +256,27 @@ uint64_t AllocateGuestStackMemory(uint64_t search_addr, uint64_t size,
                                   Common::VirtualMemory::Mode mode, const char* name);
 bool     ProtectGuestMemory(uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode,
                             Common::VirtualMemory::Mode* old_mode = nullptr);
+// gta6-prep: ram-lock: what a tracker protection does to the PageManager's read watches: Start
+// makes the range inaccessible (NoAccess) for them, End gives it back the access it had.
+enum class ReadWatch : uint8_t { None, Start, End };
 // Transient PageManager watch state; does not change the guest mapping's semantic protection.
-bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode);
+// gta6-prep: ram-lock: on Windows with a lock budget (--lock-read-watched-mb), Start first locks
+// the range's backing pages in RAM, and End unlocks the ones Start locked once the access is back
+// and offers the budget that frees to pages refused earlier (ReadWatchLocks).
+bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode,
+                            ReadWatch watch = ReadWatch::None);
+// gta6-prep: ram-lock: the read watches' locked backing pages (ReadWatchLocks). The "RAM usage:"
+// lines' locked, unlocked, lockfail and slowlocks.
+struct ReadWatchLockStats {
+	uint64_t budget_bytes    = 0; // 0: off, as always except on Windows; less at Windows' limit
+	uint64_t locked_bytes    = 0; // now
+	uint64_t unlocked_bytes  = 0; // read-watched guest section pages without a lock, now
+	uint64_t failed_pages    = 0; // page locks VirtualLock refused, so far
+	uint64_t slow_lock_calls = 0; // VirtualLock calls that took over 1 ms, so far
+	uint64_t longest_lock_us = 0; // the longest VirtualLock call, so far
+};
+// Any thread, lock-free.
+[[nodiscard]] ReadWatchLockStats GetReadWatchLockStats() noexcept;
 // Whether the guest mapped the byte at vaddr for execution.
 [[nodiscard]] bool IsGuestExecutable(uint64_t vaddr);
 bool FreeGuestMemory(uint64_t vaddr, uint64_t size);
@@ -276,6 +295,7 @@ uint64_t TestDirectMappingCount();
 uint64_t TestFlexibleMappingCount();
 uint64_t TestBackingBytesZeroed();
 bool     TestGuestFreeRangeBounds();
+uint64_t TestSetReadWatchLockBudget(uint64_t bytes); // gta6-prep: ram-lock
 #endif
 
 } // namespace Libs::LibKernel::Memory

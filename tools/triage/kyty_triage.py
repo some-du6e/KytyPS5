@@ -425,7 +425,13 @@ R_RAM_USAGE = re.compile(r"^RAM usage: t=(?P<t>\d+) ws=(?P<ws>\S+) private=(?P<p
                          r"commit=(?P<commit>\S+)/(?P<limit>\S+) avail=(?P<avail>\S+) faults=(?P<faults>\S+) "
                          r"hard=(?P<hard>\S+)(?: vk_local=(?P<vk_local>\S+)/(?P<vk_local_budget>\S+) "
                          r"vk_host=(?P<vk_host>\S+)/(?P<vk_host_budget>\S+) spilled=(?P<spilled>\S+) "
-                         r"noaccess=(?P<noaccess>\S+)(?: oneoff=(?P<oneoff>\d+)/(?P<oneoff_mib>\S+))?)?")
+                         r"noaccess=(?P<noaccess>\S+)(?: oneoff=(?P<oneoff>\d+)/(?P<oneoff_mib>\S+))?"
+                         # gta6-prep: ram-lock: the read-watched memory locked in RAM (newer builds).
+                         r"(?: locked=(?P<locked>\d+)/(?P<lock_budget>\d+) unlocked=(?P<unlocked>\d+) "
+                         r"lockfail=(?P<lockfail>\d+) slowlocks=(?P<slowlocks>\d+)/(?P<longest_lock>\d+))?)?")
+# gta6-prep: ram-lock: the working set raised for the lock budget at startup, or why the lock stays off, a
+# budget the cap cut, the first failed VirtualLock or VirtualUnlock, and Windows' limit.
+R_RAM_LOCK = re.compile(r"^RAM lock: (?P<text>.*?)\s*$")
 # Below this the RAM usage thread's samples count as "little RAM left" (ram-available-low), and a
 # PC with less RAM than LOW_RAM_MIB wants --ram-profile low (ram-low-ram-normal-profile).
 LOW_AVAILABLE_MIB = 300
@@ -624,6 +630,7 @@ class Scanner:
             (b"RAM profile: ", self.h_ram_profile),
             (b"RAM warning: ", self.h_ram_warning),
             (b"RAM usage: ", self.h_ram_usage),
+            (b"RAM lock: ", self.h_ram_lock),
             (b"terminate", self.h_terminate),
             (b"PageManager fatal: ", self.h_side_fatal),
             (b"Guest abort diagnostics:", self.h_guest_abort),
@@ -1285,7 +1292,8 @@ class Scanner:
                                        "samples": 0, "first": None, "last": None, "tail": collections.deque(maxlen=4),
                                        "with_available": 0, "low_available": 0, "min_available": None,
                                        "noaccess_samples": 0, "max_noaccess_mib": 0, "peak_commit_percent": None,
-                                       "peak_private_mib": None, "peak_working_set_mib": None, "one_off": None}
+                                       "peak_private_mib": None, "peak_working_set_mib": None, "one_off": None,
+                                       "lock": None, "lock_lines": []}
         return hm
 
     def _ram_seen(self, line):
@@ -1348,6 +1356,13 @@ class Scanner:
             # The one-time buffers that took transfers the host rings could not, so far (newer builds).
             if g["oneoff"] is not None:
                 sample.update({"one_off_buffers": int(g["oneoff"]), "one_off_mib": ram_mib(g["oneoff_mib"])})
+            # The read-watched memory locked in RAM now and its budget (0: off), the read-watched memory of the
+            # guest section that is NOACCESS without a lock now, and so far the page locks Windows refused, the
+            # VirtualLock calls over 1 ms and the longest one in ms (newer builds).
+            if g["locked"] is not None:
+                sample.update({"locked_mib": int(g["locked"]), "lock_budget_mib": int(g["lock_budget"]),
+                               "unlocked_mib": int(g["unlocked"]), "lock_failed_pages": int(g["lockfail"]),
+                               "slow_lock_calls": int(g["slowlocks"]), "longest_lock_ms": int(g["longest_lock"])})
         used, limit = sample["commit_mib"], sample["commit_limit_mib"]
         sample["commit_percent"] = used * 100 // limit if used is not None and limit else None
         sample["evidence"] = self.ev(line).as_dict()
@@ -1366,6 +1381,14 @@ class Scanner:
                 hm["min_available"] = sample
         if "one_off_buffers" in sample:
             hm["one_off"] = {"buffers": sample["one_off_buffers"], "mib": sample["one_off_mib"], "t": sample["t"]}
+        if "locked_mib" in sample:
+            prev = hm["lock"] or {"max_locked_mib": 0, "max_unlocked_mib": 0}
+            hm["lock"] = {"locked_mib": sample["locked_mib"],
+                          "max_locked_mib": max(prev["max_locked_mib"], sample["locked_mib"]),
+                          "budget_mib": sample["lock_budget_mib"], "unlocked_mib": sample["unlocked_mib"],
+                          "max_unlocked_mib": max(prev["max_unlocked_mib"], sample["unlocked_mib"]),
+                          "failed_pages": sample["lock_failed_pages"], "slow_lock_calls": sample["slow_lock_calls"],
+                          "longest_lock_ms": sample["longest_lock_ms"], "t": sample["t"]}
         if sample.get("noaccess_mib"):
             hm["noaccess_samples"] += 1
             hm["max_noaccess_mib"] = max(hm["max_noaccess_mib"], sample["noaccess_mib"])
@@ -1373,6 +1396,15 @@ class Scanner:
                           ("working_set_mib", "peak_working_set_mib")):
             if sample[key] is not None and (hm[peak] is None or sample[key] > hm[peak]):
                 hm[peak] = sample[key]
+
+    def h_ram_lock(self, line):
+        if self._ram_seen(line):
+            return
+        m = R_RAM_LOCK.match(line)
+        if m:
+            hm = self._host_memory()
+            if len(hm["lock_lines"]) < 6:
+                hm["lock_lines"].append({"text": m.group("text"), "evidence": self.ev(line).as_dict()})
 
     # -- imports --------------------------------------------------------------
     def _called(self, sym, line, **extra):
@@ -1697,6 +1729,8 @@ def host_memory_report(hm):
     out["peak_private_mib"] = hm["peak_private_mib"]
     out["peak_working_set_mib"] = hm["peak_working_set_mib"]
     out["one_off"] = hm["one_off"]
+    out["lock"] = hm["lock"]
+    out["lock_lines"] = hm["lock_lines"]
     return out
 
 
@@ -2334,11 +2368,21 @@ def rank_fix_areas(rep, rules, vendor):
         # setting, NOACCESS pages in the last samples with little RAM left, and it ranks under no-fatal.
         if (not fatal and rep["outcome"] in ("no-fatal", "truncated") and last and
                 any(s.get("noaccess_mib") for s in hm["tail"]) and low_available_at_end(hm)):
-            add("ram-noaccess-bluescreen", rules.rule("ram-noaccess-bluescreen").severity * 4, last["evidence"],
-                "the log stops without a fatal report or a clean exit, with %s MiB of RAM available in the last "
-                "sample, after %d RAM usage sample(s) with NOACCESS guest pages (up to %d MiB)" % (
-                    last["available_mib"] if last["available_mib"] is not None else "?", hm["noaccess_samples"],
-                    hm["max_noaccess_mib"]))
+            why = ("the log stops without a fatal report or a clean exit, with %s MiB of RAM available in the last "
+                   "sample, after %d RAM usage sample(s) with NOACCESS guest pages (up to %d MiB)" % (
+                       last["available_mib"] if last["available_mib"] is not None else "?", hm["noaccess_samples"],
+                       hm["max_noaccess_mib"]))
+            # gta6-prep: ram-lock: how much of it was NOACCESS without a lock, the pages the bug check needs: the
+            # lock covers the rest.
+            if "locked_mib" in last:
+                if last["lock_budget_mib"]:
+                    why += ("; %d MiB of it NOACCESS without a lock in the last sample (%d MiB locked of a %d MiB "
+                            "budget, %d page lock(s) Windows refused so far)" % (
+                                last["unlocked_mib"], last["locked_mib"], last["lock_budget_mib"],
+                                last["lock_failed_pages"]))
+                else:
+                    why += "; none of it locked in RAM (no --lock-read-watched-mb budget)"
+            add("ram-noaccess-bluescreen", rules.rule("ram-noaccess-bluescreen").severity * 4, last["evidence"], why)
 
     if not fatal:
         prog = rep["progress"]
@@ -2713,6 +2757,8 @@ def render_markdown(rep, top=10):
             out.append("- `%s`" % _md_escape(hm["profile"]["evidence"]["text"]))
         for w in hm["warnings"]:
             out.append("- RAM warning (%s): %s" % (_fmt_ev(w["evidence"]), _md_escape(w["text"][:300])))
+        for lock_line in hm.get("lock_lines") or []:
+            out.append("- RAM lock (%s): %s" % (_fmt_ev(lock_line["evidence"]), _md_escape(lock_line["text"][:300])))
         if hm["samples"]:
             first, last = hm["first"], hm["last"]
             bits = ["%d `RAM usage:` sample(s) from t=%d to t=%d s" % (hm["samples"], first["t"], last["t"])]
@@ -2731,6 +2777,13 @@ def render_markdown(rep, top=10):
                 bits.append("%d one-time ring buffer(s) by t=%d s (%s MiB)" % (
                     hm["one_off"]["buffers"], hm["one_off"]["t"],
                     hm["one_off"]["mib"] if hm["one_off"]["mib"] is not None else "?"))
+            lock = hm.get("lock")
+            if lock and (lock["budget_mib"] or lock["max_locked_mib"] or lock["failed_pages"]):
+                bits.append("read-watched memory locked in RAM up to %d MiB of a %d MiB budget, up to %d MiB NOACCESS "
+                            "without a lock, %d page lock(s) Windows refused and %d VirtualLock call(s) over 1 ms "
+                            "(longest %d ms) by t=%d s" % (
+                                lock["max_locked_mib"], lock["budget_mib"], lock["max_unlocked_mib"],
+                                lock["failed_pages"], lock["slow_lock_calls"], lock["longest_lock_ms"], lock["t"]))
             out.append("- " + "; ".join(bits))
             out.append("- last: `%s` (%s)" % (_md_escape(last["evidence"]["text"]), _fmt_ev(last["evidence"])))
         out.append("")

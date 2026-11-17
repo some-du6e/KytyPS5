@@ -303,6 +303,14 @@ public:
 		return split ? nullptr : result;
 	}
 
+	// gta6-prep: ram-lock: calls f(backing offset, start, bytes) for each run of contiguous backing
+	// of the span, as WriteBacking() walks it, and skips the unbacked pages. Callers hold the state
+	// lock, so no view changes meanwhile; without it (a prefetch), the runs may be stale.
+	template <typename F>
+	void ForEachBackedRun(uint64_t vaddr, uint64_t size, F&& f) const {
+		ForEachRun(vaddr, size, f, [](uint64_t, uint64_t) {});
+	}
+
 	template <typename Gap>
 	void ReadSparseBacking(uint64_t vaddr, void* data, uint64_t size, Gap&& gap) const {
 		auto* destination = static_cast<uint8_t*>(data);
@@ -596,6 +604,137 @@ private:
 	std::array<std::atomic<std::atomic<uint32_t>*>, BucketCount> m_pages {};
 };
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+// gta6-prep: ram-lock: ReadWatchLocks's calls, on the backing view. It is always read-write, and
+// VirtualLock cannot lock a no-access page: the guest view of a watched page is one. Each line it
+// writes, it writes once (common/ramOptions.h has their text).
+class BackingViewLocks {
+public:
+	static constexpr uint64_t PageSize = ReadWatchPageSize;
+
+	void SetView(uint8_t* base) noexcept { m_base = base; }
+
+	// The minimum working set must hold the locks; the maximum stays above it. Both go to what they
+	// were before the first raise plus `bytes` and a margin, keeping whether Windows enforces them.
+	bool Prepare(uint64_t bytes) {
+		if (!m_have_base) {
+			if (GetProcessWorkingSetSizeEx(GetCurrentProcess(), &m_was_minimum, &m_was_maximum,
+			                               &m_flags) == 0) {
+				Refused("GetProcessWorkingSetSizeEx");
+				return false;
+			}
+			m_have_base = true;
+		}
+		const SIZE_T raise   = bytes + ReadWatchLockMargin;
+		const SIZE_T minimum = m_was_minimum + raise;
+		const SIZE_T maximum = m_was_maximum + raise;
+		if (SetProcessWorkingSetSizeEx(GetCurrentProcess(), minimum, maximum, m_flags) == 0) {
+			Refused("SetProcessWorkingSetSizeEx");
+			return false;
+		}
+		m_minimum = minimum;
+		m_maximum = maximum;
+		return true;
+	}
+
+	void Prepared(uint64_t budget, uint64_t refused, uint64_t room) {
+		Log::WriteToConsoleAndLog(
+		    room == 0
+		        ? Config::FormatLockStartFailed(budget, m_refused_call, m_refused_error)
+		        : Config::FormatLockStart(budget, m_minimum, m_maximum, m_was_minimum,
+		                                  m_was_maximum, refused, m_refused_call, m_refused_error));
+	}
+
+	ReadWatchLockResult Lock(uint64_t offset, uint64_t size) {
+		using Clock       = std::chrono::steady_clock;
+		using Micros      = std::chrono::microseconds;
+		const auto begin  = Clock::now();
+		const bool locked = VirtualLock(m_base + offset, size) != 0;
+		const auto error  = locked ? 0 : static_cast<uint32_t>(GetLastError());
+		const auto took   = std::chrono::duration_cast<Micros>(Clock::now() - begin);
+		// Under the address space's lock mutex: one writer.
+		const auto micros = static_cast<uint64_t>(took.count());
+		if (micros > m_longest_us.load(std::memory_order_relaxed)) {
+			m_longest_us.store(micros, std::memory_order_relaxed);
+		}
+		if (micros > 1000) {
+			m_slow_calls.fetch_add(1, std::memory_order_relaxed);
+		}
+		if (locked) {
+			return ReadWatchLockResult::Locked;
+		}
+		m_refused_call  = "VirtualLock";
+		m_refused_error = error;
+		ReportFirstFailure("VirtualLock", size, error);
+		return error == ERROR_WORKING_SET_QUOTA ? ReadWatchLockResult::Quota
+		                                        : ReadWatchLockResult::Failed;
+	}
+
+	void Unlock(uint64_t offset, uint64_t size) {
+		if (VirtualUnlock(m_base + offset, size) == 0) {
+			ReportFirstFailure("VirtualUnlock", size, static_cast<uint32_t>(GetLastError()));
+		}
+	}
+
+	// Without an answer, none: a page held by mistake would be unlocked by mistake later, which
+	// takes it out of the working set.
+	void QueryLocked(uint64_t offset, uint64_t pages, std::vector<uint8_t>& locked) {
+		m_query.assign(pages, {});
+		for (uint64_t index = 0; index < pages; index++) {
+			m_query[index].VirtualAddress = m_base + offset + index * PageSize;
+		}
+		if (K32QueryWorkingSetEx(GetCurrentProcess(), m_query.data(),
+		                         static_cast<DWORD>(pages * sizeof(m_query[0]))) == 0) {
+			return;
+		}
+		for (uint64_t index = 0; index < pages; index++) {
+			const auto& page = m_query[index].VirtualAttributes;
+			locked[index]    = page.Valid != 0 && page.Locked != 0 ? 1 : 0;
+		}
+	}
+
+	void Capped(uint64_t limit, uint64_t budget) {
+		Log::WriteToConsoleAndLog(
+		    Config::FormatLockCapped(limit, budget, m_refused_call, m_refused_error));
+	}
+
+	// The VirtualLock calls' figures of the "RAM usage:" lines. Any thread.
+	void AddCallStats(ReadWatchLockStats& stats) const noexcept {
+		stats.slow_lock_calls = m_slow_calls.load(std::memory_order_relaxed);
+		stats.longest_lock_us = m_longest_us.load(std::memory_order_relaxed);
+	}
+
+private:
+	void Refused(const char* call) {
+		m_refused_call  = call;
+		m_refused_error = static_cast<uint32_t>(GetLastError());
+	}
+
+	void ReportFirstFailure(std::string_view call, uint64_t size, uint32_t error) {
+		if (!std::exchange(m_reported, true)) {
+			Log::WriteToConsoleAndLog(Config::FormatLockCallFailed(call, size, error));
+		}
+	}
+
+	uint8_t* m_base     = nullptr;
+	bool     m_reported = false;
+	// The working set before the first raise, and after the last one; the last call Windows
+	// refused.
+	bool        m_have_base     = false;
+	SIZE_T      m_was_minimum   = 0;
+	SIZE_T      m_was_maximum   = 0;
+	DWORD       m_flags         = 0;
+	SIZE_T      m_minimum       = 0;
+	SIZE_T      m_maximum       = 0;
+	const char* m_refused_call  = "";
+	uint32_t    m_refused_error = 0;
+	// Read by any thread.
+	std::atomic<uint64_t>                         m_slow_calls {0};
+	std::atomic<uint64_t>                         m_longest_us {0};
+	std::vector<PSAPI_WORKING_SET_EX_INFORMATION> m_query;
+};
+#endif
+
 // Callers change it with the state lock held exclusively and query it under the operation lock or
 // the state lock. TryWriteBacking, CopySparseMemory and ProtectTransient take the state lock shared
 // themselves.
@@ -609,6 +748,9 @@ public:
 #endif
 		ReserveGuestRegions();
 		m_backing = new GuestBackingStore(backing_size);
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		m_read_locks.GetOs().SetView(reinterpret_cast<uint8_t*>(m_backing->GetBackingBase()));
+#endif
 	}
 
 	~GuestAddressSpace() {
@@ -751,9 +893,64 @@ public:
 	}
 
 	// Tracker protections only read m_mapped; the page tracker orders them per page.
-	bool ProtectTransient(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode) {
+	bool ProtectTransient(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode,
+	                      ReadWatch watch) {
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		// gta6-prep: ram-lock: a read watch's backing pages are locked before its pages lose their
+		// access, and unlocked once they have it back. The state lock keeps the translation as it
+		// is, and the page tracker's lock, held by the caller, the pages' watches. Without a
+		// budget nothing changes.
+		const bool lock = watch == ReadWatch::Start && mode == VirtualMemory::Mode::NoAccess &&
+		                  m_read_locks.Enabled();
+		if (lock && m_read_locks.HasRoom()) {
+			PrefetchBacking(vaddr, size);
+		}
+		std::shared_lock state(g_memory_state_mutex);
+		if (lock) {
+			std::lock_guard locks(m_read_lock_mutex);
+			m_backing->ForEachBackedRun(vaddr, size,
+			                            [&](uint64_t offset, uint64_t start, uint64_t bytes) {
+				                            m_read_locks.Lock(offset, start, bytes);
+			                            });
+		}
+		if (!ProtectMappedUnlocked(vaddr, size, mode)) {
+			return false;
+		}
+		if (watch == ReadWatch::End && m_read_locks.HasWork()) {
+			std::lock_guard locks(m_read_lock_mutex);
+			m_read_locks.Unlock(vaddr, size, [&](uint64_t start, uint64_t bytes, auto&& run) {
+				m_backing->ForEachBackedRun(start, bytes, run);
+			});
+		}
+		return true;
+#else
+		(void)watch;
 		std::shared_lock state(g_memory_state_mutex);
 		return ProtectMappedUnlocked(vaddr, size, mode);
+#endif
+	}
+
+	// gta6-prep: ram-lock: the read watches' lock budget in bytes; 0: off. The working set makes
+	// room for it first; returns the budget it made room for (ReadWatchLocks::SetBudget()). Windows
+	// only.
+	uint64_t SetReadWatchLockBudget(uint64_t bytes) {
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		std::lock_guard lock(m_read_lock_mutex);
+		return m_read_locks.SetBudget(bytes);
+#else
+		(void)bytes;
+		return 0;
+#endif
+	}
+
+	[[nodiscard]] ReadWatchLockStats GetReadWatchLockStats() const noexcept {
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		auto stats = m_read_locks.Stats();
+		m_read_locks.GetOs().AddCallStats(stats);
+		return stats;
+#else
+		return {};
+#endif
 	}
 
 	bool MapBacking(uint64_t vaddr, uint64_t size, uint64_t backing_offset,
@@ -1340,4 +1537,29 @@ private:
 	std::vector<std::pair<uint64_t, uint64_t>> m_owned;
 	uint64_t                                   m_granularity = 0x10000;
 	GuestBackingStore*                         m_backing     = nullptr;
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	// gta6-prep: ram-lock: brings the backing pages of a run a read watch is about to lock into RAM
+	// before ProtectTransient() takes the state lock and the lock mutex, which VirtualLock would
+	// otherwise hold while it pages them in. A hint: the page entries need no lock, and a run that
+	// changes meanwhile is only read in for nothing.
+	void PrefetchBacking(uint64_t vaddr, uint64_t size) {
+		std::array<WIN32_MEMORY_RANGE_ENTRY, 8> ranges {};
+		size_t                                  count = 0;
+		const auto                              base  = m_backing->GetBackingBase();
+		m_backing->ForEachBackedRun(vaddr, size, [&](uint64_t offset, uint64_t, uint64_t bytes) {
+			if (count < ranges.size()) {
+				ranges[count].VirtualAddress = reinterpret_cast<void*>(base + offset);
+				ranges[count].NumberOfBytes  = static_cast<SIZE_T>(bytes);
+				count++;
+			}
+		});
+		if (count != 0) {
+			(void)PrefetchVirtualMemory(GetCurrentProcess(), count, ranges.data(), 0);
+		}
+	}
+
+	// gta6-prep: ram-lock: ProtectTransient() calls it under the mutex, with the state lock shared.
+	std::mutex                       m_read_lock_mutex;
+	ReadWatchLocks<BackingViewLocks> m_read_locks;
+#endif
 };

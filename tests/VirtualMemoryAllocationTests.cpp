@@ -4,6 +4,7 @@
 #include "common/subsystems.h"
 #include "common/threads.h"
 #include "common/virtualMemory.h"
+#include "graphics/host_gpu/pageManager.h"
 #include "kernel/memory.h"
 #include "kernel/pthread.h"
 #include "libs/errno.h"
@@ -61,6 +62,9 @@
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 #include <windows.h>
+// clang-format off
+#include <psapi.h> // gta6-prep: ram-lock: K32QueryWorkingSetEx
+// clang-format on
 #ifdef DeleteFile
 #undef DeleteFile
 #endif
@@ -928,6 +932,133 @@ void TestTrackerProtectSharesBackingReads() {
 	      "tracker protection waited for a sparse backing read");
 	Check(test, excluded && guest_result == OK,
 	      "guest mprotect completed while a sparse backing read held its lock");
+	std::printf("[host]    %-48s ok\n", test);
+}
+
+// gta6-prep: ram-lock: a read watch locks the backing view's pages of its guest memory in RAM
+// before they lose their access, and its end unlocks them. Two mappings of the same memory share
+// the lock, the pages past the budget are never unlocked (VirtualUnlock of a page that is not
+// locked takes it out of the working set), and the budget a watch's end frees goes to them. Off
+// Windows the lock compiles to nothing.
+void TestReadWatchLocksBackingPages() {
+	using namespace Libs::LibKernel::Memory;
+	using Libs::Graphics::TRACKER_PAGE_SIZE;
+	const char*        test     = "ReadWatchLocksBackingPages";
+	constexpr uint64_t size     = SceKernelPageSize;
+	constexpr uint64_t pages    = size / TRACKER_PAGE_SIZE;
+	int64_t            physical = -1;
+	CheckOk(test,
+	        KernelAllocateDirectMemory(0, KernelGetDirectMemorySize(), size, SceKernelPageSize,
+	                                   SceKernelMtypeC, &physical),
+	        "KernelAllocateDirectMemory");
+	void* first  = nullptr;
+	void* second = nullptr;
+	CheckOk(test,
+	        KernelMapDirectMemory(&first, size, SceKernelProtCpuRw, 0, physical, SceKernelPageSize),
+	        "KernelMapDirectMemory");
+	CheckOk(
+	    test,
+	    KernelMapDirectMemory(&second, size, SceKernelProtCpuRw, 0, physical, SceKernelPageSize),
+	    "KernelMapDirectMemory(alias)");
+	const auto  base    = reinterpret_cast<uint64_t>(first);
+	const auto  alias   = reinterpret_cast<uint64_t>(second);
+	const auto* backing = static_cast<const uint8_t*>(FindBackingPointer(base, size));
+	Check(test, backing != nullptr && FindBackingPointer(alias, size) == backing,
+	      "the two mappings do not share their backing");
+	// Into the working set, so that a VirtualUnlock of an unlocked page shows.
+	const auto touch = [&] {
+		for (uint64_t page = 0; page < pages; page++) {
+			(void)static_cast<const volatile uint8_t*>(backing)[page * TRACKER_PAGE_SIZE];
+		}
+	};
+	touch();
+	const auto before = GetReadWatchLockStats();
+	Check(test, before.budget_bytes == 0 && before.locked_bytes == 0,
+	      "the lock is on without --lock-read-watched-mb");
+	const auto budget = TestSetReadWatchLockBudget(size);
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	Check(test, budget == size, "the working set made no room for the budget");
+	const auto attributes = [&](uint64_t page) {
+		PSAPI_WORKING_SET_EX_INFORMATION info {};
+		info.VirtualAddress = const_cast<uint8_t*>(backing) + page * TRACKER_PAGE_SIZE;
+		Check(test, K32QueryWorkingSetEx(GetCurrentProcess(), &info, sizeof(info)) != 0,
+		      "QueryWorkingSetEx failed");
+		return info.VirtualAttributes;
+	};
+	const auto locked = [&](uint64_t page) {
+		const auto page_attributes = attributes(page);
+		return page_attributes.Valid != 0 && page_attributes.Locked != 0;
+	};
+	const auto unlocked = [&](uint64_t page) { return !locked(page); };
+	const auto resident = [&](uint64_t page) { return attributes(page).Valid != 0; };
+
+	const auto all = [&](auto&& predicate, uint64_t from) {
+		for (uint64_t page = from; page < pages; page++) {
+			if (!predicate(page)) {
+				return false;
+			}
+		}
+		return true;
+	};
+	{
+		Libs::Graphics::PageManager manager;
+		manager.UpdatePageWatchers<true, true>(base, size);
+		Check(test, all(locked, 0), "a read watch did not lock its backing pages");
+		Check(test,
+		      GetReadWatchLockStats().locked_bytes == size &&
+		          GetReadWatchLockStats().budget_bytes == size &&
+		          GetReadWatchLockStats().unlocked_bytes == 0,
+		      "the locked bytes are not counted");
+		manager.UpdatePageWatchers<true, true>(alias, size);
+		Check(test, GetReadWatchLockStats().locked_bytes == size,
+		      "an alias's watch counted its shared pages again");
+		manager.UpdatePageWatchers<false, true>(base, size);
+		Check(test, all(locked, 0), "an unwatch unlocked pages an alias still watches");
+		manager.UpdatePageWatchers<false, true>(alias, size);
+		Check(test, all(unlocked, 0) && GetReadWatchLockStats().locked_bytes == 0,
+		      "the last unwatch did not unlock the backing pages");
+		// A budget of one page: the other pages stay unlocked, are counted, and are never
+		// unlocked. The end of the first page's watch gives its budget to the second.
+		touch();
+		Check(test, all(resident, 0), "the backing pages are not in the working set");
+		TestSetReadWatchLockBudget(TRACKER_PAGE_SIZE);
+		manager.UpdatePageWatchers<true, true>(base, size);
+		Check(test, locked(0) && all(unlocked, 1),
+		      "the budget's page was not locked, or more were");
+		Check(test, GetReadWatchLockStats().unlocked_bytes == (pages - 1) * TRACKER_PAGE_SIZE,
+		      "the pages past the budget are not counted");
+		manager.UpdatePageWatchers<false, true>(base, TRACKER_PAGE_SIZE);
+		Check(test, unlocked(0) && locked(1) && all(unlocked, 2),
+		      "the budget an unwatch freed did not go to the next refused page");
+		Check(test,
+		      GetReadWatchLockStats().locked_bytes == TRACKER_PAGE_SIZE &&
+		          GetReadWatchLockStats().unlocked_bytes == (pages - 2) * TRACKER_PAGE_SIZE,
+		      "the page the unwatch's budget locked is not counted");
+		manager.UpdatePageWatchers<false, true>(base + TRACKER_PAGE_SIZE, size - TRACKER_PAGE_SIZE);
+		Check(test, all(unlocked, 0) && GetReadWatchLockStats().unlocked_bytes == 0,
+		      "the unwatch left a page locked or refused");
+		Check(test, all(resident, 2), "pages past the budget were unlocked without a lock");
+		Check(test, GetReadWatchLockStats().failed_pages == before.failed_pages,
+		      "VirtualLock failed");
+	}
+#else
+	Check(
+	    test,
+	    ProtectGuestHostMemory(base, size, Common::VirtualMemory::Mode::NoAccess, ReadWatch::Start),
+	    "ProtectGuestHostMemory(read watch) failed");
+	const auto during = GetReadWatchLockStats();
+	Check(
+	    test,
+	    ProtectGuestHostMemory(base, size, Common::VirtualMemory::Mode::ReadWrite, ReadWatch::End),
+	    "ProtectGuestHostMemory(read unwatch) failed");
+	Check(test,
+	      budget == 0 && during.budget_bytes == 0 && during.locked_bytes == 0 &&
+	          during.unlocked_bytes == 0,
+	      "the lock did something off Windows");
+#endif
+	TestSetReadWatchLockBudget(0);
+	CheckOk(test, KernelMunmap(alias, size), "KernelMunmap(alias)");
+	CheckOk(test, KernelReleaseDirectMemory(physical, size), "KernelReleaseDirectMemory");
 	std::printf("[host]    %-48s ok\n", test);
 }
 
@@ -6198,6 +6329,7 @@ int main(int argc, char** argv) {
 	RunTest(TestQueriesSkipOperationLock);
 	RunTest(TestQueriesWaitForStateChanges);
 	RunTest(TestTrackerProtectSharesBackingReads);
+	RunTest(TestReadWatchLocksBackingPages); // gta6-prep: ram-lock
 	RunTest(TestClampRangeSkipsStateLock);
 	RunTest(TestGuestAddressSpaceHasNoFixedFallback);
 	RunTest(TestGuestFreeRangeSearchDoesNotUnderflow);
