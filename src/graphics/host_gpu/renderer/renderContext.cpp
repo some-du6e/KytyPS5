@@ -46,6 +46,12 @@ RenderContext::RenderContext(GraphicContext& graphics, const std::filesystem::pa
 		memory.noaccess      = PageManager::NoAccessPages() * TRACKER_PAGE_SIZE;
 		memory.one_off_count = StreamBuffer::OneOffCount();
 		memory.one_off_bytes = StreamBuffer::OneOffBytes();
+		// gta6-prep: ram-lock
+		const auto locks         = LibKernel::Memory::GetReadWatchLockStats();
+		memory.locked_bytes      = locks.locked_bytes;
+		memory.lock_budget_bytes = locks.budget_bytes;
+		memory.over_budget_pages = locks.over_budget_pages;
+		memory.lock_failed_pages = locks.failed_pages;
 		return memory;
 	});
 }

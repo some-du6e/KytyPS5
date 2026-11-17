@@ -208,6 +208,8 @@ struct ConfigOptions {
 	// gta6-prep: ram: --ram-profile normal|low; see RamSettings for what Low sets (it also implies
 	// --oom-recovery, ApplyRamProfile()).
 	RamProfile                  ram_profile = RamProfile::Normal;
+	// gta6-prep: ram-lock: --lock-read-watched-mb (0: off); unset: the RAM profile's.
+	std::optional<uint32_t>     lock_read_watched_mb;
 	// --rt-arena-mb: the BLAS memory of native ray tracing in MiB (0: no limit); unset: the
 	// profile's share of the largest device-local heap. KYTY_RT_ARENA_MB still wins.
 	std::optional<uint32_t>     rt_arena_mb;
@@ -417,8 +419,8 @@ bool NoTypeImportFallbackEnabled();
 // The video memory settings in effect (ResolveVramSettings() of the loaded options). The Auto
 // profile's built-in values without a loaded configuration.
 const VramSettings& GetVramSettings();
-// gta6-prep: ram: the system memory settings in effect (ResolveRamSettings() of --ram-profile).
-// The Normal profile's built-in values without a loaded configuration.
+// gta6-prep: ram: the system memory settings in effect (ResolveRamSettings() of --ram-profile and
+// --lock-read-watched-mb). The Normal profile's built-in values without a loaded configuration.
 const RamSettings& GetRamSettings();
 // --vram-limit-mb, 0 (off) without a loaded configuration.
 uint32_t GetVramLimitMb();

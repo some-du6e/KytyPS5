@@ -1,6 +1,7 @@
 #include "kernel/memory.h"
 
 #include "common/assert.h"
+#include "common/emulatorConfig.h"
 #include "common/hackNotice.h"
 #include "common/logging/log.h"
 #include "common/ramOptions.h"
@@ -9,6 +10,7 @@
 #include "common/virtualMemory.h"
 #include "graphics/guest_gpu/graphicsRun.h"
 #include "graphics/host_gpu/renderer/renderContext.h"
+#include "kernel/readWatchLocks.h"
 #include "libs/errno.h"
 #include "libs/libs.h"
 #include "loader/systemContent.h"
@@ -38,6 +40,9 @@
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 #include <windows.h> // IWYU pragma: keep
+// clang-format off
+#include <psapi.h> // gta6-prep: ram-lock: K32QueryWorkingSetEx
+// clang-format on
 #ifndef MEM_RESERVE_PLACEHOLDER
 #define MEM_RESERVE_PLACEHOLDER 0x00040000
 #endif
@@ -1165,6 +1170,9 @@ void Initialize() {
 	g_virtual_ranges      = std::make_unique<VirtualRanges>();
 	EXIT_IF(!g_guest_address_space->SelfTest());
 	EXIT_IF(!SelfTestSub64SharedPlaceholderAlias());
+	// gta6-prep: ram-lock: --lock-read-watched-mb, or the RAM profile's (0 under normal: off).
+	g_guest_address_space->SetReadWatchLockBudget(
+	    uint64_t {Config::GetRamSettings().lock_read_watched_mb} * Config::RamMiB);
 }
 
 void Shutdown() {
@@ -2814,6 +2822,12 @@ bool TestGuestFreeRangeBounds() {
 	return GuestFreeRangeContains(0x10000, 0x20000, 0x18000, 0x4000) &&
 	       !GuestFreeRangeContains(0x10000, 0x20000, 0x40000, 0x4000);
 }
+
+// gta6-prep: ram-lock: the read watch lock budget in bytes (0: off), which Initialize() sets from
+// --lock-read-watched-mb. Pages locked already stay locked until their watch ends.
+void TestSetReadWatchLockBudget(uint64_t bytes) {
+	g_guest_address_space->SetReadWatchLockBudget(bytes);
+}
 #endif
 
 int KYTY_SYSV_ABI KernelVirtualQuery(const void* addr, int flags, VirtualQueryInfo* info,
@@ -3065,8 +3079,15 @@ bool ProtectGuestMemory(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode,
 	return true;
 }
 
-bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode) {
-	return g_guest_address_space->ProtectTransient(vaddr, size, mode);
+bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode,
+                            ReadWatch watch) {
+	return g_guest_address_space->ProtectTransient(vaddr, size, mode, watch);
+}
+
+// gta6-prep: ram-lock
+ReadWatchLockStats GetReadWatchLockStats() noexcept {
+	return g_guest_address_space != nullptr ? g_guest_address_space->GetReadWatchLockStats()
+	                                        : ReadWatchLockStats {};
 }
 
 bool IsGuestExecutable(uint64_t vaddr) {

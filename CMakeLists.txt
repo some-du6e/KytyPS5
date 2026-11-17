@@ -645,6 +645,12 @@ add_executable(ram_policy_tests EXCLUDE_FROM_ALL
 )
 target_include_directories(ram_policy_tests PRIVATE ${inc_headers})
 
+# gta6-prep: ram-lock. ReadWatchLocks with the OS calls counted; header-only, no Windows needed.
+add_executable(read_watch_lock_tests EXCLUDE_FROM_ALL
+	"${KYTY_TESTS_DIR}/ReadWatchLockTests.cpp"
+)
+target_include_directories(read_watch_lock_tests PRIVATE ${inc_headers})
+
 add_executable(lru_cache_tests EXCLUDE_FROM_ALL
 	"${KYTY_TESTS_DIR}/LruCacheTests.cpp"
 )
@@ -1016,6 +1022,7 @@ if(BUILD_TESTING)
 	add_test(NAME lru_cache COMMAND $<TARGET_FILE:lru_cache_tests>)
 	add_test(NAME vram_policy COMMAND $<TARGET_FILE:vram_policy_tests>) # gta6-prep: vram
 	add_test(NAME ram_policy COMMAND $<TARGET_FILE:ram_policy_tests>) # gta6-prep: ram
+	add_test(NAME read_watch_lock COMMAND $<TARGET_FILE:read_watch_lock_tests>) # gta6-prep: ram-lock
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)
 	add_test(NAME resource_materialization COMMAND $<TARGET_FILE:resource_materialization_tests>)
@@ -1151,10 +1158,14 @@ if(BUILD_TESTING)
 
 	# gta6-prep: ram
 	add_test(NAME emulator_ram_cli
-	         COMMAND $<TARGET_FILE:kyty_emulator> --help --ram-profile low --ram-profile normal)
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --ram-profile low --ram-profile normal
+	                 --lock-read-watched-mb 128 --lock-read-watched-mb 0)
 	add_test(NAME emulator_ram_profile_invalid
 	         COMMAND $<TARGET_FILE:kyty_emulator> --help --ram-profile 8gb)
-	set_tests_properties(emulator_ram_profile_invalid PROPERTIES WILL_FAIL TRUE)
+	add_test(NAME emulator_lock_read_watched_invalid
+	         COMMAND $<TARGET_FILE:kyty_emulator> --help --lock-read-watched-mb 128M)
+	set_tests_properties(emulator_ram_profile_invalid emulator_lock_read_watched_invalid
+	                     PROPERTIES WILL_FAIL TRUE)
 
 	# gta6-prep: shader-mem
 	add_test(NAME shader_recompiler_shader_mem
@@ -1178,6 +1189,7 @@ if(BUILD_TESTING)
 		lru_cache_tests
 		vram_policy_tests
 		ram_policy_tests
+		read_watch_lock_tests
 		common_tests
 		shader_vertex_metadata_tests
 		resource_materialization_tests

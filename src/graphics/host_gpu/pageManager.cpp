@@ -177,8 +177,9 @@ struct PageManager::Impl {
 		return ptr;
 	}
 
-	void Protect(uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode) noexcept {
-		if (!Libs::LibKernel::Memory::ProtectGuestHostMemory(vaddr, size, mode)) {
+	void Protect(uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode,
+	             Libs::LibKernel::Memory::ReadWatch watch) noexcept {
+		if (!Libs::LibKernel::Memory::ProtectGuestHostMemory(vaddr, size, mode, watch)) {
 			Fatal("address-space protection failed at 0x%016" PRIx64 ", mode=0x%08" PRIx32, vaddr,
 			      static_cast<uint32_t>(mode));
 		}
@@ -193,10 +194,17 @@ struct PageManager::Impl {
 		uint64_t  range_bytes           = 0;
 		uint64_t  potential_range_bytes = 0;
 		int64_t   noaccess_delta        = 0; // gta6-prep: ram
+		// gta6-prep: ram-lock: every run a read watcher adds becomes NoAccess, and every run one
+		// removes gets back the access it had (Read or ReadWrite); the kernel locks the runs'
+		// memory in RAM meanwhile. Write watchers never change a NoAccess page.
+		using Libs::LibKernel::Memory::ReadWatch;
+		constexpr auto watch = !is_read ? ReadWatch::None
+		                       : track  ? ReadWatch::Start
+		                                : ReadWatch::End;
 
 		const auto release_pending = [&] {
 			if (range_bytes != 0) {
-				Protect(base_addr + range_begin * PAGE_SIZE, range_bytes, perms);
+				Protect(base_addr + range_begin * PAGE_SIZE, range_bytes, perms, watch);
 				range_bytes           = 0;
 				potential_range_bytes = 0;
 			}

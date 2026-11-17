@@ -166,6 +166,13 @@ struct ProtectionCall {
 };
 std::vector<ProtectionCall> g_protection_ranges;
 std::mutex g_protection_log_mutex;
+// gta6-prep: ram-lock: the mode and read watch kind of each
+// ProtectGuestHostMemory() call.
+struct WatchCall {
+  Common::VirtualMemory::Mode mode;
+  Libs::LibKernel::Memory::ReadWatch watch;
+};
+std::vector<WatchCall> g_protection_watches;
 
 bool ProtectAddressSpace(uint64_t vaddr, uint64_t size,
                          Common::VirtualMemory::Mode mode) {
@@ -595,6 +602,64 @@ void TestSharedReadWatchers() {
   Check(VirtualFree(memory, 0, MEM_RELEASE) != 0, "VirtualFree failed");
 }
 
+// gta6-prep: ram-lock: the kernel locks a read watch's memory in RAM by the
+// kind of protection the page manager asks for: Start for the runs a read
+// watcher denies, End for the runs that get their access back, None for write
+// watchers.
+void TestReadWatchKinds() {
+  using Libs::LibKernel::Memory::ReadWatch;
+  using Mode = Common::VirtualMemory::Mode;
+  PageManager manager;
+  constexpr auto page_size = TRACKER_PAGE_SIZE;
+  auto *memory = Allocate(page_size * 4);
+  const auto address = reinterpret_cast<uint64_t>(memory);
+  const auto calls = [] {
+    std::lock_guard lock(g_protection_log_mutex);
+    auto result = g_protection_watches;
+    g_protection_watches.clear();
+    return result;
+  };
+  const auto is = [](const WatchCall &call, Mode mode, ReadWatch watch) {
+    return call.mode == mode && call.watch == watch;
+  };
+  (void)calls();
+
+  manager.UpdatePageWatchers<true>(address, page_size);
+  auto got = calls();
+  Check(got.size() == 1 && is(got[0], Mode::Read, ReadWatch::None),
+        "a write watch is not a plain protection");
+  manager.UpdatePageWatchers<true, true>(address, page_size * 3);
+  got = calls();
+  Check(got.size() == 1 && is(got[0], Mode::NoAccess, ReadWatch::Start),
+        "a read watch did not start as one NoAccess run");
+  // Pages 1 and 2 are denied already: only page 3 starts.
+  manager.UpdatePageWatchers<true, true>(address + page_size, page_size * 3);
+  got = calls();
+  Check(got.size() == 1 && is(got[0], Mode::NoAccess, ReadWatch::Start),
+        "a second read watcher did not start the one page it added");
+  Check(g_protection_ranges.back().address == address + page_size * 3 &&
+            g_protection_ranges.back().size == page_size,
+        "a second read watcher protected pages the first one denies");
+  // Page 3 gets its access back; the first watcher still holds pages 1 and 2.
+  manager.UpdatePageWatchers<false, true>(address + page_size, page_size * 3);
+  got = calls();
+  Check(got.size() == 1 && is(got[0], Mode::ReadWrite, ReadWatch::End),
+        "a read unwatch did not end as a ReadWrite run");
+  // Page 0 falls back to its write watcher, pages 1 and 2 to ReadWrite: two
+  // runs, both End.
+  manager.UpdatePageWatchers<false, true>(address, page_size * 3);
+  got = calls();
+  Check(got.size() == 2 && is(got[0], Mode::Read, ReadWatch::End) &&
+            is(got[1], Mode::ReadWrite, ReadWatch::End),
+        "a read unwatch over a write watcher did not end both runs");
+  manager.UpdatePageWatchers<false>(address, page_size);
+  got = calls();
+  Check(got.size() == 1 && is(got[0], Mode::ReadWrite, ReadWatch::None),
+        "a write unwatch is not a plain protection");
+
+  Check(VirtualFree(memory, 0, MEM_RELEASE) != 0, "VirtualFree failed");
+}
+
 void TestConcurrentSharedWatchers() {
   constexpr size_t worker_count = 8;
   PageManager manager;
@@ -728,7 +793,11 @@ void TestFatalPaths() {
 namespace Libs::LibKernel::Memory {
 
 bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size,
-                            Common::VirtualMemory::Mode mode) {
+                            Common::VirtualMemory::Mode mode, ReadWatch watch) {
+  {
+    std::lock_guard lock(g_protection_log_mutex);
+    g_protection_watches.push_back({mode, watch});
+  }
   return ProtectAddressSpace(vaddr, size, mode);
 }
 
@@ -747,6 +816,7 @@ int main(int argc, char **argv) {
   TestRegionEndpointBatching();
   TestReadWriteWatcherInteractions();
   TestSharedReadWatchers();
+  TestReadWatchKinds();
   TestConcurrentSharedWatchers();
   TestFatalPaths();
   std::puts("PageManagerTests: all cases passed");

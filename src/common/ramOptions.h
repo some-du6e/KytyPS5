@@ -48,6 +48,12 @@ struct RamSettings {
 	// A deleted image that VMA placed outside device-local memory may go into the recycled-image
 	// pool, which keeps its (pinned host) memory.
 	bool recycle_spilled_images = true;
+	// gta6-prep: ram-lock: Windows: how much of the guest memory the GPU trackers' read watches
+	// make inaccessible (PAGE_NOACCESS) stays locked in RAM, in MiB (0: none; ReadWatchLocks).
+	// Another fork traced MEMORY_MANAGEMENT 0x1A/0x41202 bug checks to such pages of the guest
+	// section once Windows had paged them out, which it never does to a locked page.
+	// --lock-read-watched-mb wins.
+	uint32_t lock_read_watched_mb = 0;
 
 	constexpr bool operator==(const RamSettings&) const = default;
 };
@@ -66,6 +72,17 @@ constexpr RamSettings ResolveRamSettings(RamProfile profile) {
 		settings.slow_cache_save_seconds = 60;
 		settings.clear_fresh_stacks      = false;
 		settings.recycle_spilled_images  = false;
+		settings.lock_read_watched_mb    = 128;
+	}
+	return settings;
+}
+
+// gta6-prep: ram-lock: the profile's settings with --lock-read-watched-mb (nullopt: not given).
+constexpr RamSettings ResolveRamSettings(RamProfile              profile,
+                                         std::optional<uint32_t> lock_read_watched_mb) {
+	auto settings = ResolveRamSettings(profile);
+	if (lock_read_watched_mb.has_value()) {
+		settings.lock_read_watched_mb = *lock_read_watched_mb;
 	}
 	return settings;
 }
@@ -201,7 +218,7 @@ inline std::string FormatRamStartup(const RamStartup& ram) {
 
 // "RAM profile: low -> upload_ring=128 download_ring=32 compile_workers=3 async_threads=2
 // parallel_threads=2 helpers<=0 cache_save=180s/60s fresh_stack_clear=off recycle_spilled=off
-// oom_recovery=on\n". `oom_recovery`: the VramSettings in effect.
+// lock_read_watched=128 oom_recovery=on\n". `oom_recovery`: the VramSettings in effect.
 inline std::string FormatRamProfile(const RamSettings& s, bool oom_recovery) {
 	const auto  on_off = [](bool value) { return std::string(value ? "on" : "off"); };
 	std::string line   = "RAM profile: " + std::string(RamProfileName(s.profile)) +
@@ -218,6 +235,7 @@ inline std::string FormatRamProfile(const RamSettings& s, bool oom_recovery) {
 	        std::to_string(s.slow_cache_save_seconds) + "s";
 	line += " fresh_stack_clear=" + on_off(s.clear_fresh_stacks) +
 	        " recycle_spilled=" + on_off(s.recycle_spilled_images) +
+	        " lock_read_watched=" + std::to_string(s.lock_read_watched_mb) +
 	        " oom_recovery=" + on_off(oom_recovery) + "\n";
 	return line;
 }
@@ -329,6 +347,13 @@ struct RendererMemory {
 	// far, and their bytes (StreamBuffer::CountOneOff(); freeing one subtracts nothing).
 	uint64_t one_off_count = 0;
 	uint64_t one_off_bytes = 0;
+	// gta6-prep: ram-lock: the backing pages of that memory locked in RAM now (printed rounded up
+	// to a MiB) and the budget for them (0: off), and so far the page locks the budget refused and
+	// those Windows refused (Memory::GetReadWatchLockStats()).
+	uint64_t locked_bytes      = 0;
+	uint64_t lock_budget_bytes = 0;
+	uint64_t over_budget_pages = 0;
+	uint64_t lock_failed_pages = 0;
 };
 
 // `private_bytes` is the process's private commit (Windows private bytes). The guest memory section
@@ -348,9 +373,14 @@ struct RamUsage {
 // Room for the longest "RAM usage:" line.
 inline constexpr size_t RamUsageLineSize = 512;
 
+// A size in MiB, rounded up: a single page shows.
+constexpr uint64_t RamMiBRoundedUp(uint64_t bytes) {
+	return bytes / RamMiB + (bytes % RamMiB != 0 ? 1 : 0);
+}
+
 // "RAM usage: t=630 ws=2843 private=9875 commit=31790/40858 avail=187 faults=3412 hard=?
-// vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312 oneoff=12/340\n" into `out`, cut
-// to `size`.
+// vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312 oneoff=12/340 locked=128/128
+// overbudget=4096 lockfail=0\n" into `out`, cut to `size`.
 // Returns the length. Allocates nothing.
 inline size_t FormatRamUsage(const RamUsage& usage, char* out, size_t size) noexcept {
 	RamLineWriter line(out, size);
@@ -383,11 +413,20 @@ inline size_t FormatRamUsage(const RamUsage& usage, char* out, size_t size) noex
 		line.Text(" spilled=");
 		line.MiB(renderer.spilled);
 		line.Text(" noaccess=");
-		line.Number(renderer.noaccess / RamMiB + (renderer.noaccess % RamMiB != 0 ? 1 : 0));
+		line.Number(RamMiBRoundedUp(renderer.noaccess));
 		line.Text(" oneoff=");
 		line.Number(renderer.one_off_count);
 		line.Text("/");
 		line.MiB(renderer.one_off_bytes);
+		// gta6-prep: ram-lock
+		line.Text(" locked=");
+		line.Number(RamMiBRoundedUp(renderer.locked_bytes));
+		line.Text("/");
+		line.MiB(renderer.lock_budget_bytes);
+		line.Text(" overbudget=");
+		line.Number(renderer.over_budget_pages);
+		line.Text(" lockfail=");
+		line.Number(renderer.lock_failed_pages);
 	}
 	line.Text("\n");
 	return line.View().size();
@@ -408,6 +447,34 @@ constexpr bool SyncAfterSample(const RamUsage& usage, bool commit_enforced) {
 	}
 	return commit_enforced &&
 	       CommitAtPercent(usage.commit_used, usage.commit_limit, SyncCommitPercent);
+}
+
+// gta6-prep: ram-lock: the "RAM lock:" lines (Windows; the guest address space writes each at most
+// once). Before its first lock it raises the minimum and maximum working set by the budget and a
+// margin: VirtualLock locks no more than the minimum working set holds.
+
+// "RAM lock: budget=128 MiB working_set=144/145 MiB (was 0/1)\n": the minimum and maximum working
+// set after the raise, and before it.
+inline std::string FormatLockStart(uint64_t budget, uint64_t minimum, uint64_t maximum,
+                                   uint64_t was_minimum, uint64_t was_maximum) {
+	return "RAM lock: budget=" + std::to_string(budget / RamMiB) +
+	       " MiB working_set=" + std::to_string(minimum / RamMiB) + "/" +
+	       std::to_string(maximum / RamMiB) + " MiB (was " + std::to_string(was_minimum / RamMiB) +
+	       "/" + std::to_string(was_maximum / RamMiB) + ")\n";
+}
+
+// The raise failed, `call` with `error`: the lock stays off.
+inline std::string FormatLockStartFailed(uint64_t budget, std::string_view call, uint32_t error) {
+	return "RAM lock: budget=" + std::to_string(budget / RamMiB) + " MiB working_set=? (" +
+	       std::string(call) + " error " + std::to_string(error) +
+	       "): read-watched guest memory stays unlocked\n";
+}
+
+// The first VirtualLock or VirtualUnlock call that failed (the "RAM usage:" lines' lockfail counts
+// the pages VirtualLock left unlocked).
+inline std::string FormatLockCallFailed(std::string_view call, uint64_t bytes, uint32_t error) {
+	return "RAM lock: first failure: " + std::string(call) + " of " + std::to_string(bytes / 1024) +
+	       " KiB (error " + std::to_string(error) + ")\n";
 }
 
 // The value of a "<key>: <n> kB" line of /proc/meminfo or /proc/self/status, in bytes; nullopt
