@@ -225,6 +225,8 @@ copies the GPU test group out of the build tree with only the DLLs each test imp
   while loading the cache, preflight renames the store to `.shaders.unusable`, so the next boot
   cannot die on it. Boots with `--shader-validation` or a shader log leave the store out, because
   stored shaders skip both. `-ColdCache` turns the whole thing off for a clean comparison.
+- On a PC with less than 14 GiB of RAM the boot also gets `--ram-profile low`, and `memory.csv`
+  records the PC's memory every 30 s.
 - The Windows build uses the DLL version of the MSVC runtime. Before it runs anything, preflight
   checks every packaged executable's imports. It names the VC++ redistributable when a DLL is
   missing or when `msvcp140.dll` is older than the toolset that built the package (14.51 in CI).
@@ -272,6 +274,7 @@ Read this before relying on anything above.
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
 | gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
 | Preflight package | In CI, 13 CI-script tests and 13 preflight tests pass, the preflight ones under pwsh 7.6.10. All three Windows PowerShell 5.1 smoke steps pass. The packaged tests load outside the build tree: `device_creation` fails at the hidden Vulkan window, as it does under ctest on a runner with no GPU. `-Game` on an empty folder reports FAIL for imports and boot and still writes its zip. A hung test gets stopped at 5 s with its child. On that runner `kernel_file_system` ends with 0xC0000028 (bad stack while unwinding an exception) where Linux fails cleanly, so watch for it on Karim's PC. Nothing has run on a PC with a GPU yet. |
+| `--ram-profile`, RAM lines, preflight and triage RAM support (run 44020349456, `c0e43876`, merged as `2105e147`) | Green. Linux passes 72 of 72 host tests and Windows 70 of 70 gated, including `ram_policy`, `emulator_ram_cli`, `emulator_ram_profile_invalid` and `diag`, which checks the commit figures against `K32GetPerformanceInfo` on Windows. The tools job passes triage 63, NID 68, CI scripts 15 and preflight 23. The Windows PowerShell 5.1 smoke steps check the RAM lines in `system.txt`, `summary.json` and `memory.csv`. Nothing has run on a PC with 8 GB of RAM or on a GPU. |
 | Preflight shader cache (run 43966470006, `425a5841`) | Green. 22 preflight tests pass in CI under pwsh. Under Windows PowerShell 5.1, the empty-game steps linked the run folder to the shared cache through a real junction, found the marker file there on both runs, and kept it out of the zip. `-ColdCache` made no link. A junction made with `mklink /J` stayed out of the zip. How much time a warm boot saves is unmeasured, since no real game has booted. |
 | GPU group time limit (run 43939026905, `00f3b3b0`) | Green. Once the probe finds no device, the Linux GPU step takes 8.4 minutes instead of 54, and the Linux job 27 minutes instead of 70. The 3 device-free tests still pass on both runners. |
 | NID tools | 68 tests pass in CI and locally. The triage tool's output without `--nid-names` is byte-identical to before on all 99 fixture outputs. Not yet run on Windows. |
@@ -337,12 +340,21 @@ Then, depending on what happens:
   sixth of a 6 GB card, so expect about 4.5 GB for the game once Windows has its share. Try
   `--video-out-resolution 1080p` as soon as the game renders in-game instead of waiting for spill
   lines, and compare the `VRAM:` and `VRAM spill:` lines with and without it.
-- If the first boot freezes on a loading screen, it is probably compiling pipelines. Keep
-  `--pipeline-precompile ask` (the default) and wait. There is no GTA 6 pipeline manifest, so
-  the first boot compiles everything cold. Record one with `--record-pipeline-manifest` and copy
-  `_PipelineCache/<ID>_<VER>.kpm` into `assets/pipelines/` for later runs. Under preflight,
-  `_PipelineCache` is `%LOCALAPPDATA%\KytyPS5\preflight-cache\_PipelineCache`, and every later
-  preflight boot of every build loads a manifest recorded there.
+- With less than 14 GiB of RAM, add `--ram-profile low` after the preset:
+  `kyty_emulator --game <path> --preset rtx3050 --ram-profile low --session-log auto`. Preflight
+  adds it by itself on such a PC. It costs speed: fewer compile threads, no pipeline helpers and
+  so no precompile pause, and smaller host rings. So leave it off with 16 GB or more. Size the
+  page file first, as "A PC with 8 GB of RAM" describes. Without enough commit the emulator may
+  not start at all.
+- If the first boot freezes on a loading screen, it is probably compiling pipelines. Wait. There
+  is no GTA 6 pipeline manifest, so the first boot compiles everything cold, and the
+  `--pipeline-precompile ask` pause (the default) only stops the game for a recorded manifest.
+  Record one with `--record-pipeline-manifest` and copy `_PipelineCache/<ID>_<VER>.kpm` into
+  `assets/pipelines/` for later runs. Under preflight, `_PipelineCache` is
+  `%LOCALAPPDATA%\KytyPS5\preflight-cache\_PipelineCache`, and every later preflight boot of every
+  build loads a manifest recorded there. The pause needs a pipeline helper, and
+  `--ram-profile low` runs none. Add `--pipeline-helpers 1` after it to get the pause back, for
+  about 400 MB of RAM.
 - Start with `--native-raytracing` off, as the preset has it, then compare once the game is
   in-game: add `--native-raytracing` after the preset and compare fps and the `VRAM:` lines. On
   GTA V it took Fidelity on an RTX 3090 from about 13 fps to 20-30 (capped at 30). GTA 6 has
@@ -362,6 +374,141 @@ Then, depending on what happens:
 - If the game ran on an earlier build and broke on this one, rerun with `--preset safe`. If that
   fixes it, bisect the kill switches one at a time.
 
+## A PC with 8 GB of RAM
+
+Nothing here has run on such a PC or with GTA 6. On 8 GB of RAM, whether a game boots depends first
+on the page file, then on physical RAM. The GPU comes after both.
+
+**Why.**
+
+- The emulator commits all of its guest memory at startup. It is one pagefile-backed section of
+  about 12,736 MiB, whatever the game, created with SEC_COMMIT (`memoryAddressSpace.inc`,
+  `memory.cpp`). GTA V splits it into 448 MiB of flexible memory and 12,288 MiB of direct memory.
+  Windows backs every committed byte with RAM or the page file, so the commit limit is the RAM plus
+  the page files.
+- NVIDIA's Windows driver also seems to charge commit for the video memory it allocates. An AnyPS5
+  probe measured about 1 GiB of commit per GiB of VRAM; nobody has measured it here. With
+  host-visible memory and the emulator's heap on top, a session can want an estimated 26 to 33 GB
+  of commit.
+- Physical RAM is the harder limit, and no setting fixes it. A 12.4 GiB guest plus 2 to 4 GB for
+  the emulator and the driver does not fit in what 8 GB leaves after Windows. Expect constant
+  paging and multi-second frames in places.
+- A blue screen is possible. The emulator makes GPU-written guest pages PAGE_NOACCESS while it
+  watches them for CPU reads. chenxiao07 traced MEMORY_MANAGEMENT 0x1A/0x41202 to Windows
+  mishandling such pages of a pagefile-backed section once they are paged out, and reproduced it
+  with a standalone program on Windows 11 build 26200
+  ([chenxiao07/KytyPS5#5](https://github.com/chenxiao07/KytyPS5/issues/5)). It has not been seen
+  on this branch, upstream or TheCruZ's fork. Their fix locks the watched pages in RAM, so they
+  cannot be paged out. A port of it for `--ram-profile low` is in progress.
+
+**Before the first boot.**
+
+1. Add a page file. Keep the existing one, since Windows writes crash dumps through the one on C:.
+   Add a fixed-size one on a drive that still has room after the dump: 32,768 MB with 42 GB or
+   more free, 16,384 MB with 26 to 42 GB free. With less, make the one on C: bigger instead.
+   1. Press Win+R and run `SystemPropertiesPerformance`, then Advanced, Virtual memory, Change.
+   2. Untick "Automatically manage paging file size for all drives" first. The drive list and the
+      size boxes stay greyed out until you do.
+   3. Pick the drive and choose Custom size, with the same initial and maximum size.
+   4. Click Set, then OK, then restart Windows.
+2. In the next session log, the `RAM:` line should show a headroom of 12,288 MiB or more, with no
+   `RAM warning:` line. The headroom counts only the page files' current size. Windows may grow a
+   page file it manages past that, but a fixed size avoids the stall while it grows, so set one
+   anyway.
+
+**Every session.**
+
+- First close browsers, Discord, game launchers, overlays, OneDrive and Teams. Task Manager's Memory
+  page should show about 2.5 GB in use at most.
+- Start through preflight or `kyty_emulator` directly, not the launcher, which stays running.
+- After a crash, wait until `kyty_emulator.exe` and `WerFault.exe` have left Task Manager. A dying
+  emulator still holds its 13 GB of commit.
+- Don't use RAM cleaners, don't turn off the page file or memory compression, and don't run with a
+  system-managed page file on a nearly full drive.
+
+**`--ram-profile low`** trades speed for memory. `normal`, the default, keeps every built-in value,
+and the emulator never picks low by itself. Preflight adds it after `--preset rtx3050` on a PC with
+less than 14 GiB of RAM, unless `-ExtraArgs` names a RAM profile.
+
+| setting | normal | low | cost |
+|---|---|---|---|
+| automatic pipeline helpers | 4 on 12 threads, 2 under `--vram-profile low` (which `--preset rtx3050` sets); more during a precompile pause, bounded by free RAM | none | slower cold compute compiles |
+| `--pipeline-precompile` pause | the game stops while a recorded manifest compiles | off, since it needs a helper | stalls in play instead; `--pipeline-helpers 1` brings the pause back for about 400 MB |
+| shader compile workers | 6 | 3 | stutter in new areas |
+| async pipeline threads | 3 | 2 | slower background compiles |
+| shader cache and manifest threads | half the hardware threads | 2 | slower WarmUp |
+| host upload / download rings | 512 / 64 MiB | 128 / 32 MiB | bursts take one-time buffers or wait |
+| driver cache saves | every 60 s, 20 s after a slow pipeline | 180 s / 60 s | up to 3 minutes of the cache lost in a crash |
+| fresh guest stacks | cleared | left as the OS zeroed them | none expected |
+| spilled images in the recycle pool | yes | no | more allocations under pressure |
+| `--oom-recovery` | off (on under `--preset rtx3050`) | on | slow oversubscription instead of an exit |
+
+`--pipeline-helpers`, `KYTY_PIPELINE_HELPERS` and `--no-oom-recovery` still win. Under the
+recommended `--preset rtx3050` the last row changes nothing, since the preset already turns OOM
+recovery on. The savings are estimates:
+- 416 MiB of host-visible memory from the rings;
+- about 400 MB per helper that does not run;
+- fewer concurrent shader translations and driver compiles.
+
+The smaller rings can also cost memory, through the one-time buffers that take what they cannot
+hold. The `oneoff` field counts those. `ram_policy_tests` pins both profiles, and a `static_assert`
+at each use pins the normal value to the literal it replaced.
+
+**What the logs show.**
+
+- `RAM:` appears once at startup, with the guest section committed. It has the RAM and available
+  RAM, commit and its limit, the headroom, the page file, the guest section and the profile. On
+  Windows the page file is the commit limit less the RAM, marked `~`, and `~0` means there is
+  none. Under low, `RAM profile:` lists its settings.
+- On Windows, `RAM warning:` appears when the headroom is under 12 GiB. It names the page file to
+  add (20 GiB less the headroom, rounded up to 4 GiB), and says that a page file Windows manages
+  may grow on its own.
+- With a session log, which preflight always opens, a `RAM usage:` line appears every 30 s. On
+  Windows the first one at 95% of the commit limit adds a second `RAM warning:`. Without a session
+  log neither appears. Its fields:
+  - `ws` is the working set and `private` the private bytes. The guest section is a shared section,
+    so `private` leaves out its 12.4 GiB; `commit` against its limit shows it.
+  - `commit` is the system's commit charge and its limit, and `avail` the available RAM.
+  - `faults` is the process's page faults per second, soft ones included. `hard` is `?` on Windows,
+    where `memory.csv` has the pages read from disk.
+  - `vk_local` and `vk_host` are the VRAM heaps' usage and budget.
+  - `spilled` is what went outside VRAM so far. It never goes down, so it shows that spill
+    happened, not that it eats host memory now. `vk_host` against its budget shows that.
+  - `noaccess` is the guest memory the read watchers keep NOACCESS now.
+  - `oneoff` counts the one-time buffers that took transfers the host rings could not, so far,
+    with their MiB.
+- A `RAM usage:` line written with less than 512 MiB available, or with commit at 90% of its limit
+  on Windows, is also synced to disk, so that it can survive a blue screen. Other lines reach the
+  disk when Windows flushes its cache.
+- A fatal report ends with one more `RAM usage:` line, without the VRAM fields.
+- If the guest section cannot be created, the "could not reserve <n> MB for guest direct memory"
+  report adds the free commit, the limit and the page file that would fit. When the commit had
+  room, it names no page file, because the page file was not what failed.
+- Preflight writes these to `system.txt`:
+  - the commit limit, the page files and the free space per drive;
+  - the 10 processes with the most memory (names only);
+  - 14 days of events 41, 1001, 2004 and 4101.
+
+  It warns before a boot with less than 25,024 MiB of free commit, and says so when the page file
+  can still grow. It suggests `-BootSeconds 0` under low. `memory.csv` gets a row when the boot
+  starts and every 30 s after. Its `pages_input_per_s` counts pages read from disk per second, not
+  faults.
+- `kyty_triage.py` adds a `host_memory` section and five rules: a warning line, commit at 95% or
+  more on Windows, under 300 MiB available in most samples, under 14 GiB of RAM with the normal
+  profile, and the blue-screen hint.
+  - The hint needs a log that stops low on RAM after NOACCESS samples. It ranks under the plain
+    no-fatal rule, because a session log never has a clean-exit line and preflight stops its boots.
+  - A line that a zip holds twice, in `session.log` and `emulator-boot.log`, counts once.
+
+**What the first log answers.**
+
+- Did the commit limit hold? Look at `headroom`, then at the commit of the last `RAM usage:` line.
+- Is physical RAM the wall? Look at `avail` and `faults`, and at `pages_input_per_s` in `memory.csv`.
+- Is spill eating host memory? Compare `vk_host` with its budget.
+- Did the smaller rings save memory or cost it? Look at `oneoff`.
+- Is the blue-screen pattern live? Look at `noaccess`, and for Event 1001 in preflight's `system.txt`.
+- Where did memory peak? Compare the `RAM usage:` times with the `Shader cache:` lines.
+
 ## Day-one triage playbook
 
 1. **Before the 18th, run the GPU tests.** Extract the artifact, open `preflight`, double-click
@@ -370,7 +517,8 @@ Then, depending on what happens:
 2. **Import report and first boot.** With the decrypted dump, from a command prompt in
    `preflight`, run `preflight.cmd -Game "D:\PS5\GTA6" -ExtraArgs "--title-profile gta6"`. It
    writes the `--dump-imports` report, which needs no GPU, boots the game for 5 minutes with
-   `--preset rtx3050`, a session log and the shared shader cache, and zips everything. The first
+   `--preset rtx3050` (plus `--ram-profile low` under 14 GiB of RAM), a session log and the
+   shared shader cache, and zips everything. The first
    boot compiles cold. Repeat boots of the same build start warm. Without preflight, run
    `kyty_emulator --game <path> --dump-imports imports.txt`, boot with
    `--preset rtx3050 --session-log auto`, and zip the logs with `tools/triage/collect_logs.ps1`.
@@ -593,5 +741,6 @@ unknown on top of the first.
 | Triage | `tools/triage/` |
 | Preflight | `tools/preflight/`, `.github/scripts/package_gpu_tests.py`, `.github/scripts/ctest_groups.py` |
 | NID names | `tools/nid/` |
+| RAM | `src/common/ramOptions.h`, `src/common/ramLog.*`, `src/graphics/host_gpu/renderer/cache/streamBuffer.*` (one-time buffer count), `tools/preflight/preflight.ps1`, `tools/triage/` |
 | CI | `.github/workflows/gta6-ci.yml`, `.github/scripts/run_tests.py` |
 | Tests | `tests/TitleProfileTests.cpp`, `HleSoftFailTests.cpp`, `VramPolicyTests.cpp`, `DiagTests.cpp`, `ShaderRecompilerComputeTests.cpp` |
