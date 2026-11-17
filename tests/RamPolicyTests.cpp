@@ -1,5 +1,6 @@
 // gta6-prep: ram
 // --ram-profile and the settings behind it, without a GPU or a game.
+#include "common/parallelFor.h"
 #include "common/ramOptions.h"
 #include "graphics/host_gpu/renderer/cache/memoryPolicy.h"
 
@@ -119,6 +120,23 @@ void TestHelperBound() {
 	      "the low RAM profile leaves automatic helpers");
 }
 
+// K4: ParallelThreads(cap) is ParallelThreads() bounded by the cap; 0 is no bound.
+void TestParallelThreads() {
+	using Common::CapThreads;
+	static_assert(CapThreads(6, 0) == 6);
+	static_assert(CapThreads(6, 2) == 2);
+	static_assert(CapThreads(1, 2) == 1);
+	static_assert(CapThreads(12, 12) == 12);
+	static_assert(CapThreads(0, 2) == 1);
+	Check(Common::ParallelThreads(0) == Common::ParallelThreads(),
+	      "no cap changed the thread count");
+	Check(Common::ParallelThreads(2) >= 1 && Common::ParallelThreads(2) <= 2,
+	      "a cap of 2 is not 1 or 2 threads");
+	Check(Common::ParallelThreads(ResolveRamSettings(RamProfile::Normal).parallel_threads) ==
+	          Common::ParallelThreads(),
+	      "the normal profile changes the WarmUp and manifest threads");
+}
+
 } // namespace
 
 int main() {
@@ -127,6 +145,7 @@ int main() {
 	TestParsing();
 	TestOomRecoveryImplied();
 	TestHelperBound();
+	TestParallelThreads();
 	std::printf("RamPolicyTests: ok\n");
 	return 0;
 }

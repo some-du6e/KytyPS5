@@ -35,6 +35,13 @@ namespace {
 
 constexpr uint64_t MiB           = 1024 * 1024;
 constexpr uint64_t GdsBufferSize = 64 * 1024;
+// gta6-prep: ram: the host-visible rings' sizes come from Config::GetRamSettings() (128 and 32 MiB
+// with --ram-profile low); these are the defaults. A transfer the ring cannot hold takes a one-time
+// buffer (UploadMemory(), StreamBuffer::MapDownload()) or waits for the ring.
+constexpr uint64_t UploadRingMiB   = 512;
+constexpr uint64_t DownloadRingMiB = 64;
+static_assert(UploadRingMiB == Config::RamSettings {}.upload_ring_mb &&
+              DownloadRingMiB == Config::RamSettings {}.download_ring_mb);
 // GPU-modified ranges come as many small scattered islands, so a readback widens to a window.
 
 std::pair<Buffer*, uint64_t> UploadMemory(GraphicContext& graphics, CommandScheduler& scheduler,
@@ -270,9 +277,11 @@ BufferCache::BufferCache(GraphicContext& graphics, CommandScheduler& scheduler,
       m_bda_pagetable_buffer(graphics, scheduler, MemoryUsage::DeviceLocal, 0, AllFlags,
                              BDA_PAGETABLE_SIZE),
       m_memory_tracker(page_manager),
-      m_staging_buffer(graphics, scheduler, MemoryUsage::Upload, 512 * MiB),
+      m_staging_buffer(graphics, scheduler, MemoryUsage::Upload,
+                       uint64_t {Config::GetRamSettings().upload_ring_mb} * MiB),
       m_stream_buffer(graphics, scheduler, MemoryUsage::Stream, 64 * MiB),
-      m_download_buffer(graphics, scheduler, MemoryUsage::Download, 64 * MiB),
+      m_download_buffer(graphics, scheduler, MemoryUsage::Download,
+                        uint64_t {Config::GetRamSettings().download_ring_mb} * MiB),
       m_device_buffer(graphics, scheduler, MemoryUsage::DeviceLocal, 128 * MiB),
       m_texture_cache(texture_cache) {
 	std::memset(m_gds_buffer.Mapped().data(), 0, static_cast<size_t>(m_gds_buffer.Size()));

@@ -30,7 +30,8 @@ static VramRequest VramRequestOf(const ConfigOptions& cfg) {
 	request.no_oom_recovery = cfg.no_oom_recovery;
 	request.profile         = cfg.vram_profile;
 	request.rt_arena_mb     = cfg.rt_arena_mb;
-	return request;
+	// gta6-prep: ram: --ram-profile low implies --oom-recovery (--no-oom-recovery still wins).
+	return ApplyRamProfile(request, cfg.ram_profile);
 }
 
 void Initialize() {

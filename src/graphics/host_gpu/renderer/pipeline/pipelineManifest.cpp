@@ -1729,7 +1729,9 @@ void PipelineCache::OpenManifest() {
 	} else {
 		AddManifestRecords(all);
 	}
-	for (size_t i = 0; i < Common::ParallelThreads(); i++) {
+	// gta6-prep: ram: 2 threads at most with --ram-profile low, as WarmUp().
+	const auto threads = Common::ParallelThreads(Config::GetRamSettings().parallel_threads);
+	for (size_t i = 0; i < threads; i++) {
 		state.threads.emplace_back([this](const std::stop_token& stop) { ManifestWorker(stop); });
 	}
 	state.watcher = std::jthread([this](const std::stop_token& stop) {

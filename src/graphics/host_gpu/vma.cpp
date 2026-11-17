@@ -466,7 +466,11 @@ void GraphicContext::DeleteImage(VulkanImage& image) {
 	create.usage         = image.usage;
 	create.sharingMode   = vk::SharingMode::eExclusive;
 	create.initialLayout = vk::ImageLayout::eUndefined;
-	if (image.recyclable) {
+	// gta6-prep: ram: --ram-profile low sends an image VMA placed outside device-local memory to
+	// the graveyard instead: the pool would keep its pinned host memory.
+	static_assert(Config::RamSettings {}.recycle_spilled_images);
+	if (image.recyclable && (Config::GetRamSettings().recycle_spilled_images ||
+	                         !SpilledOutOfDeviceMemory(image.allocation))) {
 		VmaAllocationInfo allocation_info {};
 		vmaGetAllocationInfo(allocator, image.allocation, &allocation_info);
 		std::lock_guard lock(g_recycled_mutex);

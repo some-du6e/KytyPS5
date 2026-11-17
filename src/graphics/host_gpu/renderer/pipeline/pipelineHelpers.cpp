@@ -751,8 +751,10 @@ uint32_t PipelineHelperProcesses(const GraphicContext& graphics) {
 	const auto processors = static_cast<uint32_t>(std::popcount(process_mask));
 	const auto automatic  = processors / 2u > 2u ? processors / 2u - 2u : 1u;
 	// gta6-prep: vram: --vram-profile low keeps at most 2 (each helper has a device of its own).
-	return MemoryPolicy::BoundPipelineHelpers(automatic,
-	                                          Config::GetVramSettings().max_pipeline_helpers);
+	// gta6-prep: ram: --ram-profile low keeps none (each takes ~400 MB while it compiles).
+	return Config::BoundHelpersByRam(MemoryPolicy::BoundPipelineHelpers(
+	                                     automatic, Config::GetVramSettings().max_pipeline_helpers),
+	                                 Config::GetRamSettings().max_pipeline_helpers);
 }
 
 uint32_t PipelineHelperProcessesAlone(uint32_t processes) {
@@ -773,9 +775,11 @@ uint32_t PipelineHelperProcessesAlone(uint32_t processes) {
 		const auto extra = static_cast<uint32_t>(memory.ullAvailPhys / 2u / (512ull << 20u));
 		alone            = std::min(alone, processes + extra);
 	}
-	// gta6-prep: vram: as PipelineHelperProcesses().
-	return std::max(processes, MemoryPolicy::BoundPipelineHelpers(
-	                               alone, Config::GetVramSettings().max_pipeline_helpers));
+	// gta6-prep: vram, gta6-prep: ram: as PipelineHelperProcesses().
+	return std::max(processes, Config::BoundHelpersByRam(
+	                               MemoryPolicy::BoundPipelineHelpers(
+	                                   alone, Config::GetVramSettings().max_pipeline_helpers),
+	                               Config::GetRamSettings().max_pipeline_helpers));
 }
 
 // The helper process.
