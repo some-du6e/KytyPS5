@@ -274,7 +274,8 @@ Read this before relying on anything above.
 | TheCruZ fork, own CI | Green on Linux and Windows at `c00f2f27` (run 43081193192 in TheCruZ/KytyPS5-GTA), for the tests its CI runs. It does not run `shader_cfg`, which fails at `c00f2f27` (see below). |
 | gta6-prep, full CI (run 43304032901, `30032c06`) | Green. Builds on Linux (clang) and Windows (clang-cl): emulator, launcher and every test target. Linux: 69 of 69 host tests pass. Windows: 67 of 67 gated host tests pass; `vdecsw` is skipped because clang-cl does not build it (as upstream), and upstream's `common` fails on the Windows runner as it does upstream, so it is reported, not gated. |
 | GPU test group on CI | 3 of 42 pass on lavapipe; the rest stop because the runner has no device with fragment barycentrics and 64-bit LDS/image atomics, as upstream's do. |
-| GPU test group on an RTX 3050 6 GB (Windows 11, driver 621.14, through preflight) | 39 of 42 pass, including this branch's own `shader_recompiler_gta6_alu` and `vram_heap_limit`. `shader_recompiler_compute` passes 1058 checks, then stops at `ShaderMemDsAtomics64`, and `shader_recompiler_shader_mem` stops at the same case. That was a test bug, not an NVIDIA one. The case kept ADDR in v7, the high half of the VDST pair, so loading the VDST marker before each atomic moved ADDR out of range, and the recompiler's bounds check skipped every 64-bit atomic, as it would on any GPU. `42bd58a4` fixes the case, and the new host tests `shader_recompiler_shader_mem_host_subgroup32` and `_subgroup64` check its LDS addresses in CI without a GPU. The fixed case has not run on a GPU yet. Its first run is also the first on a GPU for the 64-bit compare-exchange loop on LDS (ds inc, dec, rsub and mskor) and for native 64-bit `OpAtomicSMin` and `OpAtomicXor` on Workgroup memory. The buffer form of that loop already passed in `ShaderMemBufferAtomics64`. `ShaderMemDsAtomics32`, the two `ShaderMemDsAddF32Contention` cases and everything else `shader_recompiler_compute` runs after the fixed case have not run on a GPU either. The run before stopped earlier, at a test bug in `ShaderMemBufferAtomicsWrap` (fixed in `dfdf16a9`). `kernel_file_system` dies with 0xC0000028 (bad stack while unwinding) in its mutex handoff case, as it does on CI's Windows runner; it is being investigated. The 2 GiB buffer case is skipped on PCs with less than 14 GiB of RAM. The first run on that PC got only 4 tests to the GPU, because its page file could not commit the 12.7 GB guest section; the tests now use 6 GiB. |
+| GPU test group on an RTX 3050 6 GB (Windows 11, driver 621.14, through preflight) | 39 of 42 pass, including this branch's own `shader_recompiler_gta6_alu` and `vram_heap_limit`. `shader_recompiler_compute` passes 1058 checks, then stops at `ShaderMemDsAtomics64`, and `shader_recompiler_shader_mem` stops at the same case. That was a test bug, not an NVIDIA one. The case kept ADDR in v7, the high half of the VDST pair, so loading the VDST marker before each atomic moved ADDR out of range, and the recompiler's bounds check skipped every 64-bit atomic, as it would on any GPU. `42bd58a4` fixes the case, and the new host tests `shader_recompiler_shader_mem_host_subgroup32` and `_subgroup64` check its LDS addresses in CI without a GPU. The fixed case has not run on a GPU yet. Its first run is also the first on a GPU for the 64-bit compare-exchange loop on LDS (ds inc, dec, rsub and mskor) and for native 64-bit `OpAtomicSMin` and `OpAtomicXor` on Workgroup memory. The buffer form of that loop already passed in `ShaderMemBufferAtomics64`. `ShaderMemDsAtomics32`, the two `ShaderMemDsAddF32Contention` cases and everything else `shader_recompiler_compute` runs after the fixed case have not run on a GPU either. The run before stopped earlier, at a test bug in `ShaderMemBufferAtomicsWrap` (fixed in `dfdf16a9`). `kernel_file_system` died with 0xC0000028 (bad stack while unwinding) in its mutex handoff case, as on CI's Windows runner. That was an emulator bug on Windows, fixed in `d8e1118a` (next row). The 2 GiB buffer case is skipped on PCs with less than 14 GiB of RAM. The first run on that PC got only 4 tests to the GPU, because its page file could not commit the 12.7 GB guest section; the tests now use 6 GiB. |
+| Cancel fix and shader-mem host tests (run 44252374777, `dfe61030`) | Green. Linux passes 78 of 78 host tests and Windows 76 of 76 gated, including the new `guest_threads`, `kernel_file_system_mutex`, `shader_recompiler_shader_mem_host_subgroup32` and `_subgroup64`. On the Windows runner `kernel_file_system` now gets through all three mutex cases and stops at the hidden Vulkan test window, as on Linux. Before `d8e1118a` it died with 0xC0000028 in the mutex handoff case. The cause: a guest thread canceled at `PthreadTestcancel` left through winpthreads' `pthread_exit`, whose msvcrt longjmp unwinds with RtlUnwindEx from the guest stack, where the TEB's stack bounds are zero. `d8e1118a` leaves through `PthreadExit`'s host-stack return instead (Windows only). `8565bd98` (real TEB bounds for guest stacks) stays on `wf/kfs-unwind`. The GPU package still holds 42 tests. None of this has run on a GPU. |
 | Test fixes from the first CI run | `shader_alu_decode`: the VOPC program overwrote its own buffer descriptor (test bug). `resource_tracking`: its "unsupported format" was `k8SScaled`, which shader-mem made supported (bisected to the shader-mem merge). `shader_cfg`: one check (material selection must reject an `s_cmp_le_u32` loop bound) fails in TheCruZ's fork at its own tip; it now prints a "known fork deviation" line instead of aborting, and the ~110 tests after it, which the fork never ran, pass. The recompiler keeps the fork's behaviour. |
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
 | gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
@@ -587,10 +588,22 @@ at each use pins the normal value to the literal it replaced.
      just before it.
    - `VRAM spill` or `VRAM pressure` lines, or a slow game. Compare `--vram-limit-mb` runs on a
      bigger card if one is around.
+   - On Windows, the process ends with no fatal line in the log, probably with 0xE06D7363 (a C++
+     exception) or 0x40010006 (OutputDebugString). Something raised an exception on a guest thread,
+     where Windows cannot run frame-based handlers (see "Windows guest threads" under Known risks).
+     Try a build of `wf/kfs-unwind`, whose `8565bd98` gives guest stacks real bounds. Those exit
+     codes are inferred from how Windows works; nobody has seen them on this branch.
 5. **Re-run and compare.** `kyty_triage.py --compare old.json new.log` shows which failures went
    away and which are new.
 6. **Keep fixes per-title** unless they fix a real emulation bug. Add GTA 6 quirks to the `gta6`
    profile in `src/common/titleProfile.cpp`, and its IDs once known.
+7. **Second opinion.** If this branch cannot get GTA 6 past boot, try TheCruZ's own build: the
+   newest release on [his releases page](https://github.com/TheCruZ/KytyPS5-GTA/releases) (v24,
+   2026-11-17, has a Windows zip). It has the work this branch lacks (see "This branch is behind
+   both of its sources" under Known risks), including native ray tracing for more BVH walks. It
+   has none of this branch's 8 GB mode, read-watch locks, soft-fails, title profile or logs. So on
+   8 GB of RAM it needs the same page file and uses more RAM. Where it gets further, its commits
+   show what to bring over.
 
 ## Known risks
 
@@ -607,6 +620,16 @@ at each use pins the normal value to the literal it replaced.
 - **Defaults that changed.** These are deliberate, but they are changes. GTA V's legacy
   entitlement labels now go only to GTA V. An unsupported shader instruction skips a draw instead
   of exiting, and several boot-path EXITs now return errors.
+- **Windows guest threads.** Guest code runs with the TEB's stack bounds zeroed, as upstream does.
+  So Windows cannot run frame-based exception handlers on a guest thread. An uncaught C++
+  exception, or system code that raises and catches its own (OutputDebugString does), ends the
+  process without a log line. Access violations are unaffected: they reach the emulator's vectored
+  handler first. `8565bd98` on `wf/kfs-unwind` gives guest stacks real bounds. It is held off
+  gta6-prep because it changes every guest thread on Windows and has not run on a PC.
+- **Thread cancellation on Windows.** winpthreads acts on a cancel only at `PthreadTestcancel`. A
+  canceled guest thread blocked in a join, a condition wait, a sleep or a semaphore keeps waiting,
+  where the PS5 would cancel it. A game that cancels such a thread and then joins it hangs at the
+  join. `d8e1118a` makes a `pthread_testcancel()` in those waits safe to add.
 - **Silent wrong results.** Returning 0 or an error instead of crashing can push a failure later
   and make it harder to read. The once-per-site `Soft-fail:` and first-call import lines exist to
   keep that visible.
@@ -617,11 +640,13 @@ at each use pins the normal value to the literal it replaced.
   infostealer that adds itself to Windows Defender's exclusions. Only use this fork's CI artifact
   or the official projects' release pages, never builds posted in comments, Discord DMs or videos,
   and never add a broad Defender exclusion for an emulator.
-- **This branch is behind both of its sources.** Upstream main is about 50 commits past
+- **This branch is behind both of its sources.** On 2026-11-18, upstream main was 70 commits past
   `bc934ef0`. Those include nmzik's generic native ray tracing (2026-11-12 to 11-15), which mirrors
   guest BVHs into host acceleration structures and traces recognized traversals with ray queries.
-  TheCruZ has since rebased his fork and added CPU-side work such as resolving draws on a second
-  thread and draw templates. None of it is on gta6-prep yet.
+  TheCruZ has since rebased his fork onto that upstream and was 237 commits past it. Those include
+  CPU-side work such as resolving draws on a second thread and draw templates, and native ray
+  tracing for more BVH walks (sce::Psr format 10 BVHs, SAROS's walks). None of it is on gta6-prep
+  yet. Bringing it over means replaying this branch onto his rebased history.
 - **Firmware.** One unverified report says GTA 6 needs PS5 firmware 14.22, which could delay
   usable dumps.
 - **The estimates below.**
