@@ -406,6 +406,48 @@ class ContractRamTests(unittest.TestCase):
         # Nothing above the plain no-fatal rule and the other host memory rules changes.
         self.assertNotIn("ram-low-ram-normal-profile", [a["rule_id"] for a in rep["fix_areas"]])
 
+    def test_guard_fields(self):
+        # gta6-prep: read-guard: --ram-profile low on 8 GB with guard pages. The RAM usage lines have guarded
+        # between unlocked and lockfail; unlocked stays 0, since the pages past the budget are guarded.
+        text = (
+            "--- Session 2026-11-19 21:00:00 ---\n"
+            "Fork build some-du6e/KytyPS5 1234abc\n"
+            "RAM profile: low -> upload_ring=128 download_ring=32 compile_workers=3 async_threads=2 parallel_threads=2 "
+            "helpers<=0 cache_save=180s/60s fresh_stack_clear=off recycle_spilled=off lock_read_watched=all "
+            "read_watch_guard_pages=on oom_recovery=on\n"
+            "RAM usage: t=30 ws=2420 private=7810 commit=31650/40858 avail=280 faults=2210 hard=? vk_local=3300/5560 "
+            "vk_host=820/3711 spilled=0 noaccess=1400 oneoff=3/96 locked=1011/1011 unlocked=0 guarded=389 lockfail=0 "
+            "slowlocks=2/7\n"
+            "RAM usage: t=60 ws=2610 private=8600 commit=32390/40858 avail=201 faults=3105 hard=? vk_local=4800/5560 "
+            "vk_host=1210/3711 spilled=256 noaccess=1312 oneoff=9/260 locked=1009/1011 unlocked=0 guarded=303 "
+            "lockfail=0 slowlocks=9/48\n")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(text.encode("utf-8")))
+        hm = rep["host_memory"]
+        self.assertTrue(hm["profile"]["settings"].endswith("read_watch_guard_pages=on oom_recovery=on"))
+        last = hm["last"]
+        self.assertEqual((last["locked_mib"], last["lock_budget_mib"], last["unlocked_mib"], last["guarded_mib"],
+                          last["lock_failed_pages"], last["slow_lock_calls"], last["longest_lock_ms"]),
+                         (1009, 1011, 0, 303, 0, 9, 48))
+        self.assertEqual((hm["lock"]["guarded_mib"], hm["lock"]["max_guarded_mib"]), (303, 389))
+        bluescreen = [a for a in rep["fix_areas"] if a["rule_id"] == "ram-noaccess-bluescreen"]
+        self.assertEqual(len(bluescreen), 1)
+        self.assertIn("0 MiB of it NOACCESS without a lock in the last sample", bluescreen[0]["why"][0])
+        self.assertIn("; 303 MiB of it guard pages, not NOACCESS, in the last sample (--read-watch-guard-pages)",
+                      bluescreen[0]["why"][0])
+        self.assertIn("--read-watch-guard-pages", bluescreen[0]["next_step"])
+        md = u.kt.render_markdown(rep)
+        self.assertIn("read-watched memory locked in RAM up to 1011 MiB of a 1011 MiB budget, up to 0 MiB NOACCESS "
+                      "without a lock, up to 389 MiB guard pages, 0 page lock(s) Windows refused and 9 VirtualLock "
+                      "call(s) over 1 ms (longest 48 ms) by t=60 s", md)
+        # Guard pages without a lock budget: the summary still says how much was guarded.
+        off = text.replace("locked=1011/1011", "locked=0/0").replace("locked=1009/1011", "locked=0/0")
+        rep = u.kt.triage(["-"], rules=u.RULES, stdin=io.BytesIO(off.encode("utf-8")))
+        self.assertEqual(rep["host_memory"]["lock"]["budget_mib"], 0)
+        bluescreen = [a for a in rep["fix_areas"] if a["rule_id"] == "ram-noaccess-bluescreen"]
+        self.assertIn("none of it locked in RAM (no --lock-read-watched-mb budget); 303 MiB of it guard pages",
+                      bluescreen[0]["why"][0])
+        self.assertIn("up to 389 MiB guard pages", u.kt.render_markdown(rep))
+
     def test_lock_off_and_failures(self):
         # The normal profile prints the fields with no budget: the hint says nothing was locked, and the markdown
         # leaves the lock out. A failed raise, a cut budget, a failed VirtualLock and Windows' limit show as RAM

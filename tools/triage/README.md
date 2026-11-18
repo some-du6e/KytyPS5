@@ -88,12 +88,14 @@ Formats it knows (the emitters are listed in the survey catalogue and `notes/log
   plain no-fatal rule, since a session log has no clean-exit line and preflight stops its boots.
   It points at the Windows blue screen 0x1A/0x41202 and at Event 1001 in preflight's `system.txt`.
   Newer builds end the renderer's part of `RAM usage:` with `locked=<MiB>/<budget MiB>
-  unlocked=<MiB> lockfail=<pages> slowlocks=<calls>/<ms>`. These are the read-watched guest memory
-  locked in RAM now, and the read-watched memory of the guest section that stays NOACCESS without a
-  lock now: the budget or Windows refused it, and it is what the blue screen needs. The last two
-  count since startup: the page locks Windows refused, and the VirtualLock calls over 1 ms with the
-  longest one. `host_memory.lock` keeps the last of them with the peaks of `locked` and `unlocked`,
-  and the hint quotes `unlocked`. `RAM lock:` lines go to `host_memory.lock_lines`: the working set
+  unlocked=<MiB> guarded=<MiB> lockfail=<pages> slowlocks=<calls>/<ms>` (`guarded` only from the
+  read-watch guard pages on). These are the read-watched guest memory locked in RAM now, the
+  read-watched memory of the guest section that stays NOACCESS without a lock now (the budget or
+  Windows refused it, and it is what the blue screen needs; 0 with guard pages), and the part of it
+  that is guard pages now (`--read-watch-guard-pages`). The last two count since startup: the page
+  locks Windows refused, and the VirtualLock calls over 1 ms with the longest one.
+  `host_memory.lock` keeps the last of them with the peaks of `locked`, `unlocked` and `guarded`,
+  and the hint quotes `unlocked` and `guarded`. `RAM lock:` lines go to `host_memory.lock_lines`: the working set
   raised at startup (or why the lock stays off), a `--lock-read-watched-mb` the cap cut, the first
   failed call, and Windows' limit. Older lines still parse.
 - Progress: `Initialized:`, `Shaders: VS ...`, `--- Execute: Main`, pipeline cache and manifest
