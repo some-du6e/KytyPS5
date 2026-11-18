@@ -197,6 +197,9 @@ struct PageManager::Impl {
 		// gta6-prep: ram-lock: every run a read watcher adds becomes NoAccess, and every run one
 		// removes gets back the access it had (Read or ReadWrite); the kernel locks the runs'
 		// memory in RAM meanwhile. Write watchers never change a NoAccess page.
+		// gta6-prep: read-guard: nor a guard page: the kernel's guards are over read-only, whatever
+		// access the page has without its read watchers, so a write watcher added under a read
+		// watch still sees the writes.
 		using Libs::LibKernel::Memory::ReadWatch;
 		constexpr auto watch = !is_read ? ReadWatch::None
 		                       : track  ? ReadWatch::Start
@@ -316,6 +319,28 @@ bool PageManager::AllowExecute(uint64_t vaddr) {
 	return Libs::LibKernel::Memory::ProtectGuestHostMemory(
 	    Common::AlignDown(vaddr, PAGE_SIZE), PAGE_SIZE,
 	    static_cast<Mode>(static_cast<uint32_t>(perms) | static_cast<uint32_t>(Mode::Execute)));
+}
+
+// gta6-prep: read-guard
+void PageManager::RearmReadWatch(uint64_t vaddr) noexcept {
+	if (!GuestRange {vaddr, 1}.Valid()) {
+		return;
+	}
+	auto* region = m_impl->FindRegion(vaddr);
+	if (region == nullptr) {
+		return;
+	}
+	const auto  index = static_cast<size_t>((vaddr % REGION_SIZE) / PAGE_SIZE);
+	SpinGuard   lock(region->lock);
+	const auto& page = region->pages[index];
+	if (page.access_watchers == 0) {
+		return;
+	}
+	// A Start of the page alone, as the read watch's Start made it: the kernel keeps PAGE_NOACCESS
+	// if the page holds a lock (or gets one now), and a guard otherwise. Its watchers stay as they
+	// are, and so does NoAccessPages().
+	m_impl->Protect(Common::AlignDown(vaddr, PAGE_SIZE), PAGE_SIZE, page.Perms(),
+	                Libs::LibKernel::Memory::ReadWatch::Start);
 }
 
 template <bool track, bool is_read>

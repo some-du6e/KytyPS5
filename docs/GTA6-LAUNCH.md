@@ -283,6 +283,7 @@ Read this before relying on anything above.
 | gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
 | Preflight package | In CI, 13 CI-script tests and 13 preflight tests pass, the preflight ones under pwsh 7.6.10. All three Windows PowerShell 5.1 smoke steps pass. The packaged tests load outside the build tree: `device_creation` fails at the hidden Vulkan window, as it does under ctest on a runner with no GPU. `-Game` on an empty folder reports FAIL for imports and boot and still writes its zip. A hung test gets stopped at 5 s with its child. On that runner `kernel_file_system` ends with 0xC0000028 (bad stack while unwinding an exception) where Linux fails cleanly, so watch for it on Karim's PC. Nothing has run on a PC with a GPU yet. |
 | Read-watch locks (run 44044570383, `709a99b7`, merged as `0aa6b19c`) | Green after one fix: run 44038715401 failed on a Windows-only compile error. Linux passes 74 of 74 host tests and Windows 72 of 72 gated, including `read_watch_lock` and `virtual_memory_allocation`. On the Windows runner, `virtual_memory_allocation` checks with QueryWorkingSetEx that a watch locks the backing pages and the unwatch unlocks them. Whether the lock keeps the blue screen away is unverified: nothing has run on a PC with 8 GB of RAM. |
+| Read-watch guard pages (`wf/read-guard`) | Written without a compiler: not built or run yet. CI's Windows runner is the first to check, with VirtualQuery, that the pages past the lock budget become PAGE_GUARD \| PAGE_READONLY, that the locked ones keep PAGE_NOACCESS, that a read faults once and the watch's end leaves no guard, that a page whose guard went stays read-only until its watch ends, that the emulator's exception filter puts no guard back on a served guest page, and that WriteFile() of a guard page takes the guard with no handler run (its log line says whether the call failed). Whether the guard pages keep the blue screen away, and what their stale reads cost, is unverified here: nothing has run on a PC with 8 GB of RAM. |
 | `--ram-profile`, RAM lines, preflight and triage RAM support (run 44020349456, `c0e43876`, merged as `2105e147`) | Green. Linux passes 72 of 72 host tests and Windows 70 of 70 gated, including `ram_policy`, `emulator_ram_cli`, `emulator_ram_profile_invalid` and `diag`, which checks the commit figures against `K32GetPerformanceInfo` on Windows. The tools job passes triage 63, NID 68, CI scripts 15 and preflight 23. The Windows PowerShell 5.1 smoke steps check the RAM lines in `system.txt`, `summary.json` and `memory.csv`. Nothing has run on a PC with 8 GB of RAM or on a GPU. |
 | Preflight shader cache (run 43966470006, `425a5841`) | Green. 22 preflight tests pass in CI under pwsh. Under Windows PowerShell 5.1, the empty-game steps linked the run folder to the shared cache through a real junction, found the marker file there on both runs, and kept it out of the zip. `-ColdCache` made no link. A junction made with `mklink /J` stayed out of the zip. How much time a warm boot saves is unmeasured, since no real game has booted. |
 | GPU group time limit (run 43939026905, `00f3b3b0`) | Green. Once the probe finds no device, the Linux GPU step takes 8.4 minutes instead of 54, and the Linux job 27 minutes instead of 70. The 3 device-free tests still pass on both runners. |
@@ -411,15 +412,38 @@ on the page file, then on physical RAM. The GPU comes after both.
   - Their fix makes such pages guard pages instead (91a15d6c). Their repro ran twice for 30 minutes
     on guard pages without a blue screen.
   - They keep PAGE_NOACCESS only on pages they have locked in RAM, 32 MiB at most (d8f99391a5).
-  - This branch has no guard pages. Under `--ram-profile low` it locks the watched pages on Windows
-    instead, up to an eighth of the RAM (about 1 GiB with 8 GB). Before a run of guest pages becomes
-    NOACCESS, it locks the same pages of the section's read-write view with VirtualLock. It unlocks
-    them when the watch ends.
-  - Three kinds of page stay NOACCESS without a lock, as before: pages past that cap, pages Windows
-    refuses to lock, and pages the game protects with PROT_NONE itself. `unlocked` on the
-    `RAM usage:` lines shows how much of the first two there is.
-  - Nobody has run the lock without guard pages, so whether it keeps the blue screen away is
-    unverified.
+  - This branch does both under `--ram-profile low` on Windows. It locks the watched pages in RAM, up
+    to an eighth of the RAM (about 1 GiB with 8 GB). Before a run of guest pages becomes NOACCESS, it
+    locks the same pages of the section's read-write view with VirtualLock, and it unlocks them when
+    the watch ends. Pages locked when their watch starts keep PAGE_NOACCESS.
+  - The watched pages of the section that the lock does not take become
+    PAGE_GUARD | PAGE_READONLY guard pages, as in the other fork. That covers pages past the cap
+    and pages Windows refuses to lock, or every watched page with `--lock-read-watched-mb 0`. A
+    guard page needs no lock, so a finished watch keeps the budget it frees for the next watches
+    instead of offering it to these pages. `--read-watch-guard-pages off` makes them PAGE_NOACCESS
+    without a lock again, as before, and a finished watch then offers them the budget it frees.
+  - A guard page is one-shot, which is why locked pages keep PAGE_NOACCESS. The first read of the page
+    takes the guard off for every thread. Until the emulator has read back what the GPU wrote
+    there, other threads read the page without a fault and see the bytes from before. Their writes
+    still fault, since the guard is over read-only. They wait for the readback, and the write
+    tracking sees them, as on a NOACCESS page. The other fork put each guard back at once and still
+    saw 1 fault in about 90 whose page another thread read first, on a game whose job threads read
+    the same GPU results together. Here the window lasts until that first read is served. Stale
+    reads can show as flicker, dark or wrong lighting, or physics glitches, and only on guarded
+    memory.
+  - A Windows API that reads or writes a guest buffer in the kernel, such as a file write or a
+    socket send or receive, takes the guard without the emulator seeing a fault. The call fails,
+    or uses the bytes from before the GPU's, and the watch is lost. A user-mode access, such as a
+    CRT memcpy, faults like any other. Guest file writes and socket sends and receives therefore
+    read the guarded pages of their buffer first, which serves their watches. Guest file reads
+    already go through a host buffer, and the save-data code copies a save's parameters before it
+    writes them.
+  - Two kinds of page stay NOACCESS without a lock: watched pages outside the section (private
+    memory such as guest stacks; the bug check is a section view's), and pages the game protects
+    with PROT_NONE itself. On the `RAM usage:` lines, `guarded` shows how much is guard pages, and
+    `unlocked` how much of the section is NOACCESS without a lock (0 with guard pages).
+  - Nobody has run the lock or the guard pages in a game or on a PC with 8 GB of RAM, so whether
+    they keep the blue screen away, and what the stale reads cost in GTA 6, is unverified.
 
 **Before the first boot.**
 
@@ -463,11 +487,13 @@ less than 14 GiB of RAM, unless `-ExtraArgs` names a RAM profile.
 | spilled images in the recycle pool | yes | no | more allocations under pressure |
 | `--oom-recovery` | off (on under `--preset rtx3050`) | on | slow oversubscription instead of an exit |
 | read-watched guest memory locked in RAM (Windows) | none | all of it, up to an eighth of the RAM (`--lock-read-watched-mb`) | up to that much RAM Windows can no longer page out (about 1 GiB with 8 GB), VirtualLock calls that may read pages back from the page file, and about 30 MiB of bookkeeping at 1 GiB locked |
+| read-watched guest memory without a lock (Windows) | PAGE_NOACCESS | guard pages (`--read-watch-guard-pages`) | other threads can read such a page stale until the first read of it is served |
 
 `--pipeline-helpers`, `KYTY_PIPELINE_HELPERS` and `--no-oom-recovery` still win.
-`--lock-read-watched-mb <MiB>` sets a smaller lock budget, and `0` turns the lock off. Under the
-recommended `--preset rtx3050` the last row changes nothing, since the preset already turns OOM
-recovery on. The savings are estimates:
+`--lock-read-watched-mb <MiB>` sets a smaller lock budget, and `0` turns the lock off.
+`--read-watch-guard-pages off` leaves the memory without a lock PAGE_NOACCESS, and `on` makes guard
+pages under the normal profile too. Under the recommended `--preset rtx3050` the `--oom-recovery`
+row changes nothing, since the preset already turns OOM recovery on. The savings are estimates:
 - 416 MiB of host-visible memory from the rings;
 - about 400 MB per helper that does not run;
 - fewer concurrent shader translations and driver compiles.
@@ -496,13 +522,18 @@ at each use pins the normal value to the literal it replaced.
   - `vk_local` and `vk_host` are the VRAM heaps' usage and budget.
   - `spilled` is what went outside VRAM so far. It never goes down, so it shows that spill
     happened, not that it eats host memory now. `vk_host` against its budget shows that.
-  - `noaccess` is the guest memory the read watchers keep NOACCESS now.
+  - `noaccess` is the guest memory the read watchers hold now: NOACCESS, or guard pages with
+    `--read-watch-guard-pages`.
   - `oneoff` counts the one-time buffers that took transfers the host rings could not, so far,
     with their MiB.
   - `locked` is the read-watched memory locked in RAM now, then the budget. It reads `0/0` when the
     lock is off.
   - `unlocked` is the read-watched memory of the guest section that is NOACCESS without a lock now,
-    because the budget or Windows refused it. That is the memory the blue screen needs.
+    because the budget or Windows refused it. That is the memory the blue screen needs. With guard
+    pages it is 0: those pages are guarded instead.
+  - `guarded` is the read-watched memory of the guest section that is guard pages now: past the
+    budget or refused by Windows, or all of it without a lock budget. A page whose guard went with
+    an access still counts until its watch ends.
   - `lockfail` counts the page locks Windows refused so far.
   - `slowlocks` counts the VirtualLock calls that took over 1 ms so far, then gives the longest one
     in ms.
@@ -533,8 +564,8 @@ at each use pins the normal value to the literal it replaced.
 - `kyty_triage.py` adds a `host_memory` section and five rules: a warning line, commit at 95% or
   more on Windows, under 300 MiB available in most samples, under 14 GiB of RAM with the normal
   profile, and the blue-screen hint.
-  - The hint needs a log that stops low on RAM after NOACCESS samples. It quotes `unlocked` from
-    the last sample. It ranks under the plain no-fatal rule, because a session log never has a
+  - The hint needs a log that stops low on RAM after NOACCESS samples. It quotes `unlocked`, and
+    `guarded` when guard pages held memory, from the last sample. It ranks under the plain no-fatal rule, because a session log never has a
     clean-exit line and preflight stops its boots.
   - A line that a zip holds twice, in `session.log` and `emulator-boot.log`, counts once.
 
@@ -544,9 +575,13 @@ at each use pins the normal value to the literal it replaced.
 - Is physical RAM the wall? Look at `avail` and `faults`, and at `pages_input_per_s` in `memory.csv`.
 - Is spill eating host memory? Compare `vk_host` with its budget.
 - Did the smaller rings save memory or cost it? Look at `oneoff`.
-- Is the blue-screen pattern live? Look at `unlocked`, and for Event 1001 in preflight's
-  `system.txt`. Above 0, some NOACCESS memory has no lock. If it stays above 0 at the cap, the
-  remaining fix is the other fork's guard pages.
+- Is the blue-screen pattern live? Look at `unlocked` and `guarded`, and for Event 1001 in
+  preflight's `system.txt`. `unlocked` above 0 means NOACCESS memory without a lock, so the guard
+  pages were off: turn them on. `guarded` above 0 means guard pages took what the lock could not.
+- Do the guard pages cost correctness? With `guarded` above 0, look for flicker, dark or wrong
+  lighting, or objects in the wrong place. If they go away with `--read-watch-guard-pages off`,
+  the stale reads of the guard window are the cause, and NOACCESS brings back the blue-screen
+  risk the guards avoid.
 - Does the lock stall the game? Look at `slowlocks`.
 - Where did memory peak? Compare the `RAM usage:` times with the `Shader cache:` lines.
 
@@ -807,6 +842,6 @@ unknown on top of the first.
 | Triage | `tools/triage/` |
 | Preflight | `tools/preflight/`, `.github/scripts/package_gpu_tests.py`, `.github/scripts/ctest_groups.py` |
 | NID names | `tools/nid/` |
-| RAM | `src/common/ramOptions.h`, `src/common/ramLog.*`, `src/kernel/readWatchLocks.h` (the lock bookkeeping), `src/graphics/host_gpu/renderer/cache/streamBuffer.*` (one-time buffer count), `tools/preflight/preflight.ps1`, `tools/triage/` |
+| RAM | `src/common/ramOptions.h`, `src/common/ramLog.*`, `src/kernel/readWatchLocks.h` (the lock bookkeeping), `src/kernel/memoryAddressSpace.inc` (where the locks and guard pages are applied), `src/common/hostException.cpp` (what a guard page fault gets back), `src/graphics/host_gpu/renderer/cache/streamBuffer.*` (one-time buffer count), `tools/preflight/preflight.ps1`, `tools/triage/` |
 | CI | `.github/workflows/gta6-ci.yml`, `.github/scripts/run_tests.py` |
 | Tests | `tests/TitleProfileTests.cpp`, `HleSoftFailTests.cpp`, `VramPolicyTests.cpp`, `DiagTests.cpp`, `ShaderRecompilerComputeTests.cpp` |

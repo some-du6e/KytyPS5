@@ -144,8 +144,9 @@ boots at all, and the RAM decides how slow it gets.
   smaller, runs fewer compile threads and no pipeline helpers, and implies `--oom-recovery`. It also
   locks the guest memory the GPU trackers make inaccessible in RAM, up to an eighth of the RAM
   (about 1 GiB with 8 GB). Another fork found that Windows can blue-screen on such memory once it
-  pages it out. What the cap leaves out stays inaccessible without a lock, as before.
-  `--lock-read-watched-mb` sets the amount, and 0 turns it off. A PC with 16 GB reports a little
+  pages it out. What the cap leaves out becomes guard pages instead, as that fork's fix does.
+  `--lock-read-watched-mb` sets the amount, and 0 turns it off. `--read-watch-guard-pages off`
+  leaves what the lock does not take inaccessible, as before. A PC with 16 GB reports a little
   under 16 GiB and keeps the normal settings. `-ExtraArgs "--ram-profile normal"` turns it off, and
   preflight then adds nothing.
 - **The free commit.** Right before the boot, preflight checks how much of the commit limit is

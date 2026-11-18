@@ -900,12 +900,17 @@ public:
 		// access, and unlocked once they have it back. The state lock keeps the translation as it
 		// is, and the page tracker's lock, held by the caller, the pages' watches. Without a
 		// budget nothing changes.
-		const bool lock = watch == ReadWatch::Start && mode == VirtualMemory::Mode::NoAccess &&
-		                  m_read_locks.Enabled();
+		const bool watch_starts =
+		    watch == ReadWatch::Start && mode == VirtualMemory::Mode::NoAccess;
+		const bool lock = watch_starts && m_read_locks.Enabled();
 		if (lock && m_read_locks.HasRoom()) {
 			PrefetchBacking(vaddr, size);
 		}
 		std::shared_lock state(g_memory_state_mutex);
+		const bool       guards = m_read_guards.load(std::memory_order_relaxed);
+		if (watch_starts && guards) {
+			return ProtectReadGuardsUnlocked(vaddr, size, lock);
+		}
 		if (lock) {
 			std::lock_guard locks(m_read_lock_mutex);
 			m_backing->ForEachBackedRun(vaddr, size,
@@ -913,20 +918,76 @@ public:
 				                            m_read_locks.Lock(offset, start, bytes);
 			                            });
 		}
+		// gta6-prep: read-guard: End's VirtualProtect sets the whole protection, PAGE_GUARD
+		// included, so it takes off the guards a Start put there (VirtualMemory::Protect()).
 		if (!ProtectMappedUnlocked(vaddr, size, mode)) {
 			return false;
 		}
-		if (watch == ReadWatch::End && m_read_locks.HasWork()) {
+		if (watch == ReadWatch::End &&
+		    (m_read_locks.HasWork() || m_guarded_pages.load(std::memory_order_relaxed) != 0)) {
 			std::lock_guard locks(m_read_lock_mutex);
-			m_read_locks.Unlock(vaddr, size, [&](uint64_t start, uint64_t bytes, auto&& run) {
-				m_backing->ForEachBackedRun(start, bytes, run);
-			});
+			// gta6-prep: read-guard: with guard pages the budget this frees goes to no refused
+			// page: those are guarded, which needs no lock, and the next watches' Start gets it,
+			// where a lock keeps PAGE_NOACCESS.
+			m_read_locks.Unlock(
+			    vaddr, size,
+			    [&](uint64_t start, uint64_t bytes, auto&& run) {
+				    m_backing->ForEachBackedRun(start, bytes, run);
+			    },
+			    !guards);
+			EraseReadGuardsUnlocked(vaddr, size);
 		}
 		return true;
 #else
 		(void)watch;
 		std::shared_lock state(g_memory_state_mutex);
 		return ProtectMappedUnlocked(vaddr, size, mode);
+#endif
+	}
+
+	// gta6-prep: read-guard: --read-watch-guard-pages (off: every read-watched page is
+	// PAGE_NOACCESS, as before). Windows only; it applies to the watches that start after it.
+	void SetReadWatchGuards(bool on) {
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		m_read_guards.store(on, std::memory_order_relaxed);
+#else
+		(void)on;
+#endif
+	}
+
+	// gta6-prep: read-guard: Memory::PrepareKernelAccess(). Windows only.
+	void TouchReadGuards(uint64_t vaddr, uint64_t size) {
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		if (size == 0 || m_guarded_pages.load(std::memory_order_relaxed) == 0) {
+			return;
+		}
+		// Touched without the lock mutex, which the faults' End takes, and only where a guard is:
+		// a page in the set may have lost its guard to a fault already, or its memory to an unmap.
+		std::vector<std::pair<uint64_t, uint64_t>> runs;
+		{
+			std::lock_guard locks(m_read_lock_mutex);
+			m_guarded.ForEach(vaddr & ~(ReadWatchPageSize - 1), vaddr + size,
+			                  [&](uint64_t begin, uint64_t end) { runs.emplace_back(begin, end); });
+		}
+		for (const auto& [begin, end]: runs) {
+			for (auto page = begin; page < end;) {
+				MEMORY_BASIC_INFORMATION info {};
+				if (VirtualQuery(reinterpret_cast<const void*>(page), &info, sizeof(info)) == 0) {
+					break;
+				}
+				const auto region_end = std::min<uint64_t>(
+				    end, reinterpret_cast<uint64_t>(info.BaseAddress) + info.RegionSize);
+				if (info.State == MEM_COMMIT && (info.Protect & PAGE_GUARD) != 0) {
+					for (auto touch = page; touch < region_end; touch += ReadWatchPageSize) {
+						(void)*reinterpret_cast<const volatile uint8_t*>(touch);
+					}
+				}
+				page = region_end;
+			}
+		}
+#else
+		(void)vaddr;
+		(void)size;
 #endif
 	}
 
@@ -947,6 +1008,13 @@ public:
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 		auto stats = m_read_locks.Stats();
 		m_read_locks.GetOs().AddCallStats(stats);
+		// gta6-prep: read-guard: with guard pages the pages refused a lock are guarded, so none of
+		// the read-watched memory is NOACCESS without a lock: "unlocked" is 0 and "guarded" has
+		// them (and, without a budget, everything the watches hold in the section).
+		stats.guarded_bytes = m_guarded_pages.load(std::memory_order_relaxed) * ReadWatchPageSize;
+		if (m_read_guards.load(std::memory_order_relaxed)) {
+			stats.unlocked_bytes = 0;
+		}
 		return stats;
 #else
 		return {};
@@ -1558,8 +1626,130 @@ private:
 		}
 	}
 
+	// gta6-prep: read-guard: a guard page is one-shot. The first read takes the guard off for every
+	// thread as Windows raises the fault (a write faults either way), and until that fault's handler
+	// has served the watch (read back what the GPU wrote), other threads read the page without a
+	// fault and see the bytes it held before. Their writes still fault: every guard is over
+	// read-only, whatever access the page has without the watch, so a write goes through the write
+	// fault as on a NOACCESS page (it waits for the readback, and the write watchers see it). A
+	// write watcher added after the Start changes no protection (the PageManager leaves a NoAccess
+	// page alone), and a guard over read-write would let its writes through unseen once the guard
+	// is gone. End gives the page its real access. PAGE_NOACCESS keeps every reader out until the
+	// watch ends, so the pages a lock holds keep it: locked, they never leave RAM, and the blue
+	// screen another fork traced to PAGE_NOACCESS (0x1A/0x41202, readWatchLocks.h) needs a page
+	// Windows took out of RAM. Only the pages the lock does not take (past the budget, refused by
+	// Windows, or all of them without a budget) get guards. Their stale reads are the price of
+	// avoiding that bug check. The other fork, whose guards are over read-only too, put each guard
+	// back at once in its fault and still saw 1 fault in about 90 whose page another thread read
+	// first, on a game whose job threads read the same GPU results together (chenxiao07/KytyPS5
+	// d8f99391a5). Here the window lasts until the watch is served.
+	//
+	// A Start's parts: the guest view's private mappings keep PAGE_NOACCESS (the bug check is a
+	// section view's), the section's pages that hold a lock keep it too, and its other pages are
+	// guarded. Planned under the lock mutex, applied after it, under the state lock (shared) and
+	// the page tracker's lock that the caller holds. A page planned as NOACCESS keeps its lock
+	// until its own watch ends, which needs that tracker lock. Only a Start of its own locks a
+	// refused page while its watch lasts: with the guards on, an Unlock() of another range offers
+	// the budget it frees to no refused page (ProtectTransient()), since a guard needs no lock. (A
+	// protection that Unlock() put on one could also outlive its watch: it does not hold the page's
+	// tracker lock, so it cannot tell a guard from one that went with a fault served meanwhile.)
+	// That Start, which is how a guard whose fault was resolved without serving the watch comes
+	// back (PageManager::RearmReadWatch()), gives the page a lock and PAGE_NOACCESS if the budget
+	// has room then, and a guard otherwise.
+	struct ReadGuardPart {
+		uint64_t start   = 0;
+		uint64_t end     = 0;
+		DWORD    protect = PAGE_NOACCESS;
+	};
+
+	static constexpr DWORD ReadGuardProtect = PAGE_GUARD | PAGE_READONLY;
+
+	bool ProtectReadGuardsUnlocked(uint64_t vaddr, uint64_t size, bool lock) {
+		thread_local std::vector<ReadGuardPart> parts;
+		parts.clear();
+		{
+			std::lock_guard locks(m_read_lock_mutex);
+			if (lock) {
+				m_backing->ForEachBackedRun(vaddr, size,
+				                            [&](uint64_t offset, uint64_t start, uint64_t bytes) {
+					                            m_read_locks.Lock(offset, start, bytes);
+				                            });
+			}
+			ForEachMappedUnlocked(vaddr, size, [&](uint64_t start, uint64_t end, MappingType type) {
+				if (type != MappingType::Backing) {
+					parts.push_back({start, end, PAGE_NOACCESS});
+				} else if (!lock) {
+					// Pages still locked from before the budget went to 0 get a guard too: their
+					// lock may be for memory mapped there before (only Lock() looks at that).
+					parts.push_back({start, end, ReadGuardProtect});
+				} else {
+					m_read_locks.ForEachLockRun(
+					    start, end, [&](uint64_t from, uint64_t to, bool locked) {
+						    parts.push_back(
+						        {from, to, locked ? DWORD {PAGE_NOACCESS} : ReadGuardProtect});
+					    });
+				}
+			});
+			constexpr uint64_t Page = ReadWatchPageSize;
+			m_guarded.Erase(vaddr & ~(Page - 1), (vaddr + size + Page - 1) & ~(Page - 1));
+			for (const auto& part: parts) {
+				if (part.protect != PAGE_NOACCESS) {
+					m_guarded.Add(part.start & ~(Page - 1), (part.end + Page - 1) & ~(Page - 1));
+				}
+			}
+			m_guarded_pages.store(m_guarded.Pages(), std::memory_order_relaxed);
+		}
+		for (const auto& part: parts) {
+			DWORD old_protect = 0;
+			if (VirtualProtect(reinterpret_cast<void*>(part.start), part.end - part.start,
+			                   part.protect, &old_protect) == 0) {
+				std::printf("VirtualProtect() failed: 0x%08" PRIx32 "\n",
+				            static_cast<uint32_t>(GetLastError()));
+				return false;
+			}
+		}
+		return true;
+	}
+
+	// gta6-prep: read-guard: a read watch ended on [vaddr, vaddr + size), under the lock mutex:
+	// its pages are no longer guarded (the VirtualProtect before took the guards off).
+	void EraseReadGuardsUnlocked(uint64_t vaddr, uint64_t size) {
+		if (m_guarded.Empty()) {
+			return;
+		}
+		constexpr uint64_t Page = ReadWatchPageSize;
+		m_guarded.Erase(vaddr & ~(Page - 1), (vaddr + size + Page - 1) & ~(Page - 1));
+		m_guarded_pages.store(m_guarded.Pages(), std::memory_order_relaxed);
+	}
+
+	// f(start, end, type) for the part of each mapping within [vaddr, vaddr + size), as
+	// ProtectMappedUnlocked() walks them: each lies in one view or one allocation.
+	template <typename F>
+	void ForEachMappedUnlocked(uint64_t vaddr, uint64_t size, F&& f) const {
+		const auto end = vaddr + size;
+		auto       it  = m_mapped.upper_bound(vaddr);
+		if (it != m_mapped.begin()) {
+			--it;
+		}
+		for (; it != m_mapped.end() && it->second.vaddr < end; ++it) {
+			const auto& region      = it->second;
+			const auto  range_start = std::max(vaddr, region.vaddr);
+			const auto  range_end   = std::min(end, region.vaddr + region.size);
+			if (range_start < range_end) {
+				f(range_start, range_end, region.type);
+			}
+		}
+	}
+
 	// gta6-prep: ram-lock: ProtectTransient() calls it under the mutex, with the state lock shared.
 	std::mutex                       m_read_lock_mutex;
 	ReadWatchLocks<BackingViewLocks> m_read_locks;
+	// gta6-prep: read-guard: --read-watch-guard-pages, and the guest pages that a read watch's
+	// Start made guard pages (under the lock mutex until their watch ends; a guard that went with a
+	// fault, or memory unmapped meanwhile, stays in the set until then). Their count is read
+	// without the mutex.
+	std::atomic<bool>     m_read_guards {false};
+	ReadWatchPageRuns     m_guarded;
+	std::atomic<uint64_t> m_guarded_pages {0};
 #endif
 };

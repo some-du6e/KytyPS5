@@ -63,6 +63,9 @@ public:
 	LodStatsCounter&    GetLodStats() { return m_lod_stats; }
 
 	[[nodiscard]] bool HandleFault(PageFaultAccess access, uint64_t fault_vaddr) noexcept;
+	// gta6-prep: read-guard: after a resolved guard page fault in guest memory
+	// (PageManager::RearmReadWatch()).
+	void RearmReadWatch(uint64_t vaddr) noexcept { m_page_manager.RearmReadWatch(vaddr); }
 	// Before the emulated GPU writes guest memory (labels, WRITE_DATA): resolves a tracked page
 	// as its write fault would, without raising the exception.
 	void PrepareGpuWrite(const void* destination, uint64_t size) noexcept;

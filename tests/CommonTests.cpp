@@ -10,6 +10,7 @@
 #include "common/threads.h"
 #include "common/virtualMemory.h"
 
+#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
@@ -21,6 +22,16 @@
 #include <string>
 #include <string_view>
 #include <thread>
+
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h> // gta6-prep: read-guard
+#endif
 
 namespace {
 
@@ -96,6 +107,73 @@ TEST(HostException, GuestSignalWaitsUntilTheFaultHandlerReturns) {
 		    const bool mapped   = VirtualMemory::AllocFixed(BASE, PAGE, VirtualMemory::Mode::Read);
 		    *reinterpret_cast<volatile uint32_t*>(BASE) = 1;
 		    std::_Exit(installs && mapped && g_dispatched == 1 ? 0 : 1);
+	    },
+	    testing::ExitedWithCode(0), "");
+}
+#endif
+
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+// gta6-prep: read-guard: a guard page fault the handler resolves keeps its guard off when the guest
+// guard handler claims the address (a read watch's guard page, which the emulator's PageManager
+// re-arms only while a watch holds it), and gets the guard back otherwise (another host thread's
+// stack). The load from the unclaimed page is skipped, as an SRT walker load is, so that the
+// guard put back does not fault again.
+std::atomic<uint32_t> g_guard_faults {0};
+
+bool ResolveGuardFaults(const Common::HostException::ExceptionInfo& info) {
+	if (info.native_code != STATUS_GUARD_PAGE_VIOLATION || info.access_violation_vaddr < BASE ||
+	    info.access_violation_vaddr >= BASE + 2 * PAGE || g_guard_faults.fetch_add(1) >= 4) {
+		return false;
+	}
+	if (info.access_violation_vaddr >= BASE + PAGE) {
+		// mov eax, [rcx]
+		auto* context = static_cast<CONTEXT*>(info.native_context);
+		context->Rip += 2;
+		context->Rax = 0;
+	}
+	return true;
+}
+
+bool ClaimFirstPage(uint64_t address) {
+	return address >= BASE && address < BASE + PAGE;
+}
+
+TEST(HostException, AClaimedGuardPageStaysOffAndAnotherGetsItsGuardBack) {
+	EXPECT_EXIT(
+	    {
+		    namespace HostException = Common::HostException;
+		    const bool installs     = HostException::InstallHandler(ResolveGuardFaults);
+		    HostException::SetGuestGuardHandler(ClaimFirstPage);
+		    // mov eax, [rcx]; ret
+		    auto* code = static_cast<uint8_t*>(
+		        ::VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+		    if (code != nullptr) {
+			    code[0] = 0x8b;
+			    code[1] = 0x01;
+			    code[2] = 0xc3;
+			    ::FlushInstructionCache(::GetCurrentProcess(), code, 3);
+		    }
+		    const auto load = reinterpret_cast<uint32_t (*)(const void*)>(code);
+		    const bool mapped =
+		        VirtualMemory::AllocFixed(BASE, 2 * PAGE, VirtualMemory::Mode::ReadWrite);
+		    DWORD      old     = 0;
+		    const bool guarded = mapped && ::VirtualProtect(reinterpret_cast<void*>(BASE), 2 * PAGE,
+		                                                    PAGE_READWRITE | PAGE_GUARD, &old) != 0;
+		    const auto protection = [](uint64_t address) {
+			    MEMORY_BASIC_INFORMATION info {};
+			    return ::VirtualQuery(reinterpret_cast<const void*>(address), &info,
+			                          sizeof(info)) != 0
+			               ? info.Protect
+			               : DWORD {0};
+		    };
+		    if (installs && code != nullptr && guarded) {
+			    (void)load(reinterpret_cast<const void*>(BASE));
+			    (void)load(reinterpret_cast<const void*>(BASE + PAGE));
+		    }
+		    const bool ok = installs && code != nullptr && guarded && g_guard_faults == 2 &&
+		                    protection(BASE) == PAGE_READWRITE &&
+		                    protection(BASE + PAGE) == (PAGE_READWRITE | PAGE_GUARD);
+		    std::_Exit(ok ? 0 : 1);
 	    },
 	    testing::ExitedWithCode(0), "");
 }

@@ -760,6 +760,9 @@ int64_t KYTY_SYSV_ABI KernelWrite(int d, const void* buf, size_t nbytes) {
 		return KERNEL_ERROR_EFAULT;
 	}
 
+	// gta6-prep: read-guard: WriteFile() and send() read the guest buffer in the kernel.
+	Memory::PrepareKernelAccess(buf, nbytes);
+
 	if (d == 1 || d == 2) {
 		auto*      out      = (d == 1 ? stdout : stderr);
 		const auto written  = std::fwrite(buf, 1, nbytes, out);
@@ -1010,6 +1013,9 @@ int64_t KYTY_SYSV_ABI KernelPwrite(int d, const void* buf, size_t nbytes, int64_
 
 	EXIT_NOT_IMPLEMENTED(nbytes > UINT_MAX);
 
+	// gta6-prep: read-guard: WriteFile() reads the guest buffer in the kernel.
+	Memory::PrepareKernelAccess(buf, nbytes);
+
 	file->mutex.Lock();
 
 	bool     is_invalid    = file->f.IsInvalid();
@@ -1053,6 +1059,10 @@ static int64_t Writev(int d, const KernelIovec* iov, int iovcnt, std::optional<i
 	auto* file = g_files->GetFile(d);
 	if (file == nullptr || !file->opened || !file->writable) {
 		return KERNEL_ERROR_EBADF;
+	}
+	// gta6-prep: read-guard: WriteFile() reads the guest buffers in the kernel.
+	for (const auto& buffer: buffers) {
+		Memory::PrepareKernelAccess(buffer.iov_base, buffer.iov_len);
 	}
 	Common::LockGuard lock(file->mutex);
 	if (file->directory) {

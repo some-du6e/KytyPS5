@@ -628,10 +628,15 @@ void TestReadWatchKinds() {
   auto got = calls();
   Check(got.size() == 1 && is(got[0], Mode::Read, ReadWatch::None),
         "a write watch is not a plain protection");
+  // gta6-prep: read-guard: one run over the write-watched page and the two
+  // beside it, since every guard the kernel makes is over read-only.
   manager.UpdatePageWatchers<true, true>(address, page_size * 3);
   got = calls();
   Check(got.size() == 1 && is(got[0], Mode::NoAccess, ReadWatch::Start),
         "a read watch did not start as one NoAccess run");
+  Check(g_protection_ranges.back().address == address &&
+            g_protection_ranges.back().size == page_size * 3,
+        "a read watch over and beside a write watcher was split");
   // Pages 1 and 2 are denied already: only page 3 starts.
   manager.UpdatePageWatchers<true, true>(address + page_size, page_size * 3);
   got = calls();
@@ -656,6 +661,72 @@ void TestReadWatchKinds() {
   got = calls();
   Check(got.size() == 1 && is(got[0], Mode::ReadWrite, ReadWatch::None),
         "a write unwatch is not a plain protection");
+
+  Check(VirtualFree(memory, 0, MEM_RELEASE) != 0, "VirtualFree failed");
+}
+
+// gta6-prep: read-guard: after a guard page fault that took the guard off, a
+// page a read watcher still holds gets its read watch's protection again (a
+// Start of that page alone), and a page whose watch ended keeps the access its
+// end gave it. The watcher counts stay.
+void TestRearmReadWatch() {
+  using Libs::LibKernel::Memory::ReadWatch;
+  using Mode = Common::VirtualMemory::Mode;
+  PageManager manager;
+  constexpr auto page_size = TRACKER_PAGE_SIZE;
+  auto *memory = Allocate(page_size * 2);
+  const auto address = reinterpret_cast<uint64_t>(memory);
+  const auto calls = [] {
+    std::lock_guard lock(g_protection_log_mutex);
+    auto result = g_protection_watches;
+    g_protection_watches.clear();
+    return result;
+  };
+  const auto noaccess_before = PageManager::NoAccessPages();
+
+  // Never watched: nothing to put back.
+  (void)calls();
+  manager.RearmReadWatch(address);
+  Check(calls().empty(), "a page no watcher ever held was protected");
+
+  manager.UpdatePageWatchers<true>(address + page_size, page_size);
+  manager.UpdatePageWatchers<true, true>(address, page_size * 2);
+  (void)calls();
+  // The fault took the guards off both pages (as Windows does on a guard
+  // page's first access).
+  Check(ProtectAddressSpace(address, page_size * 2, Mode::ReadWrite),
+        "the test could not take the protection off");
+  (void)calls();
+  manager.RearmReadWatch(address + 0x10);
+  manager.RearmReadWatch(address + page_size + 0x20);
+  auto got = calls();
+  Check(got.size() == 2 && got[0].mode == Mode::NoAccess &&
+            got[0].watch == ReadWatch::Start && got[1].mode == Mode::NoAccess &&
+            got[1].watch == ReadWatch::Start,
+        "a held page did not get its read watch's protection back");
+  Check(g_protection_ranges.size() >= 2 &&
+            g_protection_ranges[g_protection_ranges.size() - 2].address ==
+                address &&
+            g_protection_ranges.back().address == address + page_size &&
+            g_protection_ranges.back().size == page_size,
+        "the re-arm did not protect the faulting page alone");
+  Check(Protection(memory) == PAGE_NOACCESS &&
+            Protection(memory + page_size) == PAGE_NOACCESS,
+        "the re-armed pages are accessible");
+  Check(PageManager::NoAccessPages() == noaccess_before + 2,
+        "a re-arm changed NoAccessPages()");
+
+  // The watch ends (the fault was served): nothing comes back.
+  manager.UpdatePageWatchers<false, true>(address, page_size * 2);
+  (void)calls();
+  manager.RearmReadWatch(address);
+  manager.RearmReadWatch(address + page_size);
+  Check(calls().empty() && IsWritable(memory) &&
+            Protection(memory + page_size) == PAGE_READONLY,
+        "a page whose read watch ended was protected again");
+  manager.UpdatePageWatchers<false>(address + page_size, page_size);
+  Check(PageManager::NoAccessPages() == noaccess_before,
+        "NoAccessPages() kept pages whose watch ended");
 
   Check(VirtualFree(memory, 0, MEM_RELEASE) != 0, "VirtualFree failed");
 }
@@ -817,6 +888,7 @@ int main(int argc, char **argv) {
   TestReadWriteWatcherInteractions();
   TestSharedReadWatchers();
   TestReadWatchKinds();
+  TestRearmReadWatch();
   TestConcurrentSharedWatchers();
   TestFatalPaths();
   std::puts("PageManagerTests: all cases passed");

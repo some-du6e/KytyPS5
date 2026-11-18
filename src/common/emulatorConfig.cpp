@@ -57,8 +57,9 @@ void Load(const ConfigOptions& cfg) {
 
 	*g_config = cfg;
 	g_vram_settings = ResolveVramSettings(VramRequestOf(cfg)); // gta6-prep: vram
-	// gta6-prep: ram (and ram-lock: --lock-read-watched-mb)
-	g_ram_settings = ResolveRamSettings(cfg.ram_profile, cfg.lock_read_watched_mb);
+	// gta6-prep: ram (and ram-lock: --lock-read-watched-mb, read-guard: --read-watch-guard-pages)
+	g_ram_settings =
+	    ResolveRamSettings(cfg.ram_profile, cfg.lock_read_watched_mb, cfg.read_watch_guard_pages);
 	Common::DebugCounters::SetEnabled(cfg.perf_overlay_enabled);
 }
 

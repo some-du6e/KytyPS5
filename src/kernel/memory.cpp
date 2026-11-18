@@ -3,6 +3,7 @@
 #include "common/assert.h"
 #include "common/emulatorConfig.h"
 #include "common/hackNotice.h"
+#include "common/hostException.h"
 #include "common/logging/log.h"
 #include "common/ramOptions.h"
 #include "common/stringUtils.h"
@@ -1150,6 +1151,28 @@ void SetGuestMemoryBudgetForTests(uint64_t bytes) {
 	g_test_memory_budget = bytes;
 }
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+// gta6-prep: read-guard: Common::HostException's guest guard handler, after the fault handler
+// resolved a guard page fault at `address`. True when the address is the guest's: the guest
+// address space reserves its ranges as placeholders before any guest runs and keeps them until
+// Shutdown(), and Windows makes a thread's stack only in free memory, so no host stack lies there
+// (one made before the reservation lies in what was taken then, which Owns() leaves out). The only
+// guard pages there are the read watches' (guest stacks are private read-write memory). The
+// fault's guard is gone; the PageManager puts the watch's protection back if a read watcher still
+// holds the page, as when an SRT walker load read around it or an image write-back was awaited.
+// A served fault's page has none left and keeps the access End gave it: a guard put back there
+// would outlive the watch.
+static bool SettleGuestGuardPage(uint64_t address) {
+	if (g_guest_address_space == nullptr || !g_guest_address_space->Owns(address, 1)) {
+		return false;
+	}
+	if (g_gpu_resources != nullptr) {
+		g_gpu_resources->RearmReadWatch(address);
+	}
+	return true;
+}
+#endif
+
 void Initialize() {
 	const auto params = Loader::SystemContentGetMemoryParams();
 	if (params.flexible_size != 0) {
@@ -1190,10 +1213,18 @@ void Initialize() {
 		}
 		g_guest_address_space->SetReadWatchLockBudget(budget);
 	}
+	// gta6-prep: read-guard: --read-watch-guard-pages, or the RAM profile's (off under normal, on
+	// under low): the read-watched pages the lock does not take become guard pages, not NOACCESS.
+	static_assert(!Config::RamSettings {}.read_watch_guard_pages);
+	g_guest_address_space->SetReadWatchGuards(Config::GetRamSettings().read_watch_guard_pages);
+	Common::HostException::SetGuestGuardHandler(SettleGuestGuardPage);
 #endif
 }
 
 void Shutdown() {
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	Common::HostException::SetGuestGuardHandler(nullptr); // gta6-prep: read-guard
+#endif
 	g_pooled_memory.reset();
 	g_flexible_memory.reset();
 	g_physical_memory.reset();
@@ -2847,6 +2878,12 @@ bool TestGuestFreeRangeBounds() {
 uint64_t TestSetReadWatchLockBudget(uint64_t bytes) {
 	return g_guest_address_space->SetReadWatchLockBudget(bytes);
 }
+
+// gta6-prep: read-guard: --read-watch-guard-pages, which Initialize() sets (Windows only). It
+// applies to the watches that start after it.
+void TestSetReadWatchGuards(bool on) {
+	g_guest_address_space->SetReadWatchGuards(on);
+}
 #endif
 
 int KYTY_SYSV_ABI KernelVirtualQuery(const void* addr, int flags, VirtualQueryInfo* info,
@@ -3101,6 +3138,14 @@ bool ProtectGuestMemory(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode,
 bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode,
                             ReadWatch watch) {
 	return g_guest_address_space->ProtectTransient(vaddr, size, mode, watch);
+}
+
+// gta6-prep: read-guard
+void PrepareKernelAccess(const void* data, uint64_t size) {
+	const auto vaddr = reinterpret_cast<uint64_t>(data);
+	if (g_guest_address_space != nullptr && vaddr != 0 && size != 0 && size <= UINT64_MAX - vaddr) {
+		g_guest_address_space->TouchReadGuards(vaddr, size);
+	}
 }
 
 // gta6-prep: ram-lock

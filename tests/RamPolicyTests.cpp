@@ -58,10 +58,13 @@ void TestNormalKeepsToday() {
 	          builtin.async_pipeline_threads == 3 && builtin.parallel_threads == 0 &&
 	          !builtin.max_pipeline_helpers.has_value() && builtin.cache_save_seconds == 60 &&
 	          builtin.slow_cache_save_seconds == 20 && builtin.clear_fresh_stacks &&
-	          builtin.recycle_spilled_images && builtin.lock_read_watched_mb == 0,
+	          builtin.recycle_spilled_images && builtin.lock_read_watched_mb == 0 &&
+	          !builtin.read_watch_guard_pages,
 	      "the built-in RAM settings are not today's values");
 	// gta6-prep: ram-lock: no lock budget, so ProtectTransient() never takes the lock's path.
 	static_assert(RamSettings {}.lock_read_watched_mb == 0, "the normal profile locks pages");
+	// gta6-prep: read-guard: and no guard pages: every read-watched page stays PAGE_NOACCESS.
+	static_assert(!RamSettings {}.read_watch_guard_pages, "the normal profile makes guard pages");
 }
 
 void TestLowProfile() {
@@ -79,7 +82,37 @@ void TestLowProfile() {
 	Check(!low.recycle_spilled_images, "low still recycles spilled images");
 	Check(low.lock_read_watched_mb == Config::RamLockAll,
 	      "low does not lock all read-watched memory (up to the cap)");
+	Check(low.read_watch_guard_pages, "low does not make the unlocked read-watched pages guards");
 	Check(!(low == RamSettings {}), "low equals normal");
+}
+
+// gta6-prep: read-guard: --read-watch-guard-pages wins over the profile's value, and without it
+// the profile decides; it changes nothing else.
+void TestGuardOverride() {
+	static_assert(ResolveRamSettings(RamProfile::Normal, std::nullopt, std::nullopt) ==
+	                  RamSettings {},
+	              "no --read-watch-guard-pages changes the normal profile");
+	static_assert(ResolveRamSettings(RamProfile::Low, std::nullopt, std::nullopt) ==
+	              ResolveRamSettings(RamProfile::Low));
+	Check(!ResolveRamSettings(RamProfile::Low, std::nullopt, false).read_watch_guard_pages,
+	      "--read-watch-guard-pages off does not turn the guards off under low");
+	Check(ResolveRamSettings(RamProfile::Normal, std::nullopt, true).read_watch_guard_pages,
+	      "--read-watch-guard-pages on is lost under normal");
+	auto normal                   = ResolveRamSettings(RamProfile::Normal, std::nullopt, true);
+	normal.read_watch_guard_pages = false;
+	Check(normal == RamSettings {}, "--read-watch-guard-pages changed more");
+	// Both options at once.
+	const auto both = ResolveRamSettings(RamProfile::Low, 0, false);
+	Check(both.lock_read_watched_mb == 0 && !both.read_watch_guard_pages,
+	      "--lock-read-watched-mb 0 with --read-watch-guard-pages off is not both off");
+	using Config::ParseReadWatchGuardPages;
+	static_assert(ParseReadWatchGuardPages("on") == true &&
+	              ParseReadWatchGuardPages("off") == false);
+	Check(!ParseReadWatchGuardPages("On").has_value() &&
+	          !ParseReadWatchGuardPages("1").has_value() &&
+	          !ParseReadWatchGuardPages("yes").has_value() &&
+	          !ParseReadWatchGuardPages("").has_value(),
+	      "--read-watch-guard-pages takes a value that is neither on nor off");
 }
 
 // gta6-prep: ram-lock: --lock-read-watched-mb wins over the profile's value; 0 turns the lock off,
@@ -268,16 +301,24 @@ void TestProfileLine() {
 	CheckEqual(Config::FormatRamProfile(ResolveRamSettings(RamProfile::Low), true),
 	           "RAM profile: low -> upload_ring=128 download_ring=32 compile_workers=3 "
 	           "async_threads=2 parallel_threads=2 helpers<=0 cache_save=180s/60s "
-	           "fresh_stack_clear=off recycle_spilled=off lock_read_watched=all oom_recovery=on\n",
+	           "fresh_stack_clear=off recycle_spilled=off lock_read_watched=all "
+	           "read_watch_guard_pages=on oom_recovery=on\n",
 	           "the RAM profile line does not follow the log contract");
 	// gta6-prep: ram-lock: a budget given in MiB.
 	Check(Config::FormatRamProfile(ResolveRamSettings(RamProfile::Low, 128), true)
-	              .find(" lock_read_watched=128 oom_recovery=on\n") != std::string::npos,
+	              .find(" lock_read_watched=128 read_watch_guard_pages=on oom_recovery=on\n") !=
+	          std::string::npos,
 	      "the RAM profile line does not show a lock budget in MiB");
+	// gta6-prep: read-guard: the guards turned off under low.
+	Check(Config::FormatRamProfile(ResolveRamSettings(RamProfile::Low, std::nullopt, false), true)
+	              .find(" lock_read_watched=all read_watch_guard_pages=off oom_recovery=on\n") !=
+	          std::string::npos,
+	      "the RAM profile line does not show the guards off");
 	CheckEqual(Config::FormatRamProfile(RamSettings {}, false),
 	           "RAM profile: normal -> upload_ring=512 download_ring=64 compile_workers=6 "
 	           "async_threads=3 parallel_threads=auto helpers=auto cache_save=60s/20s "
-	           "fresh_stack_clear=on recycle_spilled=on lock_read_watched=0 oom_recovery=off\n",
+	           "fresh_stack_clear=on recycle_spilled=on lock_read_watched=0 "
+	           "read_watch_guard_pages=off oom_recovery=off\n",
 	           "the RAM profile line of the normal profile");
 }
 
@@ -404,29 +445,39 @@ void TestUsageLine() {
 	                                              .locked_bytes      = MiB(296),
 	                                              .lock_budget_bytes = MiB(1011),
 	                                              .unlocked_bytes    = 0,
+	                                              .guarded_bytes     = MiB(16),
 	                                              .lock_failed_pages = 0,
 	                                              .slow_lock_calls   = 3,
 	                                              .longest_lock_us   = 41'700};
 	CheckEqual(Config::FormatRamUsage(usage),
 	           "RAM usage: t=630 ws=2843 private=9875 commit=31790/40858 avail=187 faults=3412 "
 	           "hard=? vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312 "
-	           "oneoff=12/340 locked=296/1011 unlocked=0 lockfail=0 slowlocks=3/41\n",
+	           "oneoff=12/340 locked=296/1011 unlocked=0 guarded=16 lockfail=0 slowlocks=3/41\n",
 	           "the RAM usage line does not follow the log contract");
 	// gta6-prep: ram-lock: a single locked or unlocked page shows, as noaccess does; the lock off
-	// is 0/0, and a call under a millisecond is 0.
+	// is 0/0, and a call under a millisecond is 0. gta6-prep: read-guard: a guarded page too.
 	usage.renderer->locked_bytes   = 4096;
 	usage.renderer->unlocked_bytes = 4096;
-	Check(Config::FormatRamUsage(usage).find(" locked=1/1011 unlocked=1 ") != std::string::npos,
-	      "one locked or unlocked page is not shown");
+	usage.renderer->guarded_bytes  = 4096;
+	Check(Config::FormatRamUsage(usage).find(" locked=1/1011 unlocked=1 guarded=1 ") !=
+	          std::string::npos,
+	      "one locked, unlocked or guarded page is not shown");
 	usage.renderer->locked_bytes      = 0;
 	usage.renderer->lock_budget_bytes = 0;
 	usage.renderer->unlocked_bytes    = 0;
+	usage.renderer->guarded_bytes     = 0;
 	usage.renderer->lock_failed_pages = 3;
 	usage.renderer->slow_lock_calls   = 0;
 	usage.renderer->longest_lock_us   = 999;
 	Check(Config::FormatRamUsage(usage).ends_with(
-	          " locked=0/0 unlocked=0 lockfail=3 slowlocks=0/0\n"),
+	          " locked=0/0 unlocked=0 guarded=0 lockfail=3 slowlocks=0/0\n"),
 	      "the lock's fields without a budget");
+	// gta6-prep: read-guard: guard pages without a lock budget.
+	usage.renderer->guarded_bytes = MiB(200);
+	Check(Config::FormatRamUsage(usage).ends_with(
+	          " locked=0/0 unlocked=0 guarded=200 lockfail=3 slowlocks=0/0\n"),
+	      "the guarded field without a lock budget");
+	usage.renderer->guarded_bytes     = 0;
 	usage.renderer->lock_failed_pages = 0;
 	usage.renderer->longest_lock_us   = 0;
 	// A single inaccessible page shows: noaccess rounds up.
@@ -469,8 +520,8 @@ void TestUsageLine() {
 	widest.available         = most;
 	widest.faults_per_s      = 1e15;
 	widest.hard_faults_per_s = 1e15;
-	widest.renderer          = Config::RendererMemory {most, most, most, most, most, most, most,
-                                              most, most, most, most, most, most, most};
+	widest.renderer = Config::RendererMemory {most, most, most, most, most, most, most, most,
+	                                          most, most, most, most, most, most, most};
 	char       buffer[Config::RamUsageLineSize];
 	const auto size = Config::FormatRamUsage(widest, buffer, sizeof(buffer));
 	Check(size < sizeof(buffer) && buffer[size - 1] == '\n', "the widest RAM usage line is cut");
@@ -549,6 +600,7 @@ int main() {
 	TestNormalKeepsToday();
 	TestLowProfile();
 	TestLockOverride();
+	TestGuardOverride();
 	TestLockCap();
 	TestParsing();
 	TestOomRecoveryImplied();

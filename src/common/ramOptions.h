@@ -60,6 +60,14 @@ struct RamSettings {
 	// Windows had paged them out, which it never does to a locked page. --lock-read-watched-mb
 	// wins.
 	uint32_t lock_read_watched_mb = 0;
+	// gta6-prep: read-guard: Windows: the read-watched pages of the guest section that hold no
+	// lock (past the budget, refused by Windows, or all of them without a budget) become guard
+	// pages over read-only (PAGE_GUARD | PAGE_READONLY), and the locked ones keep PAGE_NOACCESS.
+	// Off: every read-watched page is PAGE_NOACCESS, as before. The other fork's repro of the blue
+	// screen above ran on guard pages without one. A guard is one-shot, so other threads can read
+	// a page stale while the first read of it is served; their writes still fault
+	// (GuestAddressSpace::ProtectTransient()). --read-watch-guard-pages wins.
+	bool read_watch_guard_pages = false;
 
 	constexpr bool operator==(const RamSettings&) const = default;
 };
@@ -79,17 +87,22 @@ constexpr RamSettings ResolveRamSettings(RamProfile profile) {
 		settings.clear_fresh_stacks      = false;
 		settings.recycle_spilled_images  = false;
 		settings.lock_read_watched_mb    = RamLockAll;
+		settings.read_watch_guard_pages  = true;
 	}
 	return settings;
 }
 
 // gta6-prep: ram-lock: the profile's settings with --lock-read-watched-mb (nullopt: not given;
-// RamLockAll: all).
+// RamLockAll: all), and gta6-prep: read-guard: --read-watch-guard-pages (nullopt: not given).
 constexpr RamSettings ResolveRamSettings(RamProfile              profile,
-                                         std::optional<uint32_t> lock_read_watched_mb) {
+                                         std::optional<uint32_t> lock_read_watched_mb,
+                                         std::optional<bool>     read_watch_guard_pages = {}) {
 	auto settings = ResolveRamSettings(profile);
 	if (lock_read_watched_mb.has_value()) {
 		settings.lock_read_watched_mb = *lock_read_watched_mb;
+	}
+	if (read_watch_guard_pages.has_value()) {
+		settings.read_watch_guard_pages = *read_watch_guard_pages;
 	}
 	return settings;
 }
@@ -114,6 +127,13 @@ inline std::optional<uint32_t> ParseLockReadWatched(std::string_view text) {
 		return std::nullopt;
 	}
 	return megabytes;
+}
+
+// gta6-prep: read-guard: --read-watch-guard-pages's value: on or off.
+constexpr std::optional<bool> ParseReadWatchGuardPages(std::string_view text) {
+	if (text == "on") return true;
+	if (text == "off") return false;
+	return std::nullopt;
 }
 
 // --ram-profile low implies --oom-recovery: a failed allocation frees what it can and retries past
@@ -258,7 +278,8 @@ inline std::string FormatRamStartup(const RamStartup& ram) {
 
 // "RAM profile: low -> upload_ring=128 download_ring=32 compile_workers=3 async_threads=2
 // parallel_threads=2 helpers<=0 cache_save=180s/60s fresh_stack_clear=off recycle_spilled=off
-// lock_read_watched=all oom_recovery=on\n". `oom_recovery`: the VramSettings in effect.
+// lock_read_watched=all read_watch_guard_pages=on oom_recovery=on\n". `oom_recovery`: the
+// VramSettings in effect.
 inline std::string FormatRamProfile(const RamSettings& s, bool oom_recovery) {
 	const auto  on_off = [](bool value) { return std::string(value ? "on" : "off"); };
 	std::string line   = "RAM profile: " + std::string(RamProfileName(s.profile)) +
@@ -277,6 +298,7 @@ inline std::string FormatRamProfile(const RamSettings& s, bool oom_recovery) {
 	        " recycle_spilled=" + on_off(s.recycle_spilled_images) + " lock_read_watched=" +
 	        (s.lock_read_watched_mb == RamLockAll ? std::string("all")
 	                                              : std::to_string(s.lock_read_watched_mb)) +
+	        " read_watch_guard_pages=" + on_off(s.read_watch_guard_pages) + // gta6-prep: read-guard
 	        " oom_recovery=" + on_off(oom_recovery) + "\n";
 	return line;
 }
@@ -390,12 +412,14 @@ struct RendererMemory {
 	uint64_t one_off_bytes = 0;
 	// gta6-prep: ram-lock (Memory::GetReadWatchLockStats()): the backing pages of that memory
 	// locked in RAM now and the budget for them (0: off), and the guest section's read-watched
-	// pages without a lock now, which the budget or Windows refused (both printed rounded up to a
-	// MiB). So far: the page locks Windows refused, the VirtualLock calls over 1 ms and the
-	// longest one (printed in ms).
+	// pages NOACCESS without a lock now, which the budget or Windows refused (both printed rounded
+	// up to a MiB). gta6-prep: read-guard: and those that are guard pages now
+	// (--read-watch-guard-pages; rounded up too). So far: the page locks Windows refused, the
+	// VirtualLock calls over 1 ms and the longest one (printed in ms).
 	uint64_t locked_bytes      = 0;
 	uint64_t lock_budget_bytes = 0;
 	uint64_t unlocked_bytes    = 0;
+	uint64_t guarded_bytes     = 0;
 	uint64_t lock_failed_pages = 0;
 	uint64_t slow_lock_calls   = 0;
 	uint64_t longest_lock_us   = 0;
@@ -415,8 +439,8 @@ struct RamUsage {
 	std::optional<RendererMemory> renderer;
 };
 
-// Room for the longest "RAM usage:" line.
-inline constexpr size_t RamUsageLineSize = 512;
+// Room for the longest "RAM usage:" line (509 bytes with every field at its widest).
+inline constexpr size_t RamUsageLineSize = 576;
 
 // A size in MiB, rounded up: a single page shows.
 constexpr uint64_t RamMiBRoundedUp(uint64_t bytes) {
@@ -425,7 +449,7 @@ constexpr uint64_t RamMiBRoundedUp(uint64_t bytes) {
 
 // "RAM usage: t=630 ws=2843 private=9875 commit=31790/40858 avail=187 faults=3412 hard=?
 // vk_local=5402/5560 vk_host=1873/3711 spilled=1504 noaccess=312 oneoff=12/340 locked=296/1011
-// unlocked=0 lockfail=0 slowlocks=3/41\n" into `out`, cut to `size`.
+// unlocked=0 guarded=16 lockfail=0 slowlocks=3/41\n" into `out`, cut to `size`.
 // Returns the length. Allocates nothing.
 inline size_t FormatRamUsage(const RamUsage& usage, char* out, size_t size) noexcept {
 	RamLineWriter line(out, size);
@@ -470,6 +494,9 @@ inline size_t FormatRamUsage(const RamUsage& usage, char* out, size_t size) noex
 		line.MiB(renderer.lock_budget_bytes);
 		line.Text(" unlocked=");
 		line.Number(RamMiBRoundedUp(renderer.unlocked_bytes));
+		// gta6-prep: read-guard
+		line.Text(" guarded=");
+		line.Number(RamMiBRoundedUp(renderer.guarded_bytes));
 		line.Text(" lockfail=");
 		line.Number(renderer.lock_failed_pages);
 		line.Text(" slowlocks=");

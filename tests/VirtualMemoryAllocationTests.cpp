@@ -1,6 +1,8 @@
 #include "common/emulatorConfig.h"
 #include "common/file.h"
+#include "common/hostException.h"
 #include "common/logging/log.h"
+#include "common/platform/sysDbg.h"
 #include "common/singleton.h"
 #include "common/subsystems.h"
 #include "common/threads.h"
@@ -1060,6 +1062,371 @@ void TestReadWatchLocksBackingPages() {
 	TestSetReadWatchLockBudget(0);
 	CheckOk(test, KernelMunmap(alias, size), "KernelMunmap(alias)");
 	CheckOk(test, KernelReleaseDirectMemory(physical, size), "KernelReleaseDirectMemory");
+	std::printf("[host]    %-48s ok\n", test);
+}
+
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+// gta6-prep: read-guard: the test's stand-in for the emulator's fault handler, for the pages of one
+// read watch. A fault there ends the read watch of its page, as a served read fault does
+// (RenderContext::HandleFault()). With `serve` off it resolves a guard page fault without that, as
+// an SRT walker load that reads around the GPU's writes does. Counts the guard page faults and the
+// others (NOACCESS, or a write to a page whose guard went).
+struct ReadGuardFaults {
+	// A guard put back at every fault would fault forever: past this many faults the next is
+	// refused, and the test crashes instead of hanging.
+	static constexpr uint32_t MaxFaults = 64;
+
+	Libs::Graphics::PageManager* manager = nullptr;
+	uint64_t                     begin   = 0;
+	uint64_t                     end     = 0;
+	std::atomic<bool>            serve {true};
+	std::atomic<uint32_t>        guard_faults {0};
+	std::atomic<uint32_t>        other_faults {0};
+
+	// A fault at `address`, of a guard page or not: whether it is resolved.
+	bool Resolve(uint64_t address, bool guard) {
+		if (address < begin || address >= end ||
+		    (guard ? guard_faults : other_faults).fetch_add(1) >= MaxFaults) {
+			return false;
+		}
+		if (!serve.load()) {
+			// The guard is gone with the fault, and the access goes through when it runs again.
+			return guard;
+		}
+		using Libs::Graphics::TRACKER_PAGE_SIZE;
+		manager->UpdatePageWatchers<false, true>(address & ~(TRACKER_PAGE_SIZE - 1),
+		                                         TRACKER_PAGE_SIZE);
+		return true;
+	}
+};
+std::atomic<ReadGuardFaults*> g_read_guard_faults {nullptr};
+
+// The test's own vectored handler, called first: the emulator's exception filter never sees the
+// faults it resolves.
+LONG CALLBACK ReadGuardFaultHandler(EXCEPTION_POINTERS* exception) {
+	auto*       faults = g_read_guard_faults.load();
+	const auto* record = exception->ExceptionRecord;
+	const bool  guard  = record->ExceptionCode == STATUS_GUARD_PAGE_VIOLATION;
+	if (faults == nullptr || record->NumberParameters < 2 ||
+	    (!guard && record->ExceptionCode != EXCEPTION_ACCESS_VIOLATION)) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	return faults->Resolve(static_cast<uint64_t>(record->ExceptionInformation[1]), guard)
+	           ? EXCEPTION_CONTINUE_EXECUTION
+	           : EXCEPTION_CONTINUE_SEARCH;
+}
+
+// The handler of the emulator's exception filter (Common::HostException), where a game has the
+// runtime linker's: once it resolved a guard page fault, the filter asks the guest guard handler
+// that Memory::Initialize() installed what the page gets. It stays installed for the rest of the
+// process and resolves nothing while no test has its pages.
+bool ReadGuardHostHandler(const Common::HostException::ExceptionInfo& info) {
+	auto* faults = g_read_guard_faults.load();
+	return faults != nullptr &&
+	       info.type == Common::HostException::ExceptionType::AccessViolation &&
+	       faults->Resolve(info.access_violation_vaddr,
+	                       info.native_code == STATUS_GUARD_PAGE_VIOLATION);
+}
+
+// Removes the test's handler, and turns the guards and the lock off again, however the test ends.
+struct ReadGuardScope {
+	void* handler = nullptr;
+	~ReadGuardScope() {
+		if (handler != nullptr) {
+			RemoveVectoredExceptionHandler(handler);
+		}
+		g_read_guard_faults = nullptr;
+		Libs::LibKernel::Memory::TestSetReadWatchGuards(false);
+		Libs::LibKernel::Memory::TestSetReadWatchLockBudget(0);
+	}
+};
+#endif
+
+// gta6-prep: read-guard: with guard pages (--read-watch-guard-pages), a read watch's pages that
+// the lock takes keep PAGE_NOACCESS and the others get PAGE_GUARD | PAGE_READONLY, under a write
+// watcher or not. A read of a guarded page reaches the handler once; the watch's end leaves no
+// guard; a page whose guard went stays read-only until its watch ends, so a write watcher added
+// after the Start still sees writes; a guard whose fault was resolved without serving the watch
+// comes back through RearmReadWatch(), and one whose watch was served does not. A guard page
+// handed to WriteFile() loses its guard with no handler run; PrepareKernelAccess() serves the watch
+// first. With the switch off every read-watched page is PAGE_NOACCESS, as before. Through the
+// emulator's exception filter, a served guest page gets no guard back. Off Windows the switch does
+// nothing.
+void TestReadWatchGuardPages() {
+	using namespace Libs::LibKernel::Memory;
+	using Libs::Graphics::TRACKER_PAGE_SIZE;
+	const char*        test     = "ReadWatchGuardPages";
+	constexpr uint64_t size     = SceKernelPageSize;
+	constexpr uint64_t pages    = size / TRACKER_PAGE_SIZE;
+	int64_t            physical = -1;
+	CheckOk(test,
+	        KernelAllocateDirectMemory(0, KernelGetDirectMemorySize(), size, SceKernelPageSize,
+	                                   SceKernelMtypeC, &physical),
+	        "KernelAllocateDirectMemory");
+	void* mapped = nullptr;
+	CheckOk(
+	    test,
+	    KernelMapDirectMemory(&mapped, size, SceKernelProtCpuRw, 0, physical, SceKernelPageSize),
+	    "KernelMapDirectMemory");
+	const auto base = reinterpret_cast<uint64_t>(mapped);
+	const auto word = [&](uint64_t page) {
+		return reinterpret_cast<volatile uint32_t*>(base + page * TRACKER_PAGE_SIZE);
+	};
+	for (uint64_t page = 0; page < pages; page++) {
+		*word(page) = 0x6b790000u + static_cast<uint32_t>(page);
+	}
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	const auto protection = [&](uint64_t page) {
+		MEMORY_BASIC_INFORMATION info {};
+		Check(test,
+		      VirtualQuery(reinterpret_cast<const void*>(base + page * TRACKER_PAGE_SIZE), &info,
+		                   sizeof(info)) != 0,
+		      "VirtualQuery failed");
+		return info.Protect;
+	};
+	const auto all = [&](DWORD expected) {
+		for (uint64_t page = 0; page < pages; page++) {
+			if (protection(page) != expected) {
+				return false;
+			}
+		}
+		return true;
+	};
+	constexpr DWORD guarded = PAGE_GUARD | PAGE_READONLY;
+	{
+		// The scope goes first: the handler goes before what it uses.
+		Libs::Graphics::PageManager manager;
+		ReadGuardFaults             faults;
+		ReadGuardScope              scope;
+		faults.manager = &manager;
+		faults.begin   = base;
+		faults.end     = base + size;
+		TestSetReadWatchGuards(true);
+
+		// A lock budget of one page: page 0 is locked and keeps NOACCESS, the others are guarded.
+		Check(test, TestSetReadWatchLockBudget(TRACKER_PAGE_SIZE) == TRACKER_PAGE_SIZE,
+		      "the working set made no room for the budget");
+		manager.UpdatePageWatchers<true, true>(base, size);
+		Check(test, protection(0) == PAGE_NOACCESS, "the locked page is not PAGE_NOACCESS");
+		for (uint64_t page = 1; page < pages; page++) {
+			Check(test, protection(page) == guarded,
+			      "a page past the budget is not PAGE_GUARD | PAGE_READONLY");
+		}
+		auto stats = GetReadWatchLockStats();
+		Check(
+		    test,
+		    stats.locked_bytes == TRACKER_PAGE_SIZE &&
+		        stats.guarded_bytes == (pages - 1) * TRACKER_PAGE_SIZE && stats.unlocked_bytes == 0,
+		    "the locked and guarded pages are not counted, or the guarded ones count as unlocked");
+		// The watch's end takes the guards and NOACCESS off.
+		manager.UpdatePageWatchers<false, true>(base, size);
+		Check(test, all(PAGE_READWRITE), "the watch's end left a guard or PAGE_NOACCESS");
+		stats = GetReadWatchLockStats();
+		Check(test, stats.guarded_bytes == 0 && stats.locked_bytes == 0,
+		      "the guarded or locked pages are still counted after the watch ended");
+
+		// Every guard is over read-only, under a write watcher (page 1) or not. A write watcher
+		// added after the Start (page 3) changes no protection: the PageManager leaves a NoAccess
+		// page alone.
+		manager.UpdatePageWatchers<true>(base + TRACKER_PAGE_SIZE, TRACKER_PAGE_SIZE);
+		manager.UpdatePageWatchers<true, true>(base, size);
+		manager.UpdatePageWatchers<true>(base + TRACKER_PAGE_SIZE * 3, TRACKER_PAGE_SIZE);
+		Check(test,
+		      protection(0) == PAGE_NOACCESS && protection(1) == guarded &&
+		          protection(2) == guarded && protection(3) == guarded,
+		      "a guard is not PAGE_GUARD | PAGE_READONLY");
+
+		// A read of a guarded page reaches the handler once, which serves it: no guard is left.
+		g_read_guard_faults = &faults;
+		scope.handler       = AddVectoredExceptionHandler(1, ReadGuardFaultHandler);
+		Check(test, scope.handler != nullptr, "failed to install the test's fault handler");
+		const auto value = *word(2);
+		const auto again = *word(2);
+		Check(test, value == 0x6b790002u && again == value, "a guarded page read wrong bytes");
+		Check(test, faults.guard_faults == 1 && faults.other_faults == 0,
+		      "a read of a guarded page did not fault once");
+		Check(test, protection(2) == PAGE_READWRITE, "a served page kept its guard");
+		// Served: nothing to put back.
+		manager.RearmReadWatch(base + TRACKER_PAGE_SIZE * 2);
+		Check(test, protection(2) == PAGE_READWRITE, "a served page was guarded again");
+
+		// Resolved without serving the watch: the guard went with the fault, and the page stays
+		// read-only until RearmReadWatch() puts the guard back (still past the budget). A write in
+		// between faults, so page 3's write watcher, added after the Start, sees it.
+		faults.serve = false;
+		Check(test, *word(3) == 0x6b790003u, "a guarded page read wrong bytes");
+		Check(test, faults.guard_faults == 2 && protection(3) == PAGE_READONLY,
+		      "a guard page fault did not take the guard off, or left the page writable");
+		manager.RearmReadWatch(base + TRACKER_PAGE_SIZE * 3 + 0x10);
+		Check(test, protection(3) == guarded, "the guard of a page still watched is not back");
+		Check(test, GetReadWatchLockStats().guarded_bytes == TRACKER_PAGE_SIZE * 2,
+		      "the guarded pages are not counted after a re-arm");
+		faults.serve = true;
+		Check(test, *word(3) == 0x6b790003u && faults.guard_faults == 3,
+		      "the re-armed guard did not fault");
+		// Served: the watch's end gives the page its write watcher's access.
+		Check(test, protection(3) == PAGE_READONLY,
+		      "a served page kept its guard, or lost its write watcher's protection");
+		// Pages 2 and 3 were served (their watch ended in the handler).
+		manager.UpdatePageWatchers<false, true>(base, TRACKER_PAGE_SIZE * 2);
+		manager.UpdatePageWatchers<false>(base + TRACKER_PAGE_SIZE, TRACKER_PAGE_SIZE);
+		manager.UpdatePageWatchers<false>(base + TRACKER_PAGE_SIZE * 3, TRACKER_PAGE_SIZE);
+		Check(test, all(PAGE_READWRITE), "the watches' ends left a guard or PAGE_NOACCESS");
+		Check(test, GetReadWatchLockStats().guarded_bytes == 0,
+		      "guarded pages are counted after every watch ended");
+
+		// Without a lock budget every page is guarded. WriteFile() of a guarded page takes the
+		// guard with no handler run: the watch is lost. PrepareKernelAccess() reads the page first,
+		// from user mode, which serves the watch, and WriteFile() then succeeds.
+		TestSetReadWatchLockBudget(0);
+		manager.UpdatePageWatchers<true, true>(base, size);
+		Check(test, all(guarded), "without a budget a watched page is not guarded");
+		Check(test, GetReadWatchLockStats().guarded_bytes == size,
+		      "the guarded pages are not counted without a budget");
+		const auto path = std::filesystem::temp_directory_path() / "kyty_read_guard_write.bin";
+		HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE | DELETE, 0, nullptr, CREATE_ALWAYS,
+		                          FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+		Check(test, file != INVALID_HANDLE_VALUE, "CreateFileW failed");
+		auto       faults_before = faults.guard_faults.load();
+		DWORD      written       = 0;
+		const bool wrote = WriteFile(file, reinterpret_cast<const void*>(base + TRACKER_PAGE_SIZE),
+		                             64, &written, nullptr) != 0;
+		const auto error = static_cast<uint32_t>(GetLastError());
+		// Whether the call fails or writes the bytes from before the GPU's depends on Windows' I/O
+		// path (a fast copy that gives up can be retried once the guard is gone): logged, not
+		// checked. Either way no handler runs and the guard is gone.
+		std::printf("[host]    %-48s WriteFile of a guard page: %s (error %" PRIu32 ")\n", test,
+		            wrote ? "wrote" : "failed", error);
+		Check(test, faults.guard_faults == faults_before,
+		      "a handler ran for WriteFile()'s access to a guard page");
+		Check(test, protection(1) == PAGE_READONLY, "WriteFile() of a guard page left the guard");
+		PrepareKernelAccess(reinterpret_cast<const void*>(base + TRACKER_PAGE_SIZE * 2), 64);
+		Check(test, faults.guard_faults == faults_before + 1 && protection(2) == PAGE_READWRITE,
+		      "PrepareKernelAccess() did not serve the guarded page");
+		// The page whose guard WriteFile() took is skipped: no guard is left to touch.
+		PrepareKernelAccess(reinterpret_cast<const void*>(base + TRACKER_PAGE_SIZE), 64);
+		Check(test, faults.guard_faults == faults_before + 1,
+		      "PrepareKernelAccess() touched a page without a guard");
+		written = 0;
+		Check(test,
+		      WriteFile(file, reinterpret_cast<const void*>(base + TRACKER_PAGE_SIZE * 2), 64,
+		                &written, nullptr) != 0 &&
+		          written == 64,
+		      "WriteFile() failed after PrepareKernelAccess()");
+		CloseHandle(file);
+		// Page 2 was served; the others end their watch.
+		manager.UpdatePageWatchers<false, true>(base, TRACKER_PAGE_SIZE * 2);
+		manager.UpdatePageWatchers<false, true>(base + TRACKER_PAGE_SIZE * 3, TRACKER_PAGE_SIZE);
+		Check(test, all(PAGE_READWRITE) && GetReadWatchLockStats().guarded_bytes == 0,
+		      "the watches' ends left a guard, or guarded pages are counted");
+
+		// The switch off: every watched page is PAGE_NOACCESS, the locked one and the refused ones,
+		// as before.
+		TestSetReadWatchGuards(false);
+		TestSetReadWatchLockBudget(TRACKER_PAGE_SIZE);
+		manager.UpdatePageWatchers<true, true>(base, size);
+		Check(test, all(PAGE_NOACCESS), "with the switch off a watched page is not PAGE_NOACCESS");
+		stats = GetReadWatchLockStats();
+		Check(test,
+		      stats.guarded_bytes == 0 && stats.locked_bytes == TRACKER_PAGE_SIZE &&
+		          stats.unlocked_bytes == (pages - 1) * TRACKER_PAGE_SIZE,
+		      "with the switch off the pages are counted as guarded, or the refused ones not as "
+		      "unlocked");
+		manager.UpdatePageWatchers<false, true>(base, size);
+		Check(test, all(PAGE_READWRITE), "the watch's end left PAGE_NOACCESS");
+		Check(test, faults.other_faults == 0, "a NOACCESS page faulted");
+
+		// Through the emulator's exception filter, with its handler in place of the test's: once
+		// the handler resolved a guard page fault in guest memory, the guest guard handler that
+		// Memory::Initialize() installed claims the address, and the filter puts no guard back
+		// (it would for another host thread's stack). Without a GPU here, that handler puts back
+		// no guard whose fault was resolved without serving the watch either: RearmReadWatch() is
+		// called as the emulator's would call it.
+		Check(test, RemoveVectoredExceptionHandler(std::exchange(scope.handler, nullptr)) != 0,
+		      "failed to remove the test's fault handler");
+		Check(test, Common::HostException::InstallHandler(ReadGuardHostHandler),
+		      "the exception filter has another handler");
+		TestSetReadWatchGuards(true);
+		TestSetReadWatchLockBudget(0);
+		manager.UpdatePageWatchers<true, true>(base, size);
+		Check(test, all(guarded), "without a budget a watched page is not guarded");
+		faults_before = faults.guard_faults.load();
+		Check(test, *word(1) == 0x6b790001u && faults.guard_faults == faults_before + 1,
+		      "a read of a guarded page did not reach the filter's handler once");
+		Check(test, protection(1) == PAGE_READWRITE,
+		      "the exception filter put a guard back on a served guest page");
+		faults.serve = false;
+		Check(
+		    test, *word(2) == 0x6b790002u && faults.guard_faults == faults_before + 2,
+		    "a guard page fault resolved without serving did not reach the filter's handler once");
+		Check(test, protection(2) == PAGE_READONLY,
+		      "the exception filter put a guard back on a guest page, or left it writable");
+		manager.RearmReadWatch(base + TRACKER_PAGE_SIZE * 2);
+		Check(test, protection(2) == guarded, "the guard of a page still watched is not back");
+		faults.serve = true;
+		// Page 1 was served; the others end their watch.
+		manager.UpdatePageWatchers<false, true>(base, TRACKER_PAGE_SIZE);
+		manager.UpdatePageWatchers<false, true>(base + TRACKER_PAGE_SIZE * 2,
+		                                        TRACKER_PAGE_SIZE * 2);
+		Check(test, all(PAGE_READWRITE) && GetReadWatchLockStats().guarded_bytes == 0,
+		      "the watches' ends left a guard, or guarded pages are counted");
+		Check(test, faults.other_faults == 0, "a page faulted that was not a guard page");
+	}
+#else
+	// The switch does nothing off Windows: a read watch's pages are inaccessible as without it.
+	TestSetReadWatchGuards(true);
+	Check(
+	    test,
+	    ProtectGuestHostMemory(base, size, Common::VirtualMemory::Mode::NoAccess, ReadWatch::Start),
+	    "ProtectGuestHostMemory(read watch) failed");
+#if defined(__linux__)
+	// Probed without taking a signal: process_vm_readv() fails on an inaccessible page.
+	uint64_t   value = 0;
+	iovec      local {&value, sizeof(value)};
+	iovec      remote {reinterpret_cast<void*>(base + TRACKER_PAGE_SIZE), sizeof(value)};
+	const bool inaccessible = process_vm_readv(getpid(), &local, 1, &remote, 1, 0) == -1;
+#endif
+	Check(
+	    test,
+	    ProtectGuestHostMemory(base, size, Common::VirtualMemory::Mode::ReadWrite, ReadWatch::End),
+	    "ProtectGuestHostMemory(read unwatch) failed");
+	TestSetReadWatchGuards(false);
+#if defined(__linux__)
+	Check(test, inaccessible, "with the switch on a read-watched page stayed readable");
+#endif
+	Check(test, *word(1) == 0x6b790001u, "the memory changed");
+#endif
+	CheckOk(test, KernelMunmap(base, size), "KernelMunmap");
+	CheckOk(test, KernelReleaseDirectMemory(physical, size), "KernelReleaseDirectMemory");
+	std::printf("[host]    %-48s ok\n", test);
+}
+
+// gta6-prep: read-guard: the exception filter tells a read watch's guard page from another host
+// thread's stack guard page by the guest address space (Memory::Initialize()'s guest guard
+// handler): no host stack lies in it, for a thread started before it and one started after.
+void TestHostStacksOutsideGuestAddressSpace() {
+	using Libs::LibKernel::Memory::TestGuestAddressRangeIsOwned;
+	const char* test = "HostStacksOutsideGuestAddressSpace";
+
+	const auto outside = [](uint64_t local) {
+		const auto stack = SysStackUsage();
+		bool       ok    = !TestGuestAddressRangeIsOwned(local, 1) &&
+		          !TestGuestAddressRangeIsOwned(stack.reserved_addr, 1);
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		ok = ok && !TestGuestAddressRangeIsOwned(stack.guard_addr, 1);
+#endif
+		return ok;
+	};
+	int main_local = 0;
+	Check(test, outside(reinterpret_cast<uint64_t>(&main_local)),
+	      "the main thread's stack lies in the guest address space");
+	bool started_after = false;
+	std::thread([&] {
+		int local     = 0;
+		started_after = outside(reinterpret_cast<uint64_t>(&local));
+	}).join();
+	Check(test, started_after,
+	      "a thread started after the guest address space has its stack in it");
 	std::printf("[host]    %-48s ok\n", test);
 }
 
@@ -6423,6 +6790,8 @@ int main(int argc, char** argv) {
 	RunTest(TestQueriesWaitForStateChanges);
 	RunTest(TestTrackerProtectSharesBackingReads);
 	RunTest(TestReadWatchLocksBackingPages); // gta6-prep: ram-lock
+	RunTest(TestReadWatchGuardPages);        // gta6-prep: read-guard
+	RunTest(TestHostStacksOutsideGuestAddressSpace);
 	RunTest(TestClampRangeSkipsStateLock);
 	RunTest(TestGuestAddressSpaceHasNoFixedFallback);
 	RunTest(TestGuestFreeRangeSearchDoesNotUnderflow);

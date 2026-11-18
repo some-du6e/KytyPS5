@@ -211,6 +211,8 @@ struct ConfigOptions {
 	// gta6-prep: ram-lock: --lock-read-watched-mb (0: off, RamLockAll: all); unset: the RAM
 	// profile's.
 	std::optional<uint32_t>     lock_read_watched_mb;
+	// gta6-prep: read-guard: --read-watch-guard-pages on|off; unset: the RAM profile's.
+	std::optional<bool>         read_watch_guard_pages;
 	// --rt-arena-mb: the BLAS memory of native ray tracing in MiB (0: no limit); unset: the
 	// profile's share of the largest device-local heap. KYTY_RT_ARENA_MB still wins.
 	std::optional<uint32_t>     rt_arena_mb;

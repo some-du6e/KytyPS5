@@ -428,6 +428,8 @@ R_RAM_USAGE = re.compile(r"^RAM usage: t=(?P<t>\d+) ws=(?P<ws>\S+) private=(?P<p
                          r"noaccess=(?P<noaccess>\S+)(?: oneoff=(?P<oneoff>\d+)/(?P<oneoff_mib>\S+))?"
                          # gta6-prep: ram-lock: the read-watched memory locked in RAM (newer builds).
                          r"(?: locked=(?P<locked>\d+)/(?P<lock_budget>\d+) unlocked=(?P<unlocked>\d+) "
+                         # gta6-prep: read-guard: the read-watched memory that is guard pages (newer builds).
+                         r"(?:guarded=(?P<guarded>\d+) )?"
                          r"lockfail=(?P<lockfail>\d+) slowlocks=(?P<slowlocks>\d+)/(?P<longest_lock>\d+))?)?")
 # gta6-prep: ram-lock: the working set raised for the lock budget at startup, or why the lock stays off, a
 # budget the cap cut, the first failed VirtualLock or VirtualUnlock, and Windows' limit.
@@ -1363,6 +1365,10 @@ class Scanner:
                 sample.update({"locked_mib": int(g["locked"]), "lock_budget_mib": int(g["lock_budget"]),
                                "unlocked_mib": int(g["unlocked"]), "lock_failed_pages": int(g["lockfail"]),
                                "slow_lock_calls": int(g["slowlocks"]), "longest_lock_ms": int(g["longest_lock"])})
+                # gta6-prep: read-guard: the read-watched memory of the guest section that is guard pages now
+                # (--read-watch-guard-pages; newer builds).
+                if g["guarded"] is not None:
+                    sample["guarded_mib"] = int(g["guarded"])
         used, limit = sample["commit_mib"], sample["commit_limit_mib"]
         sample["commit_percent"] = used * 100 // limit if used is not None and limit else None
         sample["evidence"] = self.ev(line).as_dict()
@@ -1389,6 +1395,9 @@ class Scanner:
                           "max_unlocked_mib": max(prev["max_unlocked_mib"], sample["unlocked_mib"]),
                           "failed_pages": sample["lock_failed_pages"], "slow_lock_calls": sample["slow_lock_calls"],
                           "longest_lock_ms": sample["longest_lock_ms"], "t": sample["t"]}
+            if "guarded_mib" in sample:
+                hm["lock"].update({"guarded_mib": sample["guarded_mib"],
+                                   "max_guarded_mib": max(prev.get("max_guarded_mib", 0), sample["guarded_mib"])})
         if sample.get("noaccess_mib"):
             hm["noaccess_samples"] += 1
             hm["max_noaccess_mib"] = max(hm["max_noaccess_mib"], sample["noaccess_mib"])
@@ -2382,6 +2391,10 @@ def rank_fix_areas(rep, rules, vendor):
                                 last["lock_failed_pages"]))
                 else:
                     why += "; none of it locked in RAM (no --lock-read-watched-mb budget)"
+                # gta6-prep: read-guard: and how much of it was guard pages instead of NOACCESS (newer builds).
+                if last.get("guarded_mib"):
+                    why += ("; %d MiB of it guard pages, not NOACCESS, in the last sample (--read-watch-guard-pages)"
+                            % last["guarded_mib"])
             add("ram-noaccess-bluescreen", rules.rule("ram-noaccess-bluescreen").severity * 4, last["evidence"], why)
 
     if not fatal:
@@ -2778,11 +2791,14 @@ def render_markdown(rep, top=10):
                     hm["one_off"]["buffers"], hm["one_off"]["t"],
                     hm["one_off"]["mib"] if hm["one_off"]["mib"] is not None else "?"))
             lock = hm.get("lock")
-            if lock and (lock["budget_mib"] or lock["max_locked_mib"] or lock["failed_pages"]):
+            if lock and (lock["budget_mib"] or lock["max_locked_mib"] or lock["failed_pages"] or
+                         lock.get("max_guarded_mib")):
+                # gta6-prep: read-guard: the guard pages' peak, from builds that print it.
+                guarded = ", up to %d MiB guard pages" % lock["max_guarded_mib"] if "max_guarded_mib" in lock else ""
                 bits.append("read-watched memory locked in RAM up to %d MiB of a %d MiB budget, up to %d MiB NOACCESS "
-                            "without a lock, %d page lock(s) Windows refused and %d VirtualLock call(s) over 1 ms "
+                            "without a lock%s, %d page lock(s) Windows refused and %d VirtualLock call(s) over 1 ms "
                             "(longest %d ms) by t=%d s" % (
-                                lock["max_locked_mib"], lock["budget_mib"], lock["max_unlocked_mib"],
+                                lock["max_locked_mib"], lock["budget_mib"], lock["max_unlocked_mib"], guarded,
                                 lock["failed_pages"], lock["slow_lock_calls"], lock["longest_lock_ms"], lock["t"]))
             out.append("- " + "; ".join(bits))
             out.append("- last: `%s` (%s)" % (_md_escape(last["evidence"]["text"]), _fmt_ev(last["evidence"])))
