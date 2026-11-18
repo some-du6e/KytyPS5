@@ -1422,7 +1422,8 @@ namespace Libs::LibKernel::Memory {
 
 bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size,
                             Common::VirtualMemory::Mode mode,
-                            ReadWatch /*watch*/) {
+                            ReadWatch /*watch*/,
+                            Common::VirtualMemory::Mode /*base*/) {
   return ProtectAddressSpace(vaddr, size, mode);
 }
 

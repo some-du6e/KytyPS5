@@ -167,10 +167,11 @@ struct ProtectionCall {
 std::vector<ProtectionCall> g_protection_ranges;
 std::mutex g_protection_log_mutex;
 // gta6-prep: ram-lock: the mode and read watch kind of each
-// ProtectGuestHostMemory() call.
+// ProtectGuestHostMemory() call. gta6-prep: read-guard: and its base.
 struct WatchCall {
   Common::VirtualMemory::Mode mode;
   Libs::LibKernel::Memory::ReadWatch watch;
+  Common::VirtualMemory::Mode base;
 };
 std::vector<WatchCall> g_protection_watches;
 
@@ -622,20 +623,39 @@ void TestReadWatchKinds() {
   const auto is = [](const WatchCall &call, Mode mode, ReadWatch watch) {
     return call.mode == mode && call.watch == watch;
   };
+  // gta6-prep: read-guard: a Start also says what the run's pages have
+  // without the read watch, which guard pages keep under the guard.
+  const auto starts = [](const WatchCall &call, Mode base) {
+    return call.mode == Mode::NoAccess && call.watch == ReadWatch::Start &&
+           call.base == base;
+  };
   (void)calls();
 
   manager.UpdatePageWatchers<true>(address, page_size);
   auto got = calls();
   Check(got.size() == 1 && is(got[0], Mode::Read, ReadWatch::None),
         "a write watch is not a plain protection");
+  // Page 0 has a write watcher (Read), pages 1 and 2 none (ReadWrite): two
+  // NoAccess runs, split where that access changes.
   manager.UpdatePageWatchers<true, true>(address, page_size * 3);
   got = calls();
-  Check(got.size() == 1 && is(got[0], Mode::NoAccess, ReadWatch::Start),
-        "a read watch did not start as one NoAccess run");
+  Check(got.size() == 2 && starts(got[0], Mode::Read) &&
+            starts(got[1], Mode::ReadWrite),
+        "a read watch did not start as NoAccess runs split by their access "
+        "without it");
+  Check(g_protection_ranges.size() >= 2 &&
+            g_protection_ranges[g_protection_ranges.size() - 2].address ==
+                address &&
+            g_protection_ranges[g_protection_ranges.size() - 2].size ==
+                page_size &&
+            g_protection_ranges.back().address == address + page_size &&
+            g_protection_ranges.back().size == page_size * 2,
+        "a read watch's runs over and beside a write watcher are not split at "
+        "page 1");
   // Pages 1 and 2 are denied already: only page 3 starts.
   manager.UpdatePageWatchers<true, true>(address + page_size, page_size * 3);
   got = calls();
-  Check(got.size() == 1 && is(got[0], Mode::NoAccess, ReadWatch::Start),
+  Check(got.size() == 1 && starts(got[0], Mode::ReadWrite),
         "a second read watcher did not start the one page it added");
   Check(g_protection_ranges.back().address == address + page_size * 3 &&
             g_protection_ranges.back().size == page_size,
@@ -656,6 +676,74 @@ void TestReadWatchKinds() {
   got = calls();
   Check(got.size() == 1 && is(got[0], Mode::ReadWrite, ReadWatch::None),
         "a write unwatch is not a plain protection");
+
+  Check(VirtualFree(memory, 0, MEM_RELEASE) != 0, "VirtualFree failed");
+}
+
+// gta6-prep: read-guard: after a guard page fault that took the guard off, a
+// page a read watcher still holds gets its read watch's protection again (a
+// Start of that page, with its access without the watch), and a page whose
+// watch ended keeps the access its end gave it. The watcher counts stay.
+void TestRearmReadWatch() {
+  using Libs::LibKernel::Memory::ReadWatch;
+  using Mode = Common::VirtualMemory::Mode;
+  PageManager manager;
+  constexpr auto page_size = TRACKER_PAGE_SIZE;
+  auto *memory = Allocate(page_size * 2);
+  const auto address = reinterpret_cast<uint64_t>(memory);
+  const auto calls = [] {
+    std::lock_guard lock(g_protection_log_mutex);
+    auto result = g_protection_watches;
+    g_protection_watches.clear();
+    return result;
+  };
+  const auto noaccess_before = PageManager::NoAccessPages();
+
+  // Never watched: nothing to put back.
+  (void)calls();
+  manager.RearmReadWatch(address);
+  Check(calls().empty(), "a page no watcher ever held was protected");
+
+  manager.UpdatePageWatchers<true>(address + page_size, page_size);
+  manager.UpdatePageWatchers<true, true>(address, page_size * 2);
+  (void)calls();
+  // The fault took the guards off both pages (as Windows does on a guard
+  // page's first access).
+  Check(ProtectAddressSpace(address, page_size * 2, Mode::ReadWrite),
+        "the test could not take the protection off");
+  (void)calls();
+  manager.RearmReadWatch(address + 0x10);
+  manager.RearmReadWatch(address + page_size + 0x20);
+  auto got = calls();
+  Check(got.size() == 2 && got[0].mode == Mode::NoAccess &&
+            got[0].watch == ReadWatch::Start &&
+            got[0].base == Mode::ReadWrite && got[1].mode == Mode::NoAccess &&
+            got[1].watch == ReadWatch::Start && got[1].base == Mode::Read,
+        "a held page did not get its read watch's protection back, with its "
+        "access without the watch");
+  Check(g_protection_ranges.size() >= 2 &&
+            g_protection_ranges[g_protection_ranges.size() - 2].address ==
+                address &&
+            g_protection_ranges.back().address == address + page_size &&
+            g_protection_ranges.back().size == page_size,
+        "the re-arm did not protect the faulting page alone");
+  Check(Protection(memory) == PAGE_NOACCESS &&
+            Protection(memory + page_size) == PAGE_NOACCESS,
+        "the re-armed pages are accessible");
+  Check(PageManager::NoAccessPages() == noaccess_before + 2,
+        "a re-arm changed NoAccessPages()");
+
+  // The watch ends (the fault was served): nothing comes back.
+  manager.UpdatePageWatchers<false, true>(address, page_size * 2);
+  (void)calls();
+  manager.RearmReadWatch(address);
+  manager.RearmReadWatch(address + page_size);
+  Check(calls().empty() && IsWritable(memory) &&
+            Protection(memory + page_size) == PAGE_READONLY,
+        "a page whose read watch ended was protected again");
+  manager.UpdatePageWatchers<false>(address + page_size, page_size);
+  Check(PageManager::NoAccessPages() == noaccess_before,
+        "NoAccessPages() kept pages whose watch ended");
 
   Check(VirtualFree(memory, 0, MEM_RELEASE) != 0, "VirtualFree failed");
 }
@@ -793,10 +881,11 @@ void TestFatalPaths() {
 namespace Libs::LibKernel::Memory {
 
 bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size,
-                            Common::VirtualMemory::Mode mode, ReadWatch watch) {
+                            Common::VirtualMemory::Mode mode, ReadWatch watch,
+                            Common::VirtualMemory::Mode base) {
   {
     std::lock_guard lock(g_protection_log_mutex);
-    g_protection_watches.push_back({mode, watch});
+    g_protection_watches.push_back({mode, watch, base});
   }
   return ProtectAddressSpace(vaddr, size, mode);
 }
@@ -817,6 +906,7 @@ int main(int argc, char **argv) {
   TestReadWriteWatcherInteractions();
   TestSharedReadWatchers();
   TestReadWatchKinds();
+  TestRearmReadWatch();
   TestConcurrentSharedWatchers();
   TestFatalPaths();
   std::puts("PageManagerTests: all cases passed");

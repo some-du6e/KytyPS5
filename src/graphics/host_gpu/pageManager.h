@@ -23,6 +23,12 @@ public:
 	// The watchers' protections carry no execute permission: puts it back on the page holding
 	// vaddr, with their access. False while read watchers keep the page inaccessible.
 	[[nodiscard]] bool AllowExecute(uint64_t vaddr);
+	// gta6-prep: read-guard: a guard page fault on the page holding vaddr was resolved, and took
+	// the guard with it. While a read watcher still holds the page (the fault was resolved without
+	// serving its watch), the page gets the read watch's protection again; once none does, it keeps
+	// the access the watch's end gave it. Under the page's lock, so a watch ending meanwhile either
+	// comes after and takes the protection off again, or came before and leaves nothing to do.
+	void RearmReadWatch(uint64_t vaddr) noexcept;
 
 	template <bool track, bool is_read = false>
 	void UpdatePageWatchers(uint64_t vaddr, uint64_t size);

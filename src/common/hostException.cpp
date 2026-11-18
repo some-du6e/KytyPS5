@@ -85,6 +85,14 @@ int GuestSignalDispatchSignal() {
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 
+// gta6-prep: read-guard
+static std::atomic<GuestGuardHandler> g_guest_guard_handler {nullptr};
+static_assert(decltype(g_guest_guard_handler)::is_always_lock_free);
+
+void SetGuestGuardHandler(GuestGuardHandler handler) {
+	g_guest_guard_handler.store(handler, std::memory_order_release);
+}
+
 static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS exception) noexcept {
 	auto* exception_record = exception->ExceptionRecord;
 
@@ -100,6 +108,10 @@ static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS exception) noexcept {
 	// there). The system has already turned the page into a normal one; it is treated as the
 	// access violation it is for anything else, and the guard is put back if the access is handled
 	// without touching it.
+	// gta6-prep: read-guard: or a read watch's guard page in guest memory
+	// (--read-watch-guard-pages). The fault is the access violation PAGE_NOACCESS would have
+	// raised, and once it is handled the guest guard handler decides what the page gets: a guard
+	// put back after the PageManager served the watch would stay on a page no watch holds.
 	const bool guard_page = exception_record->ExceptionCode == STATUS_GUARD_PAGE_VIOLATION;
 	if (exception_record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION || guard_page) {
 		info.type = ExceptionType::AccessViolation;
@@ -140,12 +152,15 @@ static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS exception) noexcept {
 	const auto handler = g_handler.load(std::memory_order_acquire);
 	if (handler != nullptr && handler(info)) {
 		if (guard_page) {
-			MEMORY_BASIC_INFORMATION page {};
-			const auto* address = reinterpret_cast<const void*>(info.access_violation_vaddr);
-			if (VirtualQuery(address, &page, sizeof(page)) == sizeof(page) && page.State == MEM_COMMIT &&
-			    (page.Protect & PAGE_GUARD) == 0) {
-				DWORD old = 0;
-				VirtualProtect(page.BaseAddress, 1, page.Protect | PAGE_GUARD, &old);
+			const auto guest = g_guest_guard_handler.load(std::memory_order_acquire);
+			if (guest == nullptr || !guest(info.access_violation_vaddr)) {
+				MEMORY_BASIC_INFORMATION page {};
+				const auto* address = reinterpret_cast<const void*>(info.access_violation_vaddr);
+				if (VirtualQuery(address, &page, sizeof(page)) == sizeof(page) &&
+				    page.State == MEM_COMMIT && (page.Protect & PAGE_GUARD) == 0) {
+					DWORD old = 0;
+					VirtualProtect(page.BaseAddress, 1, page.Protect | PAGE_GUARD, &old);
+				}
 			}
 		}
 		return EXCEPTION_CONTINUE_EXECUTION;

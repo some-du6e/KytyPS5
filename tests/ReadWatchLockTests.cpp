@@ -541,6 +541,118 @@ void TestQuota() {
 	Check(os.locked.empty() && !locks.HasWork(), "pages stayed locked");
 }
 
+// gta6-prep: read-guard: the run set of the refused pages and of the guard pages: runs that touch
+// merge, an erase splits a run, the page count follows, and the queries cut runs to their range.
+void TestPageRuns() {
+	using Libs::LibKernel::Memory::ReadWatchPageRuns;
+	using Runs = std::vector<std::pair<uint64_t, uint64_t>>;
+	ReadWatchPageRuns runs;
+
+	const auto within = [&](uint64_t begin, uint64_t end) {
+		Runs found;
+		runs.ForEach(begin, end, [&](uint64_t from, uint64_t to) { found.emplace_back(from, to); });
+		return found;
+	};
+	const auto all = [&] { return within(0, ~uint64_t {0}); };
+	Check(runs.Empty() && runs.Pages() == 0 && !runs.First(0).has_value(),
+	      "the set does not start empty");
+	runs.Add(GuestA, GuestA + Page * 2);
+	runs.Add(GuestA + Page * 4, GuestA + Page * 5);
+	runs.Add(GuestA + Page * 2, GuestA + Page * 3);
+	Check(all() == (Runs {{GuestA, GuestA + Page * 3}, {GuestA + Page * 4, GuestA + Page * 5}}) &&
+	          runs.Pages() == 4,
+	      "touching runs did not merge, or the pages are miscounted");
+	// Adding pages already in the set counts them once; an empty range adds nothing.
+	runs.Add(GuestA + Page, GuestA + Page * 5);
+	runs.Add(GuestA + Page * 9, GuestA + Page * 9);
+	Check(all() == (Runs {{GuestA, GuestA + Page * 5}}) && runs.Pages() == 5,
+	      "an overlapping add counted pages twice, or an empty one added a run");
+	runs.Erase(GuestA + Page, GuestA + Page * 2);
+	Check(all() == (Runs {{GuestA, GuestA + Page}, {GuestA + Page * 2, GuestA + Page * 5}}) &&
+	          runs.Pages() == 4,
+	      "an erase in a run did not split it");
+	Check(
+	    within(GuestA + Page * 3, GuestA + Page * 3 + 0x10) ==
+	            (Runs {{GuestA + Page * 3, GuestA + Page * 3 + 0x10}}) &&
+	        within(GuestA + Page, GuestA + Page * 2).empty() &&
+	        within(GuestA + Page / 2, GuestA + Page * 3) ==
+	            (Runs {{GuestA + Page / 2, GuestA + Page}, {GuestA + Page * 2, GuestA + Page * 3}}),
+	    "ForEach() did not cut the runs to its range");
+	Check(runs.First(0) == std::optional<std::pair<uint64_t, uint64_t>> {{GuestA, GuestA + Page}} &&
+	          runs.First(GuestA + 1) ==
+	              std::optional<std::pair<uint64_t, uint64_t>> {
+	                  {GuestA + Page * 2, GuestA + Page * 5}} &&
+	          !runs.First(GuestA + Page * 2 + 1).has_value(),
+	      "First() did not find the first run that starts at or after its address");
+	// An erase across runs and gaps, and one past them all.
+	runs.Erase(GuestA, GuestA + Page * 4);
+	Check(all() == (Runs {{GuestA + Page * 4, GuestA + Page * 5}}) && runs.Pages() == 1,
+	      "an erase across runs left pages or miscounted them");
+	runs.Erase(0, ~uint64_t {0} & ~(Page - 1));
+	Check(runs.Empty() && runs.Pages() == 0, "an erase of everything left a run");
+}
+
+// gta6-prep: read-guard: the parts a read watch's start splits its pages into: those that hold a
+// lock keep NOACCESS, the others get guard pages (GuestAddressSpace::ProtectTransient()). Past the
+// budget, around an alias's lock, with a range that is not page-aligned, after a page lost its
+// lock to a remap, and after the watch ends.
+void TestLockRuns() {
+	using Parts = std::vector<std::tuple<uint64_t, uint64_t, bool>>;
+	Locks      locks;
+	Translate  translate;
+	const auto parts = [&](uint64_t begin, uint64_t end) {
+		Parts found;
+		locks.ForEachLockRun(begin, end, [&](uint64_t from, uint64_t to, bool locked) {
+			found.emplace_back(from, to, locked);
+		});
+		return found;
+	};
+	translate.Map(GuestA, Backing, 6);
+	// Nothing locked: one part, unlocked.
+	Check(parts(GuestA, GuestA + Page * 6) == (Parts {{GuestA, GuestA + Page * 6, false}}),
+	      "a range without locks is not one unlocked part");
+	// A budget of two pages: pages 1 and 2 locked, 3 and 4 refused, 0 and 5 not watched.
+	locks.SetBudget(Page * 2);
+	translate.Lock(locks, GuestA + Page, Page * 4);
+	Check(locks.HeldPages() == 2 && locks.RefusedPages() == 2, "the budget did not split the run");
+	Check(parts(GuestA, GuestA + Page * 6) ==
+	          (Parts {{GuestA, GuestA + Page, false},
+	                  {GuestA + Page, GuestA + Page * 3, true},
+	                  {GuestA + Page * 3, GuestA + Page * 6, false}}),
+	      "the locked pages are not one part between the others");
+	Check(parts(GuestA + Page * 2, GuestA + Page * 4) ==
+	          (Parts {{GuestA + Page * 2, GuestA + Page * 3, true},
+	                  {GuestA + Page * 3, GuestA + Page * 4, false}}),
+	      "a range that starts in the locked run is not cut to it");
+	// Not page-aligned: whole pages, cut to the range.
+	Check(parts(GuestA + Page + 0x10, GuestA + Page + 0x20) ==
+	          (Parts {{GuestA + Page + 0x10, GuestA + Page + 0x20, true}}),
+	      "a range within a locked page is not locked");
+	Check(parts(GuestA + Page / 2, GuestA + Page * 3 + 0x10) ==
+	          (Parts {{GuestA + Page / 2, GuestA + Page, false},
+	                  {GuestA + Page, GuestA + Page * 3, true},
+	                  {GuestA + Page * 3, GuestA + Page * 3 + 0x10, false}}),
+	      "an unaligned range is not cut at its ends");
+	// An alias of a locked page shares its lock: locked for both guest pages.
+	translate.Map(GuestB, Backing + Page, 1);
+	translate.Lock(locks, GuestB, Page);
+	Check(parts(GuestB, GuestB + Page) == (Parts {{GuestB, GuestB + Page, true}}),
+	      "an alias of a locked page is not locked");
+	// Page 2 is mapped over other memory: its next Lock() drops the old lock, and the budget it
+	// frees takes the new memory.
+	translate.Map(GuestA + Page * 2, Backing + Page * 16, 1);
+	translate.Lock(locks, GuestA + Page * 2, Page);
+	Check(parts(GuestA + Page, GuestA + Page * 3) ==
+	          (Parts {{GuestA + Page, GuestA + Page * 3, true}}),
+	      "a page mapped over other memory did not get its new lock");
+	// The ends of the watches: nothing is locked.
+	locks.Unlock(GuestB, Page, translate);
+	locks.Unlock(GuestA, Page * 6, translate);
+	Check(parts(GuestA, GuestA + Page * 6) == (Parts {{GuestA, GuestA + Page * 6, false}}) &&
+	          !locks.HasWork() && locks.GetOs().locked.empty(),
+	      "pages stayed locked after their watch ended");
+}
+
 // The PageManager's runs are whole 4 KiB pages; a range that is not still covers the pages it
 // touches.
 void TestPartialPages() {
@@ -570,6 +682,8 @@ int main() {
 	TestRoom();
 	TestLockFails();
 	TestQuota();
+	TestPageRuns();
+	TestLockRuns();
 	TestPartialPages();
 	std::printf("ReadWatchLockTests: ok\n");
 	return 0;

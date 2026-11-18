@@ -268,20 +268,38 @@ enum class ReadWatch : uint8_t { None, Start, End };
 // gta6-prep: ram-lock: on Windows with a lock budget (--lock-read-watched-mb), Start first locks
 // the range's backing pages in RAM, and End unlocks the ones Start locked once the access is back
 // and offers the budget that frees to pages refused earlier (ReadWatchLocks).
-bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode,
-                            ReadWatch watch = ReadWatch::None);
+// gta6-prep: read-guard: `base`, for Start: the access the range has without the read watch
+// (Read under a write watcher, else ReadWrite). On Windows with --read-watch-guard-pages, Start
+// keeps PAGE_NOACCESS only on the pages of the guest section that hold a lock, and makes its other
+// pages there PAGE_GUARD | base. End drops the guards with the rest of the protection.
+bool ProtectGuestHostMemory(
+    uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode,
+    ReadWatch                   watch = ReadWatch::None,
+    Common::VirtualMemory::Mode base  = Common::VirtualMemory::Mode::ReadWrite);
 // gta6-prep: ram-lock: the read watches' locked backing pages (ReadWatchLocks). The "RAM usage:"
-// lines' locked, unlocked, lockfail and slowlocks.
+// lines' locked, unlocked, guarded, lockfail and slowlocks.
 struct ReadWatchLockStats {
 	uint64_t budget_bytes    = 0; // 0: off, as always except on Windows; less at Windows' limit
 	uint64_t locked_bytes    = 0; // now
-	uint64_t unlocked_bytes  = 0; // read-watched guest section pages without a lock, now
+	// Read-watched guest section pages NOACCESS without a lock, now: those refused one. With
+	// guard pages (gta6-prep: read-guard), none: those pages are guarded.
+	uint64_t unlocked_bytes = 0;
+	// gta6-prep: read-guard: read-watched guest section pages that are guard pages, now.
+	uint64_t guarded_bytes   = 0;
 	uint64_t failed_pages    = 0; // page locks VirtualLock refused, so far
 	uint64_t slow_lock_calls = 0; // VirtualLock calls that took over 1 ms, so far
 	uint64_t longest_lock_us = 0; // the longest VirtualLock call, so far
 };
 // Any thread, lock-free.
 [[nodiscard]] ReadWatchLockStats GetReadWatchLockStats() noexcept;
+// gta6-prep: read-guard: before a Windows API reads or writes [data, data + size) of guest memory
+// in the kernel (a file write, a socket send or receive). A read watch's guard page in such a call
+// loses its guard with no handler run (the call fails, or uses the bytes from before the GPU's), so
+// the watch is lost and later CPU reads see stale bytes. The guarded pages of the range are read
+// first, from user mode: their faults serve the watches as any CPU read does. NOACCESS pages are
+// left as they were (the call fails on them, and the watch stays). Off Windows, and without guard
+// pages, nothing.
+void PrepareKernelAccess(const void* data, uint64_t size);
 // Whether the guest mapped the byte at vaddr for execution.
 [[nodiscard]] bool IsGuestExecutable(uint64_t vaddr);
 bool FreeGuestMemory(uint64_t vaddr, uint64_t size);
@@ -301,6 +319,7 @@ uint64_t TestFlexibleMappingCount();
 uint64_t TestBackingBytesZeroed();
 bool     TestGuestFreeRangeBounds();
 uint64_t TestSetReadWatchLockBudget(uint64_t bytes); // gta6-prep: ram-lock
+void     TestSetReadWatchGuards(bool on);            // gta6-prep: read-guard
 #endif
 
 } // namespace Libs::LibKernel::Memory

@@ -39,6 +39,18 @@ using Handler = bool (*)(const ExceptionInfo&);
 
 bool InstallHandler(Handler handler);
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+// gta6-prep: read-guard: called once the handler has resolved a guard page fault (native_code
+// STATUS_GUARD_PAGE_VIOLATION) at `address`, which took the page's guard off. It returns true for
+// guest memory, whose guard pages are the read watches': it has given the page the protection its
+// watch still needs. False, or without a guest guard handler: the page is another host thread's
+// stack guard page, which gets its guard back. Memory::Initialize() installs it. Any thread, from
+// the exception filter.
+using GuestGuardHandler = bool (*)(uint64_t address);
+
+void SetGuestGuardHandler(GuestGuardHandler handler);
+#endif
+
 #if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
 bool InitializeThreadSignalStack();
 // The host signal that delivers guest signals. Fault handling blocks it, so a guest handler runs

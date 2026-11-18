@@ -9,14 +9,16 @@
 // Windows mishandles a no-access page of a mapped view once it has paged the page out: a later
 // protection change on it can bug check (MEMORY_MANAGEMENT 0x1A/0x41202 in nt!MiGetPageProtection;
 // chenxiao07/KytyPS5#5, reproduced there, not here). Their fix makes those pages guard pages
-// instead (91a15d6c) and keeps no access only on pages it locked in RAM (d8f99391a5). There are no
-// guard pages here: before a run of guest pages loses its access, their pages of the backing view
-// are locked (VirtualLock cannot lock a no-access page), and once the access is back they are
-// unlocked. A page locked in RAM never leaves it.
+// instead (91a15d6c) and keeps no access only on pages it locked in RAM (d8f99391a5). Here, before
+// a run of guest pages loses its access, their pages of the backing view are locked (VirtualLock
+// cannot lock a no-access page), and once the access is back they are unlocked. A page locked in
+// RAM never leaves it.
 //
-// The pages the budget or Windows refuses stay no access without a lock, as they were before the
-// lock existed. They are remembered until their watch ends ("unlocked" on the "RAM usage:" lines),
-// and an unlock offers the budget it frees to them.
+// The pages the budget or Windows refuses get no lock. They are remembered until their watch ends
+// ("unlocked" on the "RAM usage:" lines), and an unlock offers the budget it frees to them.
+// gta6-prep: read-guard: without --read-watch-guard-pages they stay no access, as they were before
+// the lock existed. With it, the guest address space makes them guard pages instead, and keeps no
+// access only where ForEachLockRun() reports a lock (GuestAddressSpace::ProtectTransient()).
 //
 // Pure: the OS calls go through `Os` (read_watch_lock_tests counts them). Not thread-safe: the
 // guest address space calls it under a mutex of its own, with its state lock held shared, so the
@@ -29,6 +31,7 @@
 #include <cstdint>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -40,6 +43,92 @@ inline constexpr uint64_t ReadWatchPageSize = 0x1000;
 // What the raise of the working set adds to the budget: VirtualLock locks no more than the minimum
 // working set holds, less a few pages.
 inline constexpr uint64_t ReadWatchLockMargin = uint64_t {16} << 20u;
+
+// gta6-prep: read-guard: a set of guest pages, kept as page-aligned runs [begin, end) that neither
+// overlap nor touch. ReadWatchLocks keeps the pages refused a lock in one, and the guest address
+// space the read watches' guard pages in another. Not thread-safe.
+class ReadWatchPageRuns {
+public:
+	static constexpr uint64_t PageSize = ReadWatchPageSize;
+
+	// The pages of the page-aligned [begin, end) join the set.
+	void Add(uint64_t begin, uint64_t end) {
+		if (begin >= end) {
+			return;
+		}
+		Erase(begin, end);
+		m_pages += (end - begin) / PageSize;
+		auto next = m_runs.lower_bound(begin);
+		if (next != m_runs.begin()) {
+			if (const auto previous = std::prev(next); previous->second == begin) {
+				begin = previous->first;
+				m_runs.erase(previous);
+			}
+		}
+		if (next != m_runs.end() && next->first == end) {
+			end  = next->second;
+			next = m_runs.erase(next);
+		}
+		m_runs.emplace_hint(next, begin, end);
+	}
+
+	// The pages of the page-aligned [begin, end) leave it. (An empty range would split the run
+	// holding it into two that touch.)
+	void Erase(uint64_t begin, uint64_t end) {
+		if (begin >= end) {
+			return;
+		}
+		auto run = m_runs.lower_bound(begin);
+		if (run != m_runs.begin()) {
+			if (const auto previous = std::prev(run); previous->second > begin) {
+				run = previous;
+			}
+		}
+		while (run != m_runs.end() && run->first < end) {
+			const auto first = run->first;
+			const auto last  = run->second;
+			run              = m_runs.erase(run);
+			m_pages -= (std::min(last, end) - std::max(first, begin)) / PageSize;
+			if (first < begin) {
+				m_runs.emplace_hint(run, first, begin);
+			}
+			if (last > end) {
+				m_runs.emplace_hint(run, end, last);
+				break;
+			}
+		}
+	}
+
+	[[nodiscard]] uint64_t Pages() const noexcept { return m_pages; }
+	[[nodiscard]] bool     Empty() const noexcept { return m_runs.empty(); }
+
+	// The first run that starts at `from` or later.
+	[[nodiscard]] std::optional<std::pair<uint64_t, uint64_t>> First(uint64_t from) const {
+		const auto run = m_runs.lower_bound(from);
+		if (run == m_runs.end()) {
+			return std::nullopt;
+		}
+		return std::pair<uint64_t, uint64_t> {run->first, run->second};
+	}
+
+	// Calls f(begin, end) for the part of each run within [begin, end), lowest first.
+	template <typename F>
+	void ForEach(uint64_t begin, uint64_t end, F&& f) const {
+		auto run = m_runs.lower_bound(begin);
+		if (run != m_runs.begin()) {
+			if (const auto previous = std::prev(run); previous->second > begin) {
+				run = previous;
+			}
+		}
+		for (; run != m_runs.end() && run->first < end; ++run) {
+			f(std::max(run->first, begin), std::min(run->second, end));
+		}
+	}
+
+private:
+	std::map<uint64_t, uint64_t> m_runs;
+	uint64_t                     m_pages = 0;
+};
 
 // What Os::Lock() reports. Quota: Windows' limit of locked pages (ERROR_WORKING_SET_QUOTA).
 enum class ReadWatchLockResult : uint8_t { Locked, Quota, Failed };
@@ -139,7 +228,7 @@ public:
 	// contiguous backing of a guest range, as Lock() takes them, and skips the unbacked pages.
 	template <typename Translate>
 	void Unlock(uint64_t vaddr, uint64_t size, Translate&& translate) {
-		if (size == 0 || (m_held.empty() && m_refused.empty())) {
+		if (size == 0 || (m_held.empty() && m_refused.Empty())) {
 			return;
 		}
 		const auto begin  = vaddr & ~(PageSize - 1);
@@ -168,7 +257,34 @@ public:
 
 	// The guest pages that hold a lock, and those refused one.
 	[[nodiscard]] uint64_t HeldPages() const noexcept { return m_held.size(); }
-	[[nodiscard]] uint64_t RefusedPages() const noexcept { return m_refused_pages; }
+	[[nodiscard]] uint64_t RefusedPages() const noexcept { return m_refused.Pages(); }
+
+	// gta6-prep: read-guard: calls f(start, end, locked) for the parts of [begin, end) in address
+	// order: the runs of guest pages that hold a lock (locked) and the runs between them. A page
+	// counts whole, cut to [begin, end). Right after Lock() of a range the parts of that range are
+	// up to date: a page mapped over other memory since its lock has been seen to.
+	template <typename F>
+	void ForEachLockRun(uint64_t begin, uint64_t end, F&& f) const {
+		auto cursor = begin;
+		for (auto held = m_held.lower_bound(begin & ~(PageSize - 1));
+		     held != m_held.end() && held->first < end;) {
+			const auto run_begin = held->first;
+			auto       run_end   = run_begin + PageSize;
+			for (++held; held != m_held.end() && held->first == run_end; ++held) {
+				run_end += PageSize;
+			}
+			const auto from = std::max(run_begin, begin);
+			const auto to   = std::min(run_end, end);
+			if (cursor < from) {
+				f(cursor, from, false);
+			}
+			f(from, to, true);
+			cursor = to;
+		}
+		if (cursor < end) {
+			f(cursor, end, false);
+		}
+	}
 
 	[[nodiscard]] Os&       GetOs() noexcept { return m_os; }
 	[[nodiscard]] const Os& GetOs() const noexcept { return m_os; }
@@ -335,8 +451,8 @@ private:
 		uint64_t left   = RetryPages;
 		uint64_t cursor = 0;
 		while (left != 0 && m_locked_pages < Budget()) {
-			const auto refused = m_refused.lower_bound(cursor);
-			if (refused == m_refused.end()) {
+			const auto refused = m_refused.First(cursor);
+			if (!refused.has_value()) {
 				break;
 			}
 			const auto pages = std::min(left, Budget() - m_locked_pages);
@@ -386,55 +502,15 @@ private:
 		}
 	}
 
-	// The refused guest pages: [begin, end) of the page-aligned runs in m_refused, which neither
-	// overlap nor touch.
-	void AddRefused(uint64_t begin, uint64_t end) {
-		if (begin >= end) {
-			return;
-		}
-		EraseRefused(begin, end);
-		m_refused_pages += (end - begin) / PageSize;
-		auto next = m_refused.lower_bound(begin);
-		if (next != m_refused.begin()) {
-			if (const auto previous = std::prev(next); previous->second == begin) {
-				begin = previous->first;
-				m_refused.erase(previous);
-			}
-		}
-		if (next != m_refused.end() && next->first == end) {
-			end  = next->second;
-			next = m_refused.erase(next);
-		}
-		m_refused.emplace_hint(next, begin, end);
-	}
-
-	void EraseRefused(uint64_t begin, uint64_t end) {
-		auto run = m_refused.lower_bound(begin);
-		if (run != m_refused.begin()) {
-			if (const auto previous = std::prev(run); previous->second > begin) {
-				run = previous;
-			}
-		}
-		while (run != m_refused.end() && run->first < end) {
-			const auto first = run->first;
-			const auto last  = run->second;
-			run              = m_refused.erase(run);
-			m_refused_pages -= (std::min(last, end) - std::max(first, begin)) / PageSize;
-			if (first < begin) {
-				m_refused.emplace_hint(run, first, begin);
-			}
-			if (last > end) {
-				m_refused.emplace_hint(run, end, last);
-				break;
-			}
-		}
-	}
+	// The refused guest pages, in runs (m_refused).
+	void AddRefused(uint64_t begin, uint64_t end) { m_refused.Add(begin, end); }
+	void EraseRefused(uint64_t begin, uint64_t end) { m_refused.Erase(begin, end); }
 
 	void Publish() noexcept {
-		m_tracked_count.store(m_held.size() + m_refused_pages, std::memory_order_relaxed);
+		m_tracked_count.store(m_held.size() + m_refused.Pages(), std::memory_order_relaxed);
 		m_stats_budget.store(Budget(), std::memory_order_relaxed);
 		m_stats_locked.store(m_locked_pages, std::memory_order_relaxed);
-		m_stats_refused.store(m_refused_pages, std::memory_order_relaxed);
+		m_stats_refused.store(m_refused.Pages(), std::memory_order_relaxed);
 		m_stats_failed.store(m_failed, std::memory_order_relaxed);
 	}
 
@@ -445,9 +521,8 @@ private:
 	// The backing pages locked, and how many guest pages hold each: guest mappings of the same
 	// memory share its lock.
 	std::unordered_map<uint64_t, uint32_t> m_holders;
-	// The guest pages refused a lock (start -> end), while their watch lasts.
-	std::map<uint64_t, uint64_t> m_refused;
-	uint64_t                     m_refused_pages = 0;
+	// The guest pages refused a lock, while their watch lasts.
+	ReadWatchPageRuns m_refused;
 	// The room the working set has for locks, in bytes, and whether Windows refused more.
 	uint64_t m_room       = 0;
 	bool     m_room_final = false;

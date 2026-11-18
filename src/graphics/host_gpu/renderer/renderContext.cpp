@@ -51,6 +51,7 @@ RenderContext::RenderContext(GraphicContext& graphics, const std::filesystem::pa
 		memory.locked_bytes      = locks.locked_bytes;
 		memory.lock_budget_bytes = locks.budget_bytes;
 		memory.unlocked_bytes    = locks.unlocked_bytes;
+		memory.guarded_bytes     = locks.guarded_bytes; // gta6-prep: read-guard
 		memory.lock_failed_pages = locks.failed_pages;
 		memory.slow_lock_calls   = locks.slow_lock_calls;
 		memory.longest_lock_us   = locks.longest_lock_us;

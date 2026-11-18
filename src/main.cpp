@@ -116,7 +116,8 @@ static void PrintRamUsage() {
 	    "                                       slow pipeline), fresh guest stacks left zeroed\n"
 	    "                                       by the OS instead of cleared, no spilled images\n"
 	    "                                       in the recycled-image pool,\n"
-	    "                                       --lock-read-watched-mb all, and --oom-recovery.\n"
+	    "                                       --lock-read-watched-mb all,\n"
+	    "                                       --read-watch-guard-pages on, and --oom-recovery.\n"
 	    "                                       Options given explicitly win. Default: normal\n"
 	    "                                       (built-in values).\n");
 	::printf(
@@ -127,6 +128,14 @@ static void PrintRamUsage() {
 	    "                                       MEMORY_MANAGEMENT blue screens. The rest stays\n"
 	    "                                       inaccessible without a lock. 0 is off. Default:\n"
 	    "                                       0, or all under --ram-profile low.\n");
+	// gta6-prep: read-guard
+	::printf(
+	    "  --read-watch-guard-pages <on|off>    Windows: of the guest memory the GPU trackers\n"
+	    "                                       make inaccessible, the part not locked in RAM\n"
+	    "                                       becomes guard pages instead. A guard catches\n"
+	    "                                       only the first read, so other threads may read\n"
+	    "                                       stale data until that read is served. Default:\n"
+	    "                                       off, or on under --ram-profile low.\n");
 }
 
 static void PrintUsage() {
@@ -399,8 +408,9 @@ static bool ParseUserId(const std::string& value, int32_t& out) {
 using Config::ConfigOptions;
 
 // gta6-prep: vram
-// The video memory options that take a value, --ram-profile (gta6-prep: ram) and
-// --lock-read-watched-mb (gta6-prep: ram-lock). nullopt: not one of them.
+// The video memory options that take a value, --ram-profile (gta6-prep: ram),
+// --lock-read-watched-mb (gta6-prep: ram-lock) and --read-watch-guard-pages (gta6-prep:
+// read-guard). nullopt: not one of them.
 static std::optional<bool> ParseVramOption(const std::string& arg, const std::string& value,
                                            ConfigOptions& config) {
 	if (arg == "--vram-gc") {
@@ -464,6 +474,16 @@ static std::optional<bool> ParseVramOption(const std::string& arg, const std::st
 			return false;
 		}
 		config.lock_read_watched_mb = *megabytes;
+		return true;
+	}
+	// gta6-prep: read-guard
+	if (arg == "--read-watch-guard-pages") {
+		const auto on = Config::ParseReadWatchGuardPages(value);
+		if (!on.has_value()) {
+			::printf("invalid read-watch guard pages setting (on or off): %s\n", value.c_str());
+			return false;
+		}
+		config.read_watch_guard_pages = *on;
 		return true;
 	}
 	return std::nullopt;
