@@ -1673,6 +1673,9 @@ struct TestCase {
   u32 expected_mip_descriptors = 0;
   std::optional<std::vector<u32>> expected_buffer_resources;
   size_t max_spirv_words = 0;
+  // gta6-prep: shader-mem. The byte address, ADDR + OFFSET, of every LDS access in program order,
+  // as the compiled IR has it. CheckLdsAddresses compares them. Empty skips the check.
+  std::vector<u32> lds_addresses;
 };
 
 struct GraphicsCase {
@@ -1966,6 +1969,42 @@ void CheckSpirvEmission(const TestCase &test, const std::vector<u32> &spirv) {
   }
 }
 
+// gta6-prep: shader-mem. Each LDS access of the compiled program, in program order, must have a
+// constant ADDR operand, and ADDR + OFFSET must be the address the test means. A test that
+// overwrites its own ADDR VGPR still compiles and runs. ShaderMemDsAtomics64 did, and only its
+// first GPU readback showed it. This check needs no GPU. A failure prints both lists, with ? for
+// an access whose ADDR is not a constant.
+void CheckLdsAddresses(const TestCase &test, const ShaderRecompiler::IR::Program &program) {
+  using namespace ShaderRecompiler::IR;
+  std::vector<std::optional<u32>> addresses;
+  for (const auto *block : program.blocks) {
+    for (const auto &inst : *block) {
+      if (SharedAccessOf(inst.GetOpcode()) == SharedAccess::None) continue;
+      const auto &memory = program.memory_info[inst.Flags<MemoryFlags>().index];
+      if (memory.kind != ResourceKind::Lds) continue;
+      const auto address = inst.Arg(0).Resolve();
+      addresses.push_back(address.IsImmediate()
+                              ? std::optional<u32>(address.U32() + memory.offset)
+                              : std::nullopt);
+    }
+  }
+  if (std::equal(addresses.begin(), addresses.end(), test.lds_addresses.begin(),
+                 test.lds_addresses.end())) {
+    return;
+  }
+  std::ostringstream out;
+  out << "expected [";
+  for (size_t i = 0; i < test.lds_addresses.size(); i++) {
+    out << (i == 0 ? "" : ", ") << Hex(test.lds_addresses[i]);
+  }
+  out << "] compiled [";
+  for (size_t i = 0; i < addresses.size(); i++) {
+    out << (i == 0 ? "" : ", ") << (addresses[i] ? Hex(*addresses[i]) : std::string("?"));
+  }
+  out << "], ? = ADDR is not a constant";
+  Fail(test.name, "LDS addresses", out.str());
+}
+
 // The plan a restarted game loads from the shader cache, which saves back to the same bytes.
 ShaderRecompiler::IR::ResourcePlan LoadedResourcePlan(const char *name,
                                                       const ShaderRecompiler::IR::Program &program) {
@@ -2088,6 +2127,7 @@ CompiledShader CompileCase(const TestCase &test, u32 host_subgroup_size = 64) {
           "recompiler returned empty SPIR-V");
   ValidateSpirv(test.name, result.spirv);
   CheckSpirvEmission(test, result.spirv);
+  if (!test.lds_addresses.empty()) CheckLdsAddresses(test, result.program);
   if (test.max_spirv_words != 0u) {
     const auto words = SpirvCodeWords(result.spirv);
     Require(test.name, "emitted shader size", words <= test.max_spirv_words,

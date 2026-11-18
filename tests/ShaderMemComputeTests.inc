@@ -263,6 +263,16 @@ TestCase ShaderMemDsAtomics64() {
   TestCase test;
   test.name = "ShaderMemDsAtomics64";
   auto &code = test.code;
+  // ADDR v1, DATA v[2:3], DATA2 v[4:5], VDST v[6:7], ds_read_b64 into v[8:9], and v31 for
+  // AppendStoreVgpr's byte offset. ADDR used to be v7, the high half of VDST. Loading the VDST
+  // marker set it to 0x5a5a5a5a, which put every atomic past LDS_SIZE, so the recompiler's bounds
+  // check skipped them all and each _rtn returned 0.
+  constexpr u32 addr_reg = 1, data_reg = 2, data2_reg = 4, vdst_reg = 6, read_reg = 8;
+  static_assert(addr_reg < data_reg && data_reg + 2u <= data2_reg &&
+                    data2_reg + 2u <= vdst_reg && vdst_reg + 2u <= read_reg &&
+                    read_reg + 2u <= 31u,
+                "ADDR, DATA, DATA2, VDST, the read pair and AppendStoreVgpr's v31 must not "
+                "share a VGPR");
   std::array<uint64_t, 6> lds = {0x00000000ffffffffull, 0ull, 5ull, 0xff00ff00ff00ff00ull,
                                  0x8000000000000000ull, 0x0123456789abcdefull};
   const auto pair = [&](u32 reg, uint64_t value) {
@@ -275,21 +285,22 @@ TestCase ShaderMemDsAtomics64() {
       test.expected.push_back(static_cast<u32>(value >> (32u * half)));
     }
   };
-  AppendVMovU32(&code, 7, 0);
+  AppendVMovU32(&code, addr_reg, 0);
   for (u32 slot = 0; slot < lds.size(); slot++) {
-    pair(2, lds[slot]);
+    pair(data_reg, lds[slot]);
     code.push_back(EncodeDs0(0x4d, slot * 8u)); // ds_write_b64
-    code.push_back(EncodeDs1(0, 2, 7));
+    code.push_back(EncodeDs1(0, data_reg, addr_reg));
+    test.lds_addresses.push_back(slot * 8u);
   }
-  // VDST v[6:7], DATA v[2:3], DATA2 v[4:5], ADDR v7.
   const auto ds = [&](u32 opcode, u32 slot, uint64_t data, uint64_t data2, bool rtn,
                       uint64_t updated) {
-    pair(2, data);
-    pair(4, data2);
-    pair(6, 0x5a5a5a5aa5a5a5a5ull);
+    pair(data_reg, data);
+    pair(data2_reg, data2);
+    pair(vdst_reg, 0x5a5a5a5aa5a5a5a5ull);
     code.push_back(EncodeDs0(opcode, slot * 8u));
-    code.push_back(EncodeDs1Ex(6, 4, 2, 7));
-    result(6, rtn ? lds[slot] : 0x5a5a5a5aa5a5a5a5ull);
+    code.push_back(EncodeDs1Ex(vdst_reg, data2_reg, data_reg, addr_reg));
+    test.lds_addresses.push_back(slot * 8u);
+    result(vdst_reg, rtn ? lds[slot] : 0x5a5a5a5aa5a5a5a5ull);
     lds[slot] = updated;
   };
   ds(0x63, 0, 0x0000000100000000ull, 0, true, 0x0000000100000000ull); // inc_rtn: carry
@@ -307,8 +318,9 @@ TestCase ShaderMemDsAtomics64() {
   ds(0x6b, 5, 0x0f0f0f0f0f0f0f0full, 0, true, 0xf000000000000000ull ^ 0x0f0f0f0f0f0f0f0full);
   for (u32 slot = 0; slot < lds.size(); slot++) {
     code.push_back(EncodeDs0(0x76, slot * 8u)); // ds_read_b64
-    code.push_back(EncodeDs1(8, 0, 7));
-    result(8, lds[slot]);
+    code.push_back(EncodeDs1(read_reg, 0, addr_reg));
+    test.lds_addresses.push_back(slot * 8u);
+    result(read_reg, lds[slot]);
   }
   AppendEnd(&code);
   test.compute_info.lds_size_dwords = 12;
@@ -317,8 +329,19 @@ TestCase ShaderMemDsAtomics64() {
                   O::DS_RSUB_RTN_U64,   O::DS_MSKOR_RTN_B64, O::DS_CMPST_B64,
                   O::DS_MIN_RTN_I64,    O::DS_MAX_U64,       O::DS_XOR_RTN_B64,
                   O::BUFFER_STORE_DWORD, O::S_ENDPGM};
-  test.required_spirv = {"OpAtomicCompareExchange %ulong", "OpAtomicSMin %ulong",
-                         "WorkgroupMemoryExplicitLayoutKHR"};
+  // inc/dec/rsub/mskor run a compare-exchange loop. The QWORD atomics point into lds_qwords and
+  // the DS reads and writes into lds_dwords. Both are Block views of the same LDS, and Aliased.
+  test.required_spirv = {"OpAtomicCompareExchange %ulong",
+                         "OpAtomicSMin %ulong",
+                         "OpAtomicLoad %ulong",
+                         "OpLoopMerge",
+                         "WorkgroupMemoryExplicitLayoutKHR",
+                         "OpDecorate %lds_dwords Aliased",
+                         "OpDecorate %lds_qwords Aliased",
+                         "OpAccessChain %_ptr_Workgroup_uint %lds_dwords",
+                         "OpAccessChain %_ptr_Workgroup_ulong %lds_qwords"};
+  test.forbidden_spirv = {"OpAccessChain %_ptr_Workgroup_ulong %lds_dwords",
+                          "OpAccessChain %_ptr_Workgroup_uint %lds_qwords"};
   return ShaderMemSingleThread(std::move(test));
 }
 
