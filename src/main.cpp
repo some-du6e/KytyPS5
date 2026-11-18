@@ -134,8 +134,8 @@ static void PrintRamUsage() {
 	    "  --read-watch-guard-pages <on|off>    Windows: of the guest memory the GPU trackers\n"
 	    "                                       make inaccessible, the part not locked in RAM\n"
 	    "                                       becomes guard pages instead. A guard catches\n"
-	    "                                       only the first access, so other threads may\n"
-	    "                                       read stale data until that access is served.\n"
+	    "                                       only the first read, so other threads may\n"
+	    "                                       read stale data until that read is served.\n"
 	    "                                       Default: off, or on under --ram-profile low.\n");
 }
 

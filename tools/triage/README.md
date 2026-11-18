@@ -88,8 +88,8 @@ Formats it knows (the emitters are listed in the survey catalogue and `notes/log
   plain no-fatal rule, since a session log has no clean-exit line and preflight stops its boots.
   It points at the Windows blue screen 0x1A/0x41202 and at Event 1001 in preflight's `system.txt`.
   Newer builds end the renderer's part of `RAM usage:` with `locked=<MiB>/<budget MiB>
-  unlocked=<MiB> guarded=<MiB> lockfail=<pages> slowlocks=<calls>/<ms>` (`guarded` only from the
-  read-watch guard pages on). These are the read-watched guest memory locked in RAM now, the
+  unlocked=<MiB> guarded=<MiB> lockfail=<pages> slowlocks=<calls>/<ms>` (`guarded` only in builds
+  with the read-watch guard pages, printed whether they are on or off). These are the read-watched guest memory locked in RAM now, the
   read-watched memory of the guest section that stays NOACCESS without a lock now (the budget or
   Windows refused it, and it is what the blue screen needs; 0 with guard pages), and the part of it
   that is guard pages now (`--read-watch-guard-pages`). The last two count since startup: the page

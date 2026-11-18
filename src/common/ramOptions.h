@@ -65,7 +65,7 @@ struct RamSettings {
 	// pages over read-only (PAGE_GUARD | PAGE_READONLY), and the locked ones keep PAGE_NOACCESS.
 	// Off: every read-watched page is PAGE_NOACCESS, as before. The other fork's repro of the blue
 	// screen above ran on guard pages without one. A guard is one-shot, so other threads can read
-	// a page stale while its first access is served; their writes still fault
+	// a page stale while the first read of it is served; their writes still fault
 	// (GuestAddressSpace::ProtectTransient()). --read-watch-guard-pages wins.
 	bool read_watch_guard_pages = false;
 

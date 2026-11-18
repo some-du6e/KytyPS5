@@ -416,13 +416,13 @@ on the page file, then on physical RAM. The GPU comes after both.
     guard page needs no lock, so a finished watch keeps the budget it frees for the next watches
     instead of offering it to these pages. `--read-watch-guard-pages off` makes them PAGE_NOACCESS
     without a lock again, as before, and a finished watch then offers them the budget it frees.
-  - A guard page is one-shot, which is why locked pages keep PAGE_NOACCESS. Windows takes the guard
-    off for every thread at the first access. Until the emulator has read back what the GPU wrote
+  - A guard page is one-shot, which is why locked pages keep PAGE_NOACCESS. The first read of the page
+    takes the guard off for every thread. Until the emulator has read back what the GPU wrote
     there, other threads read the page without a fault and see the bytes from before. Their writes
     still fault, since the guard is over read-only. They wait for the readback, and the write
     tracking sees them, as on a NOACCESS page. The other fork put each guard back at once and still
     saw 1 fault in about 90 whose page another thread read first, on a game whose job threads read
-    the same GPU results together. Here the window lasts until that first access is served. Stale
+    the same GPU results together. Here the window lasts until that first read is served. Stale
     reads can show as flicker, dark or wrong lighting, or physics glitches, and only on guarded
     memory.
   - A Windows API that reads or writes a guest buffer in the kernel, such as a file write or a
@@ -481,7 +481,7 @@ less than 14 GiB of RAM, unless `-ExtraArgs` names a RAM profile.
 | spilled images in the recycle pool | yes | no | more allocations under pressure |
 | `--oom-recovery` | off (on under `--preset rtx3050`) | on | slow oversubscription instead of an exit |
 | read-watched guest memory locked in RAM (Windows) | none | all of it, up to an eighth of the RAM (`--lock-read-watched-mb`) | up to that much RAM Windows can no longer page out (about 1 GiB with 8 GB), VirtualLock calls that may read pages back from the page file, and about 30 MiB of bookkeeping at 1 GiB locked |
-| read-watched guest memory without a lock (Windows) | PAGE_NOACCESS | guard pages (`--read-watch-guard-pages`) | other threads can read such a page stale until its first access is served |
+| read-watched guest memory without a lock (Windows) | PAGE_NOACCESS | guard pages (`--read-watch-guard-pages`) | other threads can read such a page stale until the first read of it is served |
 
 `--pipeline-helpers`, `KYTY_PIPELINE_HELPERS` and `--no-oom-recovery` still win.
 `--lock-read-watched-mb <MiB>` sets a smaller lock budget, and `0` turns the lock off.
@@ -558,8 +558,8 @@ at each use pins the normal value to the literal it replaced.
 - `kyty_triage.py` adds a `host_memory` section and five rules: a warning line, commit at 95% or
   more on Windows, under 300 MiB available in most samples, under 14 GiB of RAM with the normal
   profile, and the blue-screen hint.
-  - The hint needs a log that stops low on RAM after NOACCESS samples. It quotes `unlocked` from
-    the last sample. It ranks under the plain no-fatal rule, because a session log never has a
+  - The hint needs a log that stops low on RAM after NOACCESS samples. It quotes `unlocked`, and
+    `guarded` when guard pages held memory, from the last sample. It ranks under the plain no-fatal rule, because a session log never has a
     clean-exit line and preflight stops its boots.
   - A line that a zip holds twice, in `session.log` and `emulator-boot.log`, counts once.
 
@@ -810,6 +810,6 @@ unknown on top of the first.
 | Triage | `tools/triage/` |
 | Preflight | `tools/preflight/`, `.github/scripts/package_gpu_tests.py`, `.github/scripts/ctest_groups.py` |
 | NID names | `tools/nid/` |
-| RAM | `src/common/ramOptions.h`, `src/common/ramLog.*`, `src/kernel/readWatchLocks.h` (the lock bookkeeping), `src/graphics/host_gpu/renderer/cache/streamBuffer.*` (one-time buffer count), `tools/preflight/preflight.ps1`, `tools/triage/` |
+| RAM | `src/common/ramOptions.h`, `src/common/ramLog.*`, `src/kernel/readWatchLocks.h` (the lock bookkeeping), `src/kernel/memoryAddressSpace.inc` (where the locks and guard pages are applied), `src/common/hostException.cpp` (what a guard page fault gets back), `src/graphics/host_gpu/renderer/cache/streamBuffer.*` (one-time buffer count), `tools/preflight/preflight.ps1`, `tools/triage/` |
 | CI | `.github/workflows/gta6-ci.yml`, `.github/scripts/run_tests.py` |
 | Tests | `tests/TitleProfileTests.cpp`, `HleSoftFailTests.cpp`, `VramPolicyTests.cpp`, `DiagTests.cpp`, `ShaderRecompilerComputeTests.cpp` |

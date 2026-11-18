@@ -1626,8 +1626,8 @@ private:
 		}
 	}
 
-	// gta6-prep: read-guard: a guard page is one-shot. Windows takes the guard off for every thread
-	// at the first access, read or write, as it raises the fault, and until that fault's handler
+	// gta6-prep: read-guard: a guard page is one-shot. The first read takes the guard off for every
+	// thread as Windows raises the fault (a write faults either way), and until that fault's handler
 	// has served the watch (read back what the GPU wrote), other threads read the page without a
 	// fault and see the bytes it held before. Their writes still fault: every guard is over
 	// read-only, whatever access the page has without the watch, so a write goes through the write
