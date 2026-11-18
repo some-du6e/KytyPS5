@@ -62,11 +62,11 @@ struct RamSettings {
 	uint32_t lock_read_watched_mb = 0;
 	// gta6-prep: read-guard: Windows: the read-watched pages of the guest section that hold no
 	// lock (past the budget, refused by Windows, or all of them without a budget) become guard
-	// pages over the access they would have without the watch (PAGE_GUARD | PAGE_READONLY or
-	// PAGE_READWRITE), and the locked ones keep PAGE_NOACCESS. Off: every read-watched page is
-	// PAGE_NOACCESS, as before. The other fork's repro of the blue screen above ran on guard pages
-	// without one. A guard is one-shot, so other threads can read a page stale while its first
-	// fault is served (GuestAddressSpace::ProtectTransient()). --read-watch-guard-pages wins.
+	// pages over read-only (PAGE_GUARD | PAGE_READONLY), and the locked ones keep PAGE_NOACCESS.
+	// Off: every read-watched page is PAGE_NOACCESS, as before. The other fork's repro of the blue
+	// screen above ran on guard pages without one. A guard is one-shot, so other threads can read
+	// a page stale while its first access is served; their writes still fault
+	// (GuestAddressSpace::ProtectTransient()). --read-watch-guard-pages wins.
 	bool read_watch_guard_pages = false;
 
 	constexpr bool operator==(const RamSettings&) const = default;

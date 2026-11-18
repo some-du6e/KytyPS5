@@ -77,12 +77,6 @@ struct PageManager::Impl {
 			if (access_watchers != 0) {
 				return Common::VirtualMemory::Mode::NoAccess;
 			}
-			return BasePerms();
-		}
-
-		// gta6-prep: read-guard: Perms() without the read watchers, which the kernel's guard pages
-		// keep under the guard (ProtectGuestHostMemory()).
-		[[nodiscard]] Common::VirtualMemory::Mode BasePerms() const noexcept {
 			if (write_watchers != 0) {
 				return Common::VirtualMemory::Mode::Read;
 			}
@@ -184,9 +178,8 @@ struct PageManager::Impl {
 	}
 
 	void Protect(uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode,
-	             Libs::LibKernel::Memory::ReadWatch watch,
-	             Common::VirtualMemory::Mode        base) noexcept {
-		if (!Libs::LibKernel::Memory::ProtectGuestHostMemory(vaddr, size, mode, watch, base)) {
+	             Libs::LibKernel::Memory::ReadWatch watch) noexcept {
+		if (!Libs::LibKernel::Memory::ProtectGuestHostMemory(vaddr, size, mode, watch)) {
 			Fatal("address-space protection failed at 0x%016" PRIx64 ", mode=0x%08" PRIx32, vaddr,
 			      static_cast<uint32_t>(mode));
 		}
@@ -197,7 +190,6 @@ struct PageManager::Impl {
 	                          const RegionBits* mask = nullptr) {
 		SpinGuard lock(region.lock);
 		auto      perms                 = region.pages[first].Perms();
-		auto      base                  = region.pages[first].BasePerms(); // gta6-prep: read-guard
 		uint64_t  range_begin           = 0;
 		uint64_t  range_bytes           = 0;
 		uint64_t  potential_range_bytes = 0;
@@ -205,9 +197,9 @@ struct PageManager::Impl {
 		// gta6-prep: ram-lock: every run a read watcher adds becomes NoAccess, and every run one
 		// removes gets back the access it had (Read or ReadWrite); the kernel locks the runs'
 		// memory in RAM meanwhile. Write watchers never change a NoAccess page.
-		// gta6-prep: read-guard: a run a read watcher adds also keeps one access without the
-		// watchers (BasePerms()), which the kernel's guard pages keep under the guard: the runs end
-		// where it changes too.
+		// gta6-prep: read-guard: nor a guard page: the kernel's guards are over read-only, whatever
+		// access the page has without its read watchers, so a write watcher added under a read
+		// watch still sees the writes.
 		using Libs::LibKernel::Memory::ReadWatch;
 		constexpr auto watch = !is_read ? ReadWatch::None
 		                       : track  ? ReadWatch::Start
@@ -215,8 +207,7 @@ struct PageManager::Impl {
 
 		const auto release_pending = [&] {
 			if (range_bytes != 0) {
-				Protect(base_addr + range_begin * PAGE_SIZE, range_bytes, perms, watch,
-				        watch == ReadWatch::Start ? base : perms);
+				Protect(base_addr + range_begin * PAGE_SIZE, range_bytes, perms, watch);
 				range_bytes           = 0;
 				potential_range_bytes = 0;
 			}
@@ -232,19 +223,15 @@ struct PageManager::Impl {
 			const auto new_count = update ? page.AddDelta<delta, is_read>(address)
 			                              : page.AddDelta<0, is_read>(address);
 			const auto new_perms = page.Perms();
-			const auto new_base  = page.BasePerms();
 			if constexpr (is_read) {
 				using Mode = Common::VirtualMemory::Mode;
 				noaccess_delta += static_cast<int64_t>(new_perms == Mode::NoAccess) -
 				                  static_cast<int64_t>(old_perms == Mode::NoAccess);
 			}
 
-			const bool run_ends =
-			    new_perms != perms || (watch == ReadWatch::Start && new_base != base);
-			if (run_ends) [[unlikely]] {
+			if (new_perms != perms) [[unlikely]] {
 				release_pending();
 				perms = new_perms;
-				base  = new_base;
 			} else if (range_bytes != 0) {
 				potential_range_bytes += PAGE_SIZE;
 			}
@@ -353,7 +340,7 @@ void PageManager::RearmReadWatch(uint64_t vaddr) noexcept {
 	// if the page holds a lock (or gets one now), and a guard otherwise. Its watchers stay as they
 	// are, and so does NoAccessPages().
 	m_impl->Protect(Common::AlignDown(vaddr, PAGE_SIZE), PAGE_SIZE, page.Perms(),
-	                Libs::LibKernel::Memory::ReadWatch::Start, page.BasePerms());
+	                Libs::LibKernel::Memory::ReadWatch::Start);
 }
 
 template <bool track, bool is_read>

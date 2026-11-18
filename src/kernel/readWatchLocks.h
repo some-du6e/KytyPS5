@@ -17,8 +17,10 @@
 // The pages the budget or Windows refuses get no lock. They are remembered until their watch ends
 // ("unlocked" on the "RAM usage:" lines), and an unlock offers the budget it frees to them.
 // gta6-prep: read-guard: without --read-watch-guard-pages they stay no access, as they were before
-// the lock existed. With it, the guest address space makes them guard pages instead, and keeps no
-// access only where ForEachLockRun() reports a lock (GuestAddressSpace::ProtectTransient()).
+// the lock existed. With it, the guest address space makes them guard pages instead and keeps no
+// access only where ForEachLockRun() reports a lock (GuestAddressSpace::ProtectTransient()). Its
+// unlocks then keep the budget they free for the next watches instead of offering it to the
+// refused pages, which as guard pages need no lock (Unlock()'s `retry`).
 //
 // Pure: the OS calls go through `Os` (read_watch_lock_tests counts them). Not thread-safe: the
 // guest address space calls it under a mutex of its own, with its state lock held shared, so the
@@ -226,8 +228,10 @@ public:
 	// forgets those it refused. The budget that frees goes to pages refused earlier, RetryPages of
 	// them at most: `translate(start, bytes, f)` calls f(offset, start, bytes) for each run of
 	// contiguous backing of a guest range, as Lock() takes them, and skips the unbacked pages.
+	// gta6-prep: read-guard: with `retry` off it goes to none, and stays for the next Lock() calls
+	// (with guard pages the refused pages are guarded, which needs no lock).
 	template <typename Translate>
-	void Unlock(uint64_t vaddr, uint64_t size, Translate&& translate) {
+	void Unlock(uint64_t vaddr, uint64_t size, Translate&& translate, bool retry = true) {
 		if (size == 0 || (m_held.empty() && m_refused.Empty())) {
 			return;
 		}
@@ -239,7 +243,7 @@ public:
 		}
 		FlushUnlocks();
 		EraseRefused(begin, end);
-		if (m_locked_pages < locked) {
+		if (retry && m_locked_pages < locked) {
 			Retry(translate);
 		}
 		Publish();

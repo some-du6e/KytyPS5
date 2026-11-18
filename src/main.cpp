@@ -126,16 +126,17 @@ static void PrintRamUsage() {
 	    "                                       (VirtualLock), an eighth of the RAM at most.\n"
 	    "                                       Paged out, such memory has been tied to\n"
 	    "                                       MEMORY_MANAGEMENT blue screens. The rest stays\n"
-	    "                                       inaccessible without a lock. 0 is off. Default:\n"
-	    "                                       0, or all under --ram-profile low.\n");
+	    "                                       inaccessible without a lock, or becomes guard\n"
+	    "                                       pages with --read-watch-guard-pages on. 0 is off.\n"
+	    "                                       Default: 0, or all under --ram-profile low.\n");
 	// gta6-prep: read-guard
 	::printf(
 	    "  --read-watch-guard-pages <on|off>    Windows: of the guest memory the GPU trackers\n"
 	    "                                       make inaccessible, the part not locked in RAM\n"
 	    "                                       becomes guard pages instead. A guard catches\n"
-	    "                                       only the first read, so other threads may read\n"
-	    "                                       stale data until that read is served. Default:\n"
-	    "                                       off, or on under --ram-profile low.\n");
+	    "                                       only the first access, so other threads may\n"
+	    "                                       read stale data until that access is served.\n"
+	    "                                       Default: off, or on under --ram-profile low.\n");
 }
 
 static void PrintUsage() {

@@ -3136,8 +3136,8 @@ bool ProtectGuestMemory(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode,
 }
 
 bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size, VirtualMemory::Mode mode,
-                            ReadWatch watch, VirtualMemory::Mode base) {
-	return g_guest_address_space->ProtectTransient(vaddr, size, mode, watch, base);
+                            ReadWatch watch) {
+	return g_guest_address_space->ProtectTransient(vaddr, size, mode, watch);
 }
 
 // gta6-prep: read-guard

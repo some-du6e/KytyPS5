@@ -1024,6 +1024,13 @@ if(BUILD_TESTING)
 	add_test(NAME ram_policy COMMAND $<TARGET_FILE:ram_policy_tests>) # gta6-prep: ram
 	add_test(NAME read_watch_lock COMMAND $<TARGET_FILE:read_watch_lock_tests>) # gta6-prep: ram-lock
 	add_test(NAME common COMMAND $<TARGET_FILE:common_tests>)
+	if(WIN32)
+		# gta6-prep: read-guard: the Windows runner runs common without gating it (an upstream test
+		# fails there; KNOWN_FAILING in .github/scripts/run_tests.py). The exception filter's tests,
+		# which decide what a read watch's guard page gets after its fault, are gated on their own.
+		add_test(NAME common_host_exception
+		         COMMAND $<TARGET_FILE:common_tests> --gtest_filter=HostException.*)
+	endif()
 	add_test(NAME shader_vertex_metadata COMMAND $<TARGET_FILE:shader_vertex_metadata_tests>)
 	add_test(NAME resource_materialization COMMAND $<TARGET_FILE:resource_materialization_tests>)
 	add_test(NAME resource_tracking COMMAND $<TARGET_FILE:resource_tracking_tests>)

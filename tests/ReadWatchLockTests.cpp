@@ -325,6 +325,40 @@ void TestRetry() {
 	Check(os.locked.empty() && !locks.HasWork(), "pages stayed locked");
 }
 
+// gta6-prep: read-guard: with guard pages the refused pages are guarded, which needs no lock: an
+// unlock with `retry` off offers them nothing, and the budget it frees goes to the next watch.
+void TestNoRetry() {
+	Locks     locks;
+	Translate translate;
+	translate.Map(GuestA, Backing, 2);
+	translate.Map(GuestB, Backing + Page * 8, 3);
+	locks.SetBudget(Page * 2);
+	translate.Lock(locks, GuestA, Page * 2);
+	translate.Lock(locks, GuestB, Page * 3);
+	auto& os = locks.GetOs();
+	Check(locks.RefusedPages() == 3, "the second watch was not refused");
+	os.Forget();
+	locks.Unlock(GuestA, Page * 2, translate, false);
+	Check(os.unlocks == std::vector<Call> {{Backing, Page * 2}} && os.locks.empty(),
+	      "an unlock without retry locked the refused pages, or did not unlock its own");
+	Check(locks.HeldPages() == 0 && locks.RefusedPages() == 3 && locks.Stats().locked_bytes == 0 &&
+	          locks.Stats().unlocked_bytes == Page * 3,
+	      "an unlock without retry changed the refused pages");
+	// The next watch gets the budget.
+	os.Forget();
+	translate.Lock(locks, GuestA, Page * 2);
+	Check(os.locks == std::vector<Call> {{Backing, Page * 2}} && locks.HeldPages() == 2,
+	      "the budget an unlock without retry freed did not go to the next watch");
+	// The refused pages' end has nothing to unlock.
+	locks.Unlock(GuestB, Page * 3, translate, false);
+	Check(os.unlocks.empty() && locks.RefusedPages() == 0 && locks.HeldPages() == 2,
+	      "the refused pages' end unlocked something, or kept them refused");
+	locks.Unlock(GuestA, Page * 2, translate, false);
+	Check(os.unlocks == std::vector<Call> {{Backing, Page * 2}} && os.locked.empty() &&
+	          !locks.HasWork(),
+	      "pages stayed locked");
+}
+
 // Two guest mappings of the same memory share its lock: it is locked once, counts once against the
 // budget, and is unlocked when the last of them ends its watch.
 void TestAliases() {
@@ -676,6 +710,7 @@ int main() {
 	TestLockAndUnlock();
 	TestBudget();
 	TestRetry();
+	TestNoRetry();
 	TestAliases();
 	TestRemap();
 	TestPrepare();

@@ -1304,15 +1304,19 @@ int KYTY_SYSV_ABI SaveDataSetParam(const SaveDataMountPoint* mount_point, uint32
 	}
 
 	if (param_type == 0) {
-		const auto* p = static_cast<const SaveDataParam*>(param_buf);
+		// gta6-prep: read-guard: copied first, as the other types are. WriteFile() would read the
+		// guest buffer in the kernel, where a read watch's guard page loses its guard unseen and
+		// a NOACCESS page fails the write; the copy faults as any CPU read does.
+		SaveDataParam copy {};
+		std::memcpy(&copy, param_buf, sizeof(copy));
 
 		LOGF("\t title      = %.128s\n"
 		     "\t sub_title  = %.128s\n"
 		     "\t detail     = %.1024s\n"
 		     "\t user_param = %u\n",
-		     p->title, p->sub_title, p->detail, p->user_param);
+		     copy.title, copy.sub_title, copy.detail, copy.user_param);
 		return write_save_file(save_param_path(g_mount_slots.Directory(static_cast<size_t>(slot))),
-		                       p, sizeof(*p));
+		                       &copy, sizeof(copy));
 	}
 	SaveDataParam param {};
 	const auto path = save_param_path(g_mount_slots.Directory(static_cast<size_t>(slot)));

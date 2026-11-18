@@ -268,14 +268,13 @@ enum class ReadWatch : uint8_t { None, Start, End };
 // gta6-prep: ram-lock: on Windows with a lock budget (--lock-read-watched-mb), Start first locks
 // the range's backing pages in RAM, and End unlocks the ones Start locked once the access is back
 // and offers the budget that frees to pages refused earlier (ReadWatchLocks).
-// gta6-prep: read-guard: `base`, for Start: the access the range has without the read watch
-// (Read under a write watcher, else ReadWrite). On Windows with --read-watch-guard-pages, Start
-// keeps PAGE_NOACCESS only on the pages of the guest section that hold a lock, and makes its other
-// pages there PAGE_GUARD | base. End drops the guards with the rest of the protection.
-bool ProtectGuestHostMemory(
-    uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode,
-    ReadWatch                   watch = ReadWatch::None,
-    Common::VirtualMemory::Mode base  = Common::VirtualMemory::Mode::ReadWrite);
+// gta6-prep: read-guard: on Windows with --read-watch-guard-pages, Start keeps PAGE_NOACCESS only
+// on the pages of the guest section that hold a lock, and makes its other pages there
+// PAGE_GUARD | PAGE_READONLY, whatever access they have without the watch: once a guard is gone,
+// writes still fault. End drops the guards with the rest of the protection, and offers the budget
+// it frees to no refused page (those are guarded).
+bool ProtectGuestHostMemory(uint64_t vaddr, uint64_t size, Common::VirtualMemory::Mode mode,
+                            ReadWatch watch = ReadWatch::None);
 // gta6-prep: ram-lock: the read watches' locked backing pages (ReadWatchLocks). The "RAM usage:"
 // lines' locked, unlocked, guarded, lockfail and slowlocks.
 struct ReadWatchLockStats {
