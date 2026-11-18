@@ -193,7 +193,8 @@ the job; `run_tests.py` reports host tests that fail upstream on a platform (Win
 warnings. `workflow_dispatch` with `bisect_shas` builds only the given targets at each listed
 commit, one job after another, to find which commit broke a test. Tests that open a Vulkan device run in a separate step that only reports, because GitHub
 runners have no GPU and lavapipe lacks fragment barycentrics and 64-bit image atomics. Upstream's
-own CI never runs those tests either. On lavapipe each of those tests took about 85 s to fail, 54
+own CI never runs those tests either. Lavapipe comes from the kisak-mesa PPA, or from Ubuntu's Mesa,
+with a warning, when the PPA fails. On lavapipe each of those tests took about 85 s to fail, 54
 minutes for the group. So `shader_recompiler_compute` now runs first, and when it finds no usable
 device, the rest of the group gets 10 s per test. The three tests that open no device still pass
 within that limit. `shader_recompiler_shader_mem_host_subgroup32` and `_subgroup64` also run the GPU
@@ -276,6 +277,7 @@ Read this before relying on anything above.
 | GPU test group on CI | 3 of 42 pass on lavapipe; the rest stop because the runner has no device with fragment barycentrics and 64-bit LDS/image atomics, as upstream's do. |
 | GPU test group on an RTX 3050 6 GB (Windows 11, driver 621.14, through preflight) | 39 of 42 pass, including this branch's own `shader_recompiler_gta6_alu` and `vram_heap_limit`. `shader_recompiler_compute` passes 1058 checks, then stops at `ShaderMemDsAtomics64`, and `shader_recompiler_shader_mem` stops at the same case. That was a test bug, not an NVIDIA one. The case kept ADDR in v7, the high half of the VDST pair, so loading the VDST marker before each atomic moved ADDR out of range, and the recompiler's bounds check skipped every 64-bit atomic, as it would on any GPU. `42bd58a4` fixes the case, and the new host tests `shader_recompiler_shader_mem_host_subgroup32` and `_subgroup64` check its LDS addresses in CI without a GPU. The fixed case has not run on a GPU yet. Its first run is also the first on a GPU for the 64-bit compare-exchange loop on LDS (ds inc, dec, rsub and mskor) and for native 64-bit `OpAtomicSMin` and `OpAtomicXor` on Workgroup memory. The buffer form of that loop already passed in `ShaderMemBufferAtomics64`. `ShaderMemDsAtomics32`, the two `ShaderMemDsAddF32Contention` cases and everything else `shader_recompiler_compute` runs after the fixed case have not run on a GPU either. The run before stopped earlier, at a test bug in `ShaderMemBufferAtomicsWrap` (fixed in `dfdf16a9`). `kernel_file_system` died with 0xC0000028 (bad stack while unwinding) in its mutex handoff case, as on CI's Windows runner. That was an emulator bug on Windows, fixed in `d8e1118a` (next row). The 2 GiB buffer case is skipped on PCs with less than 14 GiB of RAM. The first run on that PC got only 4 tests to the GPU, because its page file could not commit the 12.7 GB guest section; the tests now use 6 GiB. |
 | Cancel fix and shader-mem host tests (run 44252374777, `dfe61030`) | Green. Linux passes 78 of 78 host tests and Windows 76 of 76 gated, including the new `guest_threads`, `kernel_file_system_mutex`, `shader_recompiler_shader_mem_host_subgroup32` and `_subgroup64`. On the Windows runner `kernel_file_system` now gets through all three mutex cases and stops at the hidden Vulkan test window, as on Linux. Before `d8e1118a` it died with 0xC0000028 in the mutex handoff case. The cause: a guest thread canceled at `PthreadTestcancel` left through winpthreads' `pthread_exit`, whose msvcrt longjmp unwinds with RtlUnwindEx from the guest stack, where the TEB's stack bounds are zero. `d8e1118a` leaves through `PthreadExit`'s host-stack return instead (Windows only). `8565bd98` (real TEB bounds for guest stacks) stays on `wf/kfs-unwind`. The GPU package still holds 42 tests. None of this has run on a GPU. |
+| TEB bounds A/B (`wf/teb-bounds`, run 44326176478, `94232989`) | Windows is green: 76 of 76 gated host tests, including `guest_threads` with its exception cases (a throw and catch, and OutputDebugStringA, on an emulator stack and on a guest-supplied one) and `virtual_memory_allocation`, which checks the new bounds on the main entry stack. The Linux job failed twice before building, because the kisak-mesa PPA's package pool answered 503. `2d90cff9` adds a fallback to Ubuntu's Mesa, and run 44336023215 took it: Linux passed 78 of 78 host tests on gta6-prep. Not merged into gta6-prep. Nothing has run on a PC. |
 | Test fixes from the first CI run | `shader_alu_decode`: the VOPC program overwrote its own buffer descriptor (test bug). `resource_tracking`: its "unsupported format" was `k8SScaled`, which shader-mem made supported (bisected to the shader-mem merge). `shader_cfg`: one check (material selection must reject an `s_cmp_le_u32` loop bound) fails in TheCruZ's fork at its own tip; it now prints a "known fork deviation" line instead of aborting, and the ~110 tests after it, which the fork never ran, pass. The recompiler keeps the fork's behaviour. |
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
 | gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
@@ -591,8 +593,9 @@ at each use pins the normal value to the literal it replaced.
    - On Windows, the process ends with no fatal line in the log, probably with 0xE06D7363 (a C++
      exception) or 0x40010006 (OutputDebugString). Something raised an exception on a guest thread,
      where Windows cannot run frame-based handlers (see "Windows guest threads" under Known risks).
-     Try a build of `wf/kfs-unwind`, whose `8565bd98` gives guest stacks real bounds. Those exit
-     codes are inferred from how Windows works; nobody has seen them on this branch.
+     Try the Windows build of `wf/teb-bounds` (the `KytyPS5-gta6-prep-Windows-x64` artifact of run
+     44326176478): gta6-prep `3ba75260` plus `8565bd98`, which gives guest stacks real bounds.
+     Those exit codes are inferred from how Windows works; nobody has seen them on this branch.
 5. **Re-run and compare.** `kyty_triage.py --compare old.json new.log` shows which failures went
    away and which are new.
 6. **Keep fixes per-title** unless they fix a real emulation bug. Add GTA 6 quirks to the `gta6`
@@ -624,8 +627,9 @@ at each use pins the normal value to the literal it replaced.
   So Windows cannot run frame-based exception handlers on a guest thread. An uncaught C++
   exception, or system code that raises and catches its own (OutputDebugString does), ends the
   process without a log line. Access violations are unaffected: they reach the emulator's vectored
-  handler first. `8565bd98` on `wf/kfs-unwind` gives guest stacks real bounds. It is held off
-  gta6-prep because it changes every guest thread on Windows and has not run on a PC.
+  handler first. `8565bd98` gives guest stacks real bounds. It is held off gta6-prep because it
+  changes every guest thread on Windows and has not run on a PC. Branch `wf/teb-bounds` is
+  gta6-prep with it, and run 44326176478 built it for Windows.
 - **Thread cancellation on Windows.** winpthreads acts on a cancel only at `PthreadTestcancel`. A
   canceled guest thread blocked in a join, a condition wait, a sleep or a semaphore keeps waiting,
   where the PS5 would cancel it. A game that cancels such a thread and then joins it hangs at the
