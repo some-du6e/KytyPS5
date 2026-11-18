@@ -1080,7 +1080,8 @@ if(BUILD_TESTING)
 	add_test(NAME pssr COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --pssr-only)
 	add_test(NAME guest_red_zone_patcher
 		COMMAND $<TARGET_FILE:virtual_memory_allocation_tests> --red-zone-patcher-only)
-	# Guest threads canceled at PthreadTestcancel.
+	# Guest threads canceled at PthreadTestcancel, and host code on guest stacks that throws and
+	# catches.
 	add_test(NAME guest_threads
 		COMMAND $<TARGET_FILE:virtual_memory_allocation_tests> --guest-threads-only)
 	add_test(NAME command_scheduler_timeline

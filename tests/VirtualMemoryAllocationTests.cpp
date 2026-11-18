@@ -1646,6 +1646,111 @@ void TestGuestThreadCancel() {
 
 	std::printf("[host]    %-48s ok\n", test);
 }
+
+// Host code on a guest stack throws a C++ exception and catches it, as an HLE function may. It runs
+// once on a stack the emulator allocated and once on one the guest supplied. On Windows the TEB's
+// StackBase was 0 on a guest stack, so exception dispatch accepted no frame there and the throw
+// could not reach its catch.
+struct GuestThrowState {
+	bool      caught    = false;
+	bool      destroyed = false;
+	uintptr_t rsp       = 0;
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	uintptr_t teb_stack_base         = UINTPTR_MAX;
+	uintptr_t teb_stack_limit        = UINTPTR_MAX;
+	uintptr_t teb_deallocation_stack = UINTPTR_MAX;
+#endif
+};
+
+struct GuestThreadException {
+	int value;
+};
+
+// Its destructor runs when the exception unwinds the frame that holds it.
+class GuestThreadUnwindMark {
+public:
+	explicit GuestThreadUnwindMark(bool* destroyed): m_destroyed(destroyed) {}
+	~GuestThreadUnwindMark() { *m_destroyed = true; }
+	GuestThreadUnwindMark(const GuestThreadUnwindMark&)            = delete;
+	GuestThreadUnwindMark& operator=(const GuestThreadUnwindMark&) = delete;
+
+private:
+	bool* m_destroyed;
+};
+
+[[gnu::noinline]] void ThrowOnGuestThread(GuestThrowState& state) {
+	const GuestThreadUnwindMark mark(&state.destroyed);
+	throw GuestThreadException {42};
+}
+
+[[gnu::noinline]] bool CatchOnGuestThread(GuestThrowState& state) {
+	try {
+		ThrowOnGuestThread(state);
+	} catch (const GuestThreadException& exception) {
+		return exception.value == 42;
+	}
+	return false;
+}
+
+KYTY_SYSV_ABI void* GuestThreadThrowsAndCatches(void* arg) {
+	auto& state = *static_cast<GuestThrowState*>(arg);
+	asm volatile("movq %%rsp, %0" : "=r"(state.rsp) : : "memory");
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	asm volatile("movq %%gs:0x08, %0\n\t"
+	             "movq %%gs:0x10, %1\n\t"
+	             "movq %%gs:0x1478, %2\n\t"
+	             : "=r"(state.teb_stack_base), "=r"(state.teb_stack_limit),
+	               "=r"(state.teb_deallocation_stack)
+	             :
+	             : "memory");
+	// Raises DBG_PRINTEXCEPTION_C, which its own __except catches when no debugger takes it.
+	OutputDebugStringA("VirtualMemoryAllocationTests: guest thread\n");
+#endif
+	state.caught = CatchOnGuestThread(state);
+	return reinterpret_cast<void*>(static_cast<uintptr_t>(0x5eed));
+}
+
+void TestGuestThreadExceptions() {
+	using namespace Libs::LibKernel;
+	const char* test = "GuestThreadExceptions";
+	InitGuestThreads();
+
+	std::vector<uint8_t> supplied_stack(1024 * 1024);
+	for (const bool supplied: {false, true}) {
+		const std::string what = supplied ? "guest-supplied stack: " : "emulator stack: ";
+		GuestThrowState   state;
+		PthreadAttr       attr = nullptr;
+		CheckOk(test, PthreadAttrInit(&attr), "PthreadAttrInit");
+		if (supplied) {
+			CheckOk(test, PthreadAttrSetstack(&attr, supplied_stack.data(), supplied_stack.size()),
+			        "PthreadAttrSetstack");
+		}
+		Pthread thread = nullptr;
+		CheckOk(test, PthreadCreate(&thread, &attr, GuestThreadThrowsAndCatches, &state, "GuestThrow"),
+		        "PthreadCreate");
+		CheckOk(test, PthreadAttrDestroy(&attr), "PthreadAttrDestroy");
+		uint64_t stack_addr = 0;
+		uint64_t stack_size = 0;
+		Check(test, PthreadGetGuestStack(thread, &stack_addr, &stack_size), what + "no guest stack");
+		void* result = nullptr;
+		CheckOk(test, PthreadJoin(thread, &result), "PthreadJoin");
+		Check(test, result == reinterpret_cast<void*>(static_cast<uintptr_t>(0x5eed)),
+		      what + "the thread did not return its value");
+		Check(test, state.rsp >= stack_addr && state.rsp < stack_addr + stack_size,
+		      what + "the thread did not run on its guest stack");
+		Check(test, state.caught && state.destroyed,
+		      what + "a C++ exception thrown and caught on the guest stack was lost");
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		const auto top = (stack_addr + stack_size) & ~uint64_t {0x0f};
+		Check(test,
+		      state.teb_stack_base == top && state.teb_stack_limit == 0 &&
+		          state.teb_deallocation_stack == top,
+		      what + "the TEB's StackBase, StackLimit and DeallocationStack were not top, 0, top");
+#endif
+	}
+
+	std::printf("[host]    %-48s ok\n", test);
+}
 #endif
 
 void TestFragmentedBackingPublication() {
@@ -6394,6 +6499,7 @@ int main(int argc, char** argv) {
 	if (argc == 2 && std::strcmp(argv[1], "--guest-threads-only") == 0) {
 #if defined(__x86_64__) || defined(_M_X64)
 		RunTest(TestGuestThreadCancel);
+		RunTest(TestGuestThreadExceptions);
 #endif
 		return g_failed_tests == 0 ? 0 : 1;
 	}

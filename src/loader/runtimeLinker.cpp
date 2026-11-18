@@ -358,8 +358,19 @@ static KYTY_SYSV_ABI void RunEntry(uint64_t addr, EntryParams* params, atexit_fu
 		      "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12",
 		      "xmm13", "xmm14", "xmm15");
 #elif KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
-		// Windows stack probes use the TEB stack limits during the guest stack switch.
-		// bounds, which describe the host stack and are invalid while RSP is in guest memory.
+		// While the guest runs, the TEB's stack fields describe the guest stack, as in
+		// Libs::LibKernel's RunOnGuestStack. StackLimit is 0, so stack probes stay off. StackBase
+		// and DeallocationStack are its top, so the kernel's guard page range stays empty, and
+		// exception dispatch accepts the host frames on the guest stack. That helps every exception
+		// except access violations, guard page hits and illegal instructions, which HostException's
+		// vectored handler sees first and ends the process on if it cannot resolve them.
+		//
+		// Nothing may end the thread while these values are installed. When a thread ends through
+		// ExitThread, the kernel releases the allocation at DeallocationStack. One path does that
+		// today. This thread is a std::thread, not a winpthreads one, and RunEntry gives
+		// PthreadExit no frame to return to. So scePthreadExit here goes on to winpthreads'
+		// pthread_exit, which calls _endthreadex on the guest stack. DeallocationStack is then
+		// inside the main guest stack, so the release fails and the host stack leaks.
 		register entry_func_t func_reg asm("rbx")     = func;
 		register uintptr_t    guest_rsp_reg asm("r8") = guest_rsp;
 		register uintptr_t    guest_rbp_reg asm("r9") = guest_rbp;
@@ -367,10 +378,13 @@ static KYTY_SYSV_ABI void RunEntry(uint64_t addr, EntryParams* params, atexit_fu
 		             "pushq %%r13\n\t"
 		             "pushq %%r14\n\t"
 		             "pushq %%r15\n\t"
+		             "pushq %%gs:0x1478\n\t"
 		             "movq %%gs:0x08, %%r14\n\t"
 		             "movq %%gs:0x10, %%r15\n\t"
-		             "xorq %%rcx, %%rcx\n\t"
+		             "leaq 16(%[guest_rsp]), %%rcx\n\t"
 		             "movq %%rcx, %%gs:0x08\n\t"
+		             "movq %%rcx, %%gs:0x1478\n\t"
+		             "xorq %%rcx, %%rcx\n\t"
 		             "movq %%rcx, %%gs:0x10\n\t"
 		             "movq %%rsp, %%r12\n\t"
 		             "movq %%rbp, %%r13\n\t"
@@ -381,6 +395,7 @@ static KYTY_SYSV_ABI void RunEntry(uint64_t addr, EntryParams* params, atexit_fu
 		             "movq %%r12, %%rsp\n\t"
 		             "movq %%r14, %%gs:0x08\n\t"
 		             "movq %%r15, %%gs:0x10\n\t"
+		             "popq %%gs:0x1478\n\t"
 		             "popq %%r15\n\t"
 		             "popq %%r14\n\t"
 		             "popq %%r13\n\t"
@@ -458,12 +473,38 @@ static KYTY_SYSV_ABI void RunEntry(uint64_t addr, EntryParams* params, atexit_fu
 #if defined(KYTY_VIRTUAL_MEMORY_ALLOCATION_TESTS)
 struct MainEntryStackTestState {
 	bool      called = false;
+	bool      caught = false;
 	uintptr_t rsp    = 0;
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
-	uintptr_t teb_stack_base  = UINTPTR_MAX;
-	uintptr_t teb_stack_limit = UINTPTR_MAX;
+	uintptr_t teb_stack_base         = UINTPTR_MAX;
+	uintptr_t teb_stack_limit        = UINTPTR_MAX;
+	uintptr_t teb_deallocation_stack = UINTPTR_MAX;
 #endif
 };
+
+struct MainEntryTestException {
+	int value;
+};
+
+#if defined(__cpp_exceptions)
+[[gnu::noinline]] static void ThrowMainEntryTestException(int value) {
+	throw MainEntryTestException {value};
+}
+#endif
+
+// Host code on the guest stack throws and catches, as an HLE function may.
+[[gnu::noinline]] static bool CatchOnMainEntryStack() {
+#if defined(__cpp_exceptions)
+	try {
+		ThrowMainEntryTestException(7);
+	} catch (const MainEntryTestException& exception) {
+		return exception.value == 7;
+	}
+	return false;
+#else
+	return true;
+#endif
+}
 
 static KYTY_SYSV_ABI void TestMainEntryStackCallback(EntryParams* params,
                                                      atexit_func_t /*atexit_func*/) {
@@ -479,10 +520,15 @@ static KYTY_SYSV_ABI void TestMainEntryStackCallback(EntryParams* params,
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 	asm volatile("movq %%gs:0x08, %0\n\t"
 	             "movq %%gs:0x10, %1\n\t"
-	             : "=r"(state->teb_stack_base), "=r"(state->teb_stack_limit)
+	             "movq %%gs:0x1478, %2\n\t"
+	             : "=r"(state->teb_stack_base), "=r"(state->teb_stack_limit),
+	               "=r"(state->teb_deallocation_stack)
 	             :
 	             : "memory");
+	// Raises DBG_PRINTEXCEPTION_C and catches it in its own __except, without a debugger too.
+	OutputDebugStringA("KytyPS5: main entry stack test\n");
 #endif
+	state->caught = CatchOnMainEntryStack();
 	state->called = true;
 }
 
@@ -501,11 +547,14 @@ bool TestMainEntryUsesGuestStack() {
 	auto* root_frame = reinterpret_cast<const uintptr_t*>(stack_base + stack_size) - 2;
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
-	uintptr_t original_teb_stack_base  = 0;
-	uintptr_t original_teb_stack_limit = 0;
+	uintptr_t original_teb_stack_base         = 0;
+	uintptr_t original_teb_stack_limit        = 0;
+	uintptr_t original_teb_deallocation_stack = 0;
 	asm volatile("movq %%gs:0x08, %0\n\t"
 	             "movq %%gs:0x10, %1\n\t"
-	             : "=r"(original_teb_stack_base), "=r"(original_teb_stack_limit)
+	             "movq %%gs:0x1478, %2\n\t"
+	             : "=r"(original_teb_stack_base), "=r"(original_teb_stack_limit),
+	               "=r"(original_teb_deallocation_stack)
 	             :
 	             : "memory");
 #endif
@@ -514,16 +563,23 @@ bool TestMainEntryUsesGuestStack() {
 	         reinterpret_cast<void*>(stack_base + stack_size));
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
-	uintptr_t restored_teb_stack_base  = 0;
-	uintptr_t restored_teb_stack_limit = 0;
+	uintptr_t restored_teb_stack_base         = 0;
+	uintptr_t restored_teb_stack_limit        = 0;
+	uintptr_t restored_teb_deallocation_stack = 0;
 	asm volatile("movq %%gs:0x08, %0\n\t"
 	             "movq %%gs:0x10, %1\n\t"
-	             : "=r"(restored_teb_stack_base), "=r"(restored_teb_stack_limit)
+	             "movq %%gs:0x1478, %2\n\t"
+	             : "=r"(restored_teb_stack_base), "=r"(restored_teb_stack_limit),
+	               "=r"(restored_teb_deallocation_stack)
 	             :
 	             : "memory");
-	const bool teb_ok = state.teb_stack_base == 0 && state.teb_stack_limit == 0 &&
+	// While the guest ran: StackBase and DeallocationStack its stack's top, StackLimit 0.
+	const auto stack_top = stack_base + stack_size;
+	const bool teb_ok    = state.teb_stack_base == stack_top && state.teb_stack_limit == 0 &&
+	                    state.teb_deallocation_stack == stack_top &&
 	                    restored_teb_stack_base == original_teb_stack_base &&
-	                    restored_teb_stack_limit == original_teb_stack_limit;
+	                    restored_teb_stack_limit == original_teb_stack_limit &&
+	                    restored_teb_deallocation_stack == original_teb_deallocation_stack;
 #else
 	constexpr bool teb_ok = true;
 #endif
@@ -531,7 +587,7 @@ bool TestMainEntryUsesGuestStack() {
 	const bool rsp_ok  = state.rsp >= stack_base && state.rsp < stack_base + stack_size;
 	const bool root_ok = root_frame[0] == 0 && root_frame[1] == 0;
 	const bool freed   = Libs::LibKernel::Memory::FreeGuestMemory(stack_base, stack_size);
-	return state.called && rsp_ok && root_ok && teb_ok && freed;
+	return state.called && state.caught && rsp_ok && root_ok && teb_ok && freed;
 }
 
 bool TestModuleRelocationUsesWritableHostMapping() {

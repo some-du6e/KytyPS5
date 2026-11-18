@@ -880,6 +880,9 @@ static KYTY_SYSV_ABI void* RunOnGuestStack(void* arg, pthread_entry_func_t func,
 		g_pthread_self->guest_host_rbx = host_rbx;
 #if defined(__APPLE__)
 		g_pthread_self->guest_host_rsp = host_rsp - (2u * sizeof(uint64_t));
+#elif KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+		// r12-r15 and the TEB's DeallocationStack.
+		g_pthread_self->guest_host_rsp = host_rsp - (5u * sizeof(uint64_t));
 #else
 		g_pthread_self->guest_host_rsp = host_rsp - (4u * sizeof(uint64_t));
 #endif
@@ -919,16 +922,44 @@ static KYTY_SYSV_ABI void* RunOnGuestStack(void* arg, pthread_entry_func_t func,
 	               "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11",
 	               "xmm12", "xmm13", "xmm14", "xmm15");
 #else
-	// PthreadExit resumes at this frame, so all four saved registers stay on the host stack.
+	// PthreadExit resumes at this frame, so all four saved registers stay on the host stack. On
+	// Windows the TEB's DeallocationStack is saved above them.
+	//
+	// Windows: while the guest runs, the TEB's stack fields describe the guest stack.
+	// - StackLimit is 0. A stack probe (__chkstk) touches every page from StackLimit down to a new
+	//   frame below it. With the host stack's StackLimit, a host function with a large frame could
+	//   probe the memory between the host stack and the guest stack, or a fiber's, and fault.
+	// - StackBase is the guest stack's top. Exception dispatch and RtlUnwindEx accept only frames
+	//   between StackLimit and StackBase, so host code on the guest stack can catch what it throws.
+	//   That covers C++ exceptions and the other exceptions that system DLLs raise and catch
+	//   themselves. OutputDebugString, for one, raises an exception that its own __except catches.
+	//   It does not cover access violations, guard page hits or illegal instructions.
+	//   HostException's vectored handler sees those first, on every thread, and ends the process on
+	//   any it cannot resolve. StackBase used to be 0 here, so the dispatcher accepted no frame. An
+	//   exception that no vectored handler took went unhandled and ended the process, and every
+	//   unwind raised STATUS_BAD_STACK. Guest code has no unwind data, so an exception still cannot
+	//   cross a guest frame.
+	// - DeallocationStack is the top too. The kernel grows a stack when a guard page between
+	//   DeallocationStack and StackBase faults. That range stays empty, as it was with StackBase 0,
+	//   so a guard page of another thread's stack that an HLE walker touches still reaches
+	//   HostException.
+	//
+	// Nothing may end the thread while these values are installed. When a thread ends through
+	// ExitThread, the kernel releases the allocation at DeallocationStack, and the guest stack's
+	// top can be the base of the next allocation. A guest thread leaves through PthreadExit, which
+	// returns into this frame, and the code below puts the host values back first.
 	asm volatile("pushq %%r12\n\t"
 	             "pushq %%r13\n\t"
 	             "pushq %%r14\n\t"
 	             "pushq %%r15\n\t"
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	             "pushq %%gs:0x1478\n\t"
 	             "movq %%gs:0x08, %%r14\n\t"
 	             "movq %%gs:0x10, %%r15\n\t"
-	             "xorq %%rcx, %%rcx\n\t"
+	             "leaq 16(%[guest_rsp]), %%rcx\n\t"
 	             "movq %%rcx, %%gs:0x08\n\t"
+	             "movq %%rcx, %%gs:0x1478\n\t"
+	             "xorq %%rcx, %%rcx\n\t"
 	             "movq %%rcx, %%gs:0x10\n\t"
 #endif
 	             "movq %%rsp, %%r12\n\t"
@@ -941,6 +972,7 @@ static KYTY_SYSV_ABI void* RunOnGuestStack(void* arg, pthread_entry_func_t func,
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 	             "movq %%r14, %%gs:0x08\n\t"
 	             "movq %%r15, %%gs:0x10\n\t"
+	             "popq %%gs:0x1478\n\t"
 #endif
 	             "popq %%r15\n\t"
 	             "popq %%r14\n\t"

@@ -582,6 +582,11 @@ at each use pins the normal value to the literal it replaced.
    - `Unhandled host exception` with `guest pc: eboot.bin+0x...`. That is a guest crash, usually
      from a stubbed function's bad return value further up. Read the unresolved imports that ran
      just before it.
+   - On Windows, an exit with 0xC0000409 and no message, or an `Unhandled host exception` whose
+     report points into ntdll. Guest stacks have real TEB stack bounds, so for an exception that
+     nothing handles, such as an int3, a divide by zero or an uncaught C++ exception, Windows walks
+     the guest stack looking for a handler, and that walk can end either way. The process was
+     dying anyway. The exit code hides the first exception, so read what ran just before it.
    - `VRAM spill` or `VRAM pressure` lines, or a slow game. Compare `--vram-limit-mb` runs on a
      bigger card if one is around.
 5. **Re-run and compare.** `kyty_triage.py --compare old.json new.log` shows which failures went
