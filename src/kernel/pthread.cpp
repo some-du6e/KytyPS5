@@ -3260,6 +3260,41 @@ static void CleanupThread(void* arg) {
 	thread->almost_done = true;
 }
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+// winpthreads acts on a pending cancel of a guest thread in pthread_testcancel, called from
+// PthreadTestcancel. Once the guest has made cancellation asynchronous, it also acts in
+// pthread_setcancelstate, pthread_setcanceltype and a thread's cancel of itself. winpthreads'
+// pthread_join is not a cancellation point, and the emulator's own waits (PthreadCondWait, sleeps,
+// semaphores) do not call winpthreads. So on Windows a canceled guest thread blocked in one of them
+// keeps waiting.
+//
+// winpthreads runs the thread's cleanup handlers, innermost first, and then leaves through
+// pthread_exit, which longjmps to the frame pthread_create set up on the host stack. winpthreads
+// gives msvcrt's _setjmp a frame, so msvcrt's longjmp unwinds with RtlUnwindEx, and RtlUnwindEx
+// cannot get from the guest stack to the host stack. Guest code has no unwind data, nothing
+// describes RunOnGuestStack's stack switch, and the unwind checks every frame against the TEB's
+// stack bounds. It raised STATUS_BAD_STACK (0xC0000028), which ended the process.
+//
+// RunThread pushes this handler around the guest's run, so winpthreads calls it first. It leaves
+// through PthreadExit, which returns to RunOnGuestStack's host frame without unwinding anything, as
+// a guest's own pthread_exit does. That drops the frames on the guest stack without running their
+// destructors. Linux drops them too: the emulator is built without exceptions there, and glibc's
+// forced unwind stops where the unwind data ends. RunThread then runs CleanupThread, and the thread
+// joins with glibc's PTHREAD_CANCELED, the value Linux gives.
+//
+// Not covered, and untested: another thread's cancel of a guest thread whose cancellation is
+// asynchronous. winpthreads points that thread's RIP at _pthread_invoke_cancel without a call, so
+// this handler runs with whatever stack alignment the interrupted code had, and an aligned SSE
+// spill can fault. The interrupted code may also be host code that holds a lock. That cancel ended
+// the process before this handler too.
+static void ExitCanceledGuestThread(void* /*arg*/) {
+	if (g_guest_entry_return_rsp != 0) {
+		PthreadExit(reinterpret_cast<void*>(static_cast<intptr_t>(-1)));
+	}
+	// Outside the guest's run, winpthreads' own exit unwinds host frames only.
+}
+#endif
+
 static void* RunThread(void* arg) {
 	Common::WriteFpEnv(Common::GuestFpEnv);
 
@@ -3306,7 +3341,15 @@ static void* RunThread(void* arg) {
 	auto* stack_top = reinterpret_cast<void*>(
 	    (reinterpret_cast<uintptr_t>(thread->attr->stack_addr) + thread->attr->stack_size) &
 	    ~static_cast<uintptr_t>(0x0f));
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
+	pthread_cleanup_push(ExitCanceledGuestThread, nullptr);
+#endif
 	ret = RunOnGuestStack(thread->arg, thread->entry, stack_top);
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
+	pthread_cleanup_pop(0);
+#endif
 
 	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
 	pthread_cleanup_pop(1);

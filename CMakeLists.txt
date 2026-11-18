@@ -1029,6 +1029,10 @@ if(BUILD_TESTING)
 	add_test(NAME resource_tracking COMMAND $<TARGET_FILE:resource_tracking_tests>)
 	add_test(NAME event_queue_lifetime COMMAND $<TARGET_FILE:event_queue_lifetime_tests>)
 	add_test(NAME kernel_file_system COMMAND $<TARGET_FILE:kernel_file_system_tests>)
+	# Only its mutex cases, which stop before the Vulkan test window. One cancels a guest thread on
+	# a guest-supplied stack. .github/scripts/ctest_groups.py puts this test in the host group.
+	add_test(NAME kernel_file_system_mutex
+		COMMAND $<TARGET_FILE:kernel_file_system_tests> --mutex-only)
 	add_test(NAME sync_on_address COMMAND $<TARGET_FILE:sync_on_address_tests>)
 	add_test(NAME audio_out2_port COMMAND $<TARGET_FILE:audio_out2_port_tests>)
 	add_test(NAME audio_out_timing COMMAND $<TARGET_FILE:audio_out_timing_tests>)
@@ -1076,6 +1080,9 @@ if(BUILD_TESTING)
 	add_test(NAME pssr COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --pssr-only)
 	add_test(NAME guest_red_zone_patcher
 		COMMAND $<TARGET_FILE:virtual_memory_allocation_tests> --red-zone-patcher-only)
+	# Guest threads canceled at PthreadTestcancel.
+	add_test(NAME guest_threads
+		COMMAND $<TARGET_FILE:virtual_memory_allocation_tests> --guest-threads-only)
 	add_test(NAME command_scheduler_timeline
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --scheduler-only)
 	add_test(NAME stream_buffer_ring

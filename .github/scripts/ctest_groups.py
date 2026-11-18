@@ -7,6 +7,9 @@ import subprocess
 # Executables that open a Vulkan device: the shader recompiler compute harness, and the kernel file
 # system tests (they create a hidden Vulkan test window).
 GPU_EXECUTABLES = ("shader_recompiler_compute_tests", "kernel_file_system_tests")
+# Tests of those executables that stop before they open a device. They gate the host group and stay
+# out of the GPU package. kernel_file_system_mutex runs kernel_file_system_tests --mutex-only.
+HOST_TESTS = ("kernel_file_system_mutex",)
 
 
 def load_tests(build):
@@ -32,5 +35,6 @@ def split_tests(info):
         if not command or not command[0] or not os.path.exists(command[0]):
             skipped.append(test)
             continue
-        groups["gpu" if executable_name(command[0]) in GPU_EXECUTABLES else "host"].append(test)
+        gpu = executable_name(command[0]) in GPU_EXECUTABLES and test["name"] not in HOST_TESTS
+        groups["gpu" if gpu else "host"].append(test)
     return groups, skipped

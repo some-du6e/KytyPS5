@@ -1,6 +1,7 @@
 #include "common/emulatorConfig.h"
 #include "common/file.h"
 #include "common/logging/log.h"
+#include "common/singleton.h"
 #include "common/subsystems.h"
 #include "common/threads.h"
 #include "common/virtualMemory.h"
@@ -1560,6 +1561,92 @@ void TestMainEntryUsesGuestStackAndDisablesHostChecks() {
 
 	std::printf("[host]    %-48s ok\n", test);
 }
+
+#if defined(__x86_64__) || defined(_M_X64)
+// Guest threads (PthreadCreate: RunThread, RunOnGuestStack). They run in a process of their own
+// (--guest-threads-only): they start the pthread emulation, which the other cases run without.
+void InitGuestThreads() {
+	static bool initialized = false;
+	if (initialized) {
+		return;
+	}
+	Common::Singleton<Loader::RuntimeLinker>::Instance();
+	Libs::LibKernel::Initialize();
+	Libs::LibKernel::PthreadInitSelfForMainThread();
+	initialized = true;
+}
+
+// A guest thread canceled at PthreadTestcancel, once on a stack the emulator allocated and once on
+// one the guest supplied, as kernel_file_system's mutex handoff case does. On Windows, winpthreads'
+// pthread_exit longjmps out of the thread, and msvcrt's longjmp unwinds with RtlUnwindEx, which
+// cannot get from the guest stack to the host frame. The process ended with STATUS_BAD_STACK
+// (0xC0000028).
+//
+// On Linux this binary is built with -fexceptions, so RunThread's pthread_cleanup_push is glibc's
+// C++ form. glibc's forced unwind stops at the guest root frame and skips it, so CleanupThread does
+// not run here, though it does in the emulator. Checks of what CleanupThread does need a Windows
+// guard.
+struct GuestCancelState {
+	std::atomic<bool> started {false};
+	std::atomic<bool> canceled {false};
+	bool              after_cancel = false;
+};
+
+KYTY_SYSV_ABI void* GuestThreadWaitsForCancel(void* arg) {
+	auto& state = *static_cast<GuestCancelState*>(arg);
+	state.started = true;
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+	while (!state.canceled.load() && std::chrono::steady_clock::now() < deadline) {
+		std::this_thread::yield();
+	}
+	Libs::LibKernel::PthreadTestcancel();
+	state.after_cancel = true;
+	return nullptr;
+}
+
+void TestGuestThreadCancel() {
+	using namespace Libs::LibKernel;
+	const char* test = "GuestThreadCancel";
+	InitGuestThreads();
+
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+	// What a canceled guest thread joins with on Linux: glibc's PTHREAD_CANCELED.
+	void* const canceled = reinterpret_cast<void*>(static_cast<intptr_t>(-1));
+#else
+	void* const canceled = PTHREAD_CANCELED;
+#endif
+	std::vector<uint8_t> supplied_stack(1024 * 1024);
+	for (const bool supplied: {false, true}) {
+		const std::string what = supplied ? "guest-supplied stack: " : "emulator stack: ";
+		GuestCancelState  state;
+		PthreadAttr       attr = nullptr;
+		CheckOk(test, PthreadAttrInit(&attr), "PthreadAttrInit");
+		if (supplied) {
+			CheckOk(test, PthreadAttrSetstack(&attr, supplied_stack.data(), supplied_stack.size()),
+			        "PthreadAttrSetstack");
+		}
+		Pthread thread = nullptr;
+		CheckOk(test,
+		        PthreadCreate(&thread, supplied ? &attr : nullptr, GuestThreadWaitsForCancel,
+		                      &state, "GuestCancel"),
+		        "PthreadCreate");
+		CheckOk(test, PthreadAttrDestroy(&attr), "PthreadAttrDestroy");
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+		while (!state.started.load() && std::chrono::steady_clock::now() < deadline) {
+			std::this_thread::yield();
+		}
+		Check(test, state.started.load(), what + "the guest thread to cancel did not start");
+		CheckOk(test, PthreadCancel(thread), "PthreadCancel");
+		state.canceled = true;
+		void* result = nullptr;
+		CheckOk(test, PthreadJoin(thread, &result), "PthreadJoin of the canceled thread");
+		Check(test, result == canceled && !state.after_cancel,
+		      what + "PthreadTestcancel did not end the canceled guest thread");
+	}
+
+	std::printf("[host]    %-48s ok\n", test);
+}
+#endif
 
 void TestFragmentedBackingPublication() {
 	using namespace Libs::LibKernel::Memory;
@@ -6302,6 +6389,12 @@ int main(int argc, char** argv) {
 #endif
 	if (argc == 2 && std::strcmp(argv[1], "--red-zone-patcher-only") == 0) {
 		RunTest(TestWindowsGuestRedZoneStaticPatcher);
+		return g_failed_tests == 0 ? 0 : 1;
+	}
+	if (argc == 2 && std::strcmp(argv[1], "--guest-threads-only") == 0) {
+#if defined(__x86_64__) || defined(_M_X64)
+		RunTest(TestGuestThreadCancel);
+#endif
 		return g_failed_tests == 0 ? 0 : 1;
 	}
 
