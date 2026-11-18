@@ -145,6 +145,32 @@ class SplitTests(Fixture):
                          "shader_recompiler_compute_tests")
         self.assertEqual(ctest_groups.executable_name("/b/kernel_file_system_tests"), "kernel_file_system_tests")
 
+    def test_a_gpu_executable_test_that_opens_no_device_is_host(self):
+        # kernel_file_system_tests --mutex-only stops before its Vulkan test window, so it gates the
+        # host group, and the GPU package leaves it out.
+        self.add("kernel_file_system_mutex", "kernel_file_system_tests.exe", "--mutex-only")
+        groups, _ = ctest_groups.split_tests({"tests": self.tests})
+        self.assertEqual([t["name"] for t in groups["host"]],
+                         ["emulator_preset_cli", "common", "kernel_file_system_mutex"])
+        self.assertIn("kernel_file_system", [t["name"] for t in groups["gpu"]])
+        self.assertNotIn("kernel_file_system_mutex", [t["name"] for t in groups["gpu"]])
+        rc, _, err = self.run_package()
+        self.assertEqual(rc, 0, err)
+        with open(os.path.join(self.out, "tests.json"), encoding="utf-8") as f:
+            packaged = [t["name"] for t in json.load(f)["tests"]]
+        self.assertIn("kernel_file_system", packaged)
+        self.assertNotIn("kernel_file_system_mutex", packaged)
+
+    def test_host_tests_are_registered(self):
+        # A renamed ctest would drop out of HOST_TESTS and back into the GPU group, where a failure
+        # only warns.
+        with open(os.path.join(os.path.dirname(os.path.dirname(SCRIPTS)), "CMakeLists.txt"),
+                  encoding="utf-8") as f:
+            cmake = f.read()
+        for name in ctest_groups.HOST_TESTS:
+            self.assertRegex(cmake, r"add_test\(NAME %s\s+COMMAND \$<TARGET_FILE:(%s)>" %
+                             (name, "|".join(ctest_groups.GPU_EXECUTABLES)))
+
 
 class PackageTests(Fixture):
     def test_package(self):

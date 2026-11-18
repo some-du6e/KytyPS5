@@ -2,7 +2,8 @@
 """Run the ctest suite in two groups.
 
 host: every test whose executable does not need a Vulkan device, plus the tests
-      labelled "host", which run a GPU executable but open no device. These must pass.
+      of a GPU executable that open no device: those labelled "host" (they only
+      compile shaders) and ctest_groups.HOST_TESTS. These must pass.
 gpu:  tests run by executables that open a Vulkan device (the shader recompiler
       compute harness and the kernel file system tests' test video). GitHub
       runners have no GPU and lavapipe may lack features the harness requires,
