@@ -77,15 +77,25 @@ jobs:
       - name: Install build dependencies
         shell: bash
         run: |
-          # A newer Mesa gives lavapipe more of the features the GPU test harness requires.
-          sudo add-apt-repository -y ppa:kisak/kisak-mesa || echo "::warning::kisak-mesa PPA unavailable"
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes \
-            clang glslang-tools libasound2-dev libdbus-1-dev libgl1-mesa-dev \
-            libpulse-dev libudev-dev libwayland-dev libx11-dev libxcursor-dev \
-            libxext-dev libxfixes-dev libxi-dev libxkbcommon-dev libxrandr-dev \
-            libxss-dev libxtst-dev lld pkg-config wayland-protocols \
+          # A newer Mesa gives lavapipe more of the features the GPU test harness requires. The GPU
+          # tests only report, so when the PPA fails (its package pool answered 503 all morning on
+          # 2026-11-18), the job falls back to Ubuntu's Mesa instead of failing before the build.
+          packages=(
+            clang glslang-tools libasound2-dev libdbus-1-dev libgl1-mesa-dev
+            libpulse-dev libudev-dev libwayland-dev libx11-dev libxcursor-dev
+            libxext-dev libxfixes-dev libxi-dev libxkbcommon-dev libxrandr-dev
+            libxss-dev libxtst-dev lld pkg-config wayland-protocols
             mesa-vulkan-drivers vulkan-tools
+          )
+          install() { sudo apt-get install --no-install-recommends --yes "${packages[@]}"; }
+          if sudo add-apt-repository -y ppa:kisak/kisak-mesa && sudo apt-get update && install; then
+            echo "Mesa from the kisak-mesa PPA"
+          else
+            echo "::warning::kisak-mesa PPA unavailable; using Ubuntu's Mesa"
+            sudo add-apt-repository -y --remove ppa:kisak/kisak-mesa || true
+            sudo apt-get update
+            install
+          fi
 
       - name: Install Qt 6.10.3
         uses: jurplel/install-qt-action@v4
