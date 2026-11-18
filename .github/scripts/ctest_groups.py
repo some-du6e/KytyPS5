@@ -8,6 +8,19 @@ import subprocess
 # system tests (they create a hidden Vulkan test window).
 GPU_EXECUTABLES = ("shader_recompiler_compute_tests", "kernel_file_system_tests")
 
+# A test of one of those executables that opens no device, because it only compiles shaders,
+# carries this ctest label and belongs to the host group.
+HOST_LABEL = "host"
+
+
+def labels(test):
+    """The LABELS of a ctest json-v1 test: a list in json-v1, or a CMake ;-list."""
+    for prop in test.get("properties", []):
+        if prop.get("name") == "LABELS":
+            value = prop.get("value") or []
+            return value.split(";") if isinstance(value, str) else list(value)
+    return []
+
 
 def load_tests(build):
     """ctest's json-v1 description of the tests in `build`."""
@@ -32,5 +45,6 @@ def split_tests(info):
         if not command or not command[0] or not os.path.exists(command[0]):
             skipped.append(test)
             continue
-        groups["gpu" if executable_name(command[0]) in GPU_EXECUTABLES else "host"].append(test)
+        gpu = executable_name(command[0]) in GPU_EXECUTABLES and HOST_LABEL not in labels(test)
+        groups["gpu" if gpu else "host"].append(test)
     return groups, skipped

@@ -127,6 +127,19 @@ class SplitTests(Fixture):
                           "shader_recompiler_gta6_alu", "vram_heap_limit", "shader_recompiler_shader_mem", "pssr"])
         self.assertEqual([t["name"] for t in skipped], ["vdecsw", "gone"])
 
+    def test_host_label_puts_a_gpu_executable_test_in_the_host_group(self):
+        # json-v1 gives LABELS as a list; a ;-list string is read the same way.
+        self.add("shader_recompiler_shader_mem_host_subgroup32", "shader_recompiler_compute_tests.exe",
+                 "--shader-mem-host-only", "32", props=[prop("LABELS", ["host"])])
+        self.add("labelled_twice", "kernel_file_system_tests.exe", props=[prop("LABELS", "slow;host")])
+        self.add("other_label", "shader_recompiler_compute_tests.exe", "--other-only",
+                 props=[prop("LABELS", ["hosted"])])
+        groups, _ = ctest_groups.split_tests({"tests": self.tests})
+        self.assertEqual([t["name"] for t in groups["host"]],
+                         ["emulator_preset_cli", "common", "shader_recompiler_shader_mem_host_subgroup32",
+                          "labelled_twice"])
+        self.assertEqual([t["name"] for t in groups["gpu"]][-1], "other_label")
+
     def test_executable_name(self):
         self.assertEqual(ctest_groups.executable_name("D:/a/b/shader_recompiler_compute_tests.exe"),
                          "shader_recompiler_compute_tests")
@@ -185,6 +198,16 @@ class PackageTests(Fixture):
         with open(os.path.join(self.out, "tests.json"), encoding="utf-8") as f:
             self.assertEqual(json.load(f)["source"], {"repository": "o/r", "commit": "0123abc", "ref": "b", "run_id": "42",
                                                       "msvc_toolset": "14.51.36231"})
+
+    def test_host_labelled_test_stays_out_of_the_package(self):
+        self.add("shader_recompiler_shader_mem_host_subgroup32", "shader_recompiler_compute_tests.exe",
+                 "--shader-mem-host-only", "32", props=[prop("LABELS", ["host"])])
+        rc, _, err = self.run_package()
+        self.assertEqual(rc, 0, err)
+        with open(os.path.join(self.out, "tests.json"), encoding="utf-8") as f:
+            names = [t["name"] for t in json.load(f)["tests"]]
+        self.assertNotIn("shader_recompiler_shader_mem_host_subgroup32", names)
+        self.assertIn("shader_recompiler_shader_mem", names)
 
     def test_not_a_pe_image(self):
         # A Linux build: the executables are copied, without a DLL list.

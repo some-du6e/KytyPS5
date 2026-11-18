@@ -57714,6 +57714,25 @@ int main(int argc, char **argv) {
     for (const auto &test : cases) RunCase(&vulkan, test);
     return 0;
   }
+  // Compiles the --shader-mem-only cases without a Vulkan device, for the host subgroup size in
+  // argv[2]: 32 as on NVIDIA, where a wave64 program runs two lanes per invocation, or 64 as on
+  // AMD. CompileCase validates the SPIR-V and checks required_spirv, forbidden_spirv and
+  // lds_addresses. CMakeLists.txt adds one test per size, so a failure names its size, and labels
+  // both host.
+  if (argc >= 2 && std::strcmp(argv[1], "--shader-mem-host-only") == 0) {
+    if (argc != 3 || (std::strcmp(argv[2], "32") != 0 && std::strcmp(argv[2], "64") != 0)) {
+      std::fprintf(stderr, "usage: %s --shader-mem-host-only 32|64\n", argv[0]);
+      return 2;
+    }
+    const u32 subgroup = std::strcmp(argv[2], "32") == 0 ? 32u : 64u;
+    std::vector<TestCase> cases;
+    AppendShaderMemCases(cases);
+    for (const auto &test : cases) {
+      (void)CompileCase(test, subgroup);
+      std::printf("[host]    %-32s compiled for subgroups of %u\n", test.name, subgroup);
+    }
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "--mul-hi24-only") == 0) {
     VulkanHarness vulkan;
     RunCase(&vulkan, VectorMulHi24(32));

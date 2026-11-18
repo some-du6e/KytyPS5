@@ -1170,6 +1170,15 @@ if(BUILD_TESTING)
 	# gta6-prep: shader-mem
 	add_test(NAME shader_recompiler_shader_mem
 		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --shader-mem-only)
+	# Compile the same cases without a Vulkan device, for host subgroups of 32 (NVIDIA) and 64
+	# (AMD), one test per size. With the host label, .github/scripts/ctest_groups.py puts them in
+	# CI's host group, which gates the job, and preflight leaves them out.
+	add_test(NAME shader_recompiler_shader_mem_host_subgroup32
+		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --shader-mem-host-only 32)
+	add_test(NAME shader_recompiler_shader_mem_host_subgroup64
+		COMMAND $<TARGET_FILE:shader_recompiler_compute_tests> --shader-mem-host-only 64)
+	set_tests_properties(shader_recompiler_shader_mem_host_subgroup32
+		shader_recompiler_shader_mem_host_subgroup64 PROPERTIES LABELS host)
 
 	add_custom_target(kyty_tests DEPENDS
 		ime_dialog_tests
