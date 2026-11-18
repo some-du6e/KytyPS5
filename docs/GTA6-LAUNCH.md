@@ -8,7 +8,8 @@ newer-SDK title, an 8 GB mode, more shader coverage, tools for reading the first
 preflight package that runs the GPU tests and a first boot on Karim's PC, and offline NID naming.
 
 Read the "Verification status" section before trusting any of it. The branch builds on Linux and
-Windows and its host tests pass in CI, but nothing on it has run on a real GPU or with a real game.
+Windows and its host tests pass in CI. Its GPU tests have run on an RTX 3050 6 GB, 39 of 42 passing,
+but no game has run on it.
 
 ## What is on the branch
 
@@ -269,7 +270,8 @@ Read this before relying on anything above.
 | Upstream main `bc934ef0` under gta6-ci | Built on Linux. 46 of 81 tests pass; the 35 failures all need a real GPU (the harness asks for fragment barycentrics and 64-bit LDS/image atomics). `vdecsw_tests` does not compile with clang-cl, and upstream never builds it on Windows. |
 | TheCruZ fork, own CI | Green on Linux and Windows at `c00f2f27` (run 43081193192 in TheCruZ/KytyPS5-GTA), for the tests its CI runs. It does not run `shader_cfg`, which fails at `c00f2f27` (see below). |
 | gta6-prep, full CI (run 43304032901, `30032c06`) | Green. Builds on Linux (clang) and Windows (clang-cl): emulator, launcher and every test target. Linux: 69 of 69 host tests pass. Windows: 67 of 67 gated host tests pass; `vdecsw` is skipped because clang-cl does not build it (as upstream), and upstream's `common` fails on the Windows runner as it does upstream, so it is reported, not gated. |
-| GPU test group | 3 of 42 pass on lavapipe; the rest stop because the runner has no device with fragment barycentrics and 64-bit LDS/image atomics, as upstream's do. That includes this branch's own GPU tests (`shader_recompiler_gta6_alu`, `shader_recompiler_shader_mem`, `vram_heap_limit`): they compile but have never run. |
+| GPU test group on CI | 3 of 42 pass on lavapipe; the rest stop because the runner has no device with fragment barycentrics and 64-bit LDS/image atomics, as upstream's do. |
+| GPU test group on an RTX 3050 6 GB (Windows 11, driver 621.14, through preflight) | 39 of 42 pass, including this branch's own `shader_recompiler_gta6_alu` and `vram_heap_limit`. `shader_recompiler_compute` passes 1058 checks, then stops at `ShaderMemDsAtomics64`: on NVIDIA every 64-bit LDS atomic returned 0 and changed nothing, while 64-bit LDS reads and writes and 64-bit buffer atomics worked. A fix is in progress. `shader_recompiler_shader_mem` stops at the same case. The run before stopped earlier, at a test bug in `ShaderMemBufferAtomicsWrap` (fixed in `dfdf16a9`). `kernel_file_system` dies with 0xC0000028 (bad stack while unwinding) in its mutex handoff case, as it does on CI's Windows runner; it is being investigated. The 2 GiB buffer case is skipped on PCs with less than 14 GiB of RAM. The first run on that PC got only 4 tests to the GPU, because its page file could not commit the 12.7 GB guest section; the tests now use 6 GiB. |
 | Test fixes from the first CI run | `shader_alu_decode`: the VOPC program overwrote its own buffer descriptor (test bug). `resource_tracking`: its "unsupported format" was `k8SScaled`, which shader-mem made supported (bisected to the shader-mem merge). `shader_cfg`: one check (material selection must reject an `s_cmp_le_u32` loop bound) fails in TheCruZ's fork at its own tip; it now prints a "known fork deviation" line instead of aborting, and the ~110 tests after it, which the fork never ran, pass. The recompiler keeps the fork's behaviour. |
 | Python triage tool | 56 tests pass in CI, including the two that run `collect_logs.ps1` under pwsh 7. Locally those two skip (no pwsh). |
 | gta6-prep with preflight and NID tools (run 43925506782, `05e3db5f`) | Green, with the same host results (Linux 69 of 69, Windows 67 of 67 gated). The Windows artifact is now 47 MB zipped, including 48.7 MB (unzipped) of packaged GPU tests from 2 executables. |
@@ -279,7 +281,7 @@ Read this before relying on anything above.
 | Preflight shader cache (run 43966470006, `425a5841`) | Green. 22 preflight tests pass in CI under pwsh. Under Windows PowerShell 5.1, the empty-game steps linked the run folder to the shared cache through a real junction, found the marker file there on both runs, and kept it out of the zip. `-ColdCache` made no link. A junction made with `mklink /J` stayed out of the zip. How much time a warm boot saves is unmeasured, since no real game has booted. |
 | GPU group time limit (run 43939026905, `00f3b3b0`) | Green. Once the probe finds no device, the Linux GPU step takes 8.4 minutes instead of 54, and the Linux job 27 minutes instead of 70. The 3 device-free tests still pass on both runners. |
 | NID tools | 68 tests pass in CI and locally. The triage tool's output without `--nid-names` is byte-identical to before on all 99 fixture outputs. Not yet run on Windows. |
-| GPU behaviour, NVIDIA behaviour, VRAM use | Unverified on hardware. The machine that did this work has no usable GPU, and CI runners have none either. |
+| GPU behaviour, NVIDIA behaviour, VRAM use | Only the GPU test group above has run on hardware. No game has run on this branch. |
 
 Commits whose correctness no test can show say `Speculative:` in their message body. Commits
 that say "build + tests pending in gta6-prep CI" were written before the first CI run; they are
@@ -589,8 +591,7 @@ at each use pins the normal value to the literal it replaced.
 
 ## Known risks
 
-- **Nothing has run on a GPU.** It builds and the host tests pass, but every GPU-side change
-  (VRAM policy, spill logging, new shader opcodes' SPIR-V on NVIDIA) is untested on hardware. Run a
+- **Only the GPU tests have run on a GPU.** On an RTX 3050 6 GB, 39 of 42 pass and one real NVIDIA bug (64-bit LDS atomics) turned up, but no game has run on this branch: the VRAM policy, spill logging and the new opcodes' behaviour in a real frame are untested. Run a
   game that already works before trying GTA 6, so a regression shows up as a regression.
 - **The dump.** Running GTA 6 at all needs a decrypted dump from a jailbroken PS5. If the game
   needs firmware newer than any public exploit, dumps may be late or need patching, and none of
