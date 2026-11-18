@@ -374,13 +374,15 @@ TestCase ShaderMemBufferAtomicsWrap() {
     const bool equal = std::bit_cast<float>(item.before) == std::bit_cast<float>(item.compare);
     atomic(0x3e, item.before, item.source, item.compare, equal ? item.source : item.before, true);
   }
-  // EXEC = 0 leaves memory and VDATA alone.
-  code.push_back(EncodeSop1(0x04, 10, 126));
-  code.push_back(EncodeSop1(0x04, 126, InlineU32(0)));
+  // EXEC = 0 leaves memory and VDATA alone. The address and VDATA are set before EXEC goes to 0:
+  // with EXEC = 0 a V_MOV writes no lane either, so VDATA would keep the GLC result of the case
+  // before (0x3f800000, as the first run on an RTX 3050 showed).
   test.initial[slot] = 7;
   test.expected[slot] = 7;
   AppendVMovU32(&code, 20, slot * 4u);
   AppendVMovLiteral(&code, 2, 0x13579bdfu);
+  code.push_back(EncodeSop1(0x04, 10, 126));
+  code.push_back(EncodeSop1(0x04, 126, InlineU32(0)));
   AppendBufferStoreOpcode(&code, 0x3c, 2, 20, true);
   code.push_back(EncodeSop1(0x04, 126, 10));
   AppendStoreVgpr(&code, 2, slots + slot);

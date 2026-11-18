@@ -2808,6 +2808,10 @@ void CheckSocketWakeup() {
 } // namespace
 
 int main(int argc, char** argv) {
+  // gta6-prep: unbuffered, so that the lines before a crash reach the log. On Windows this test has
+  // only ever ended in 0xC0000028 (bad stack while unwinding) within a second, with an empty log,
+  // on a runner without a GPU and on a PC with an RTX 3050 alike.
+  std::setvbuf(stdout, nullptr, _IONBF, 0);
   // gta6-prep: ram: tools/preflight sets KYTY_TEST_GUEST_MEMORY_MB, so that the tests start on a PC
   // whose page file cannot commit the console's whole guest section.
   if (const char* value = std::getenv("KYTY_TEST_GUEST_MEMORY_MB"); value != nullptr) {
@@ -2837,15 +2841,20 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  std::printf("KernelFileSystemTests: mutex handoff\n");
   TestMutexHandoff();
+  std::printf("KernelFileSystemTests: static rwlock destroy\n");
   TestStaticRwlockDestroy();
+  std::printf("KernelFileSystemTests: pending signal dispatch\n");
   TestPendingSignalDispatch();
+  std::printf("KernelFileSystemTests: mutex cases done\n");
   if (argc == 2 && std::string_view(argv[1]) == "--mutex-only") {
     subsystems.Destroy();
     std::printf("KernelFileSystemTests: mutex cases passed\n");
     return 0;
   }
 
+  std::printf("KernelFileSystemTests: Vulkan test window\n");
   Check(SDL_InitSubSystem(SDL_INIT_VIDEO), "initialize Vulkan test video");
   auto graphics = std::make_unique<Libs::Graphics::WindowContext>();
   graphics->graphic_ctx.screen_width = 64;
